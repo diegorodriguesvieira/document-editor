@@ -16,15 +16,22 @@ interface ConditionOption {
   needsValue: boolean
 }
 
-/** Operators the backend evaluates. `needsValue` toggles the value input. */
-const CONDITIONS: ConditionOption[] = [
-  { id: 'present', label: 'is in the document', needsValue: false },
-  { id: 'absent', label: 'is not in the document', needsValue: false },
-  { id: 'equals', label: 'is equal to', needsValue: true },
-  { id: 'notEquals', label: 'is not equal to', needsValue: true },
-  { id: 'greaterThan', label: 'is greater than', needsValue: true },
-  { id: 'lessThan', label: 'is less than', needsValue: true },
-]
+/**
+ * Operators the backend evaluates. The `id`s are the `data-condition` contract
+ * the backend reads — stable, declarative protocol constants. `needsValue`
+ * toggles the value input.
+ */
+const CONDITIONS = [
+  { id: 'EXISTS', label: 'is in the document', needsValue: false },
+  { id: 'NOT_EXISTS', label: 'is not in the document', needsValue: false },
+  { id: 'EQUALS', label: 'is equal to', needsValue: true },
+  { id: 'NOT_EQUALS', label: 'is not equal to', needsValue: true },
+  { id: 'GREATER_THAN', label: 'is greater than', needsValue: true },
+  { id: 'LESS_THAN', label: 'is less than', needsValue: true },
+] as const satisfies readonly ConditionOption[]
+
+/** The condition operators as a typed set — shareable as the backend contract. */
+export type ConditionId = (typeof CONDITIONS)[number]['id']
 
 export interface ConditionValue {
   variable: string | null

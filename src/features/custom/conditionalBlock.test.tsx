@@ -65,7 +65,7 @@ describe('conditional block', () => {
         content: [
           {
             type: 'conditionalBlock',
-            attrs: { variable: 'gross.salary', condition: 'present', value: null },
+            attrs: { variable: 'gross.salary', condition: 'EXISTS', value: null },
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
           },
         ],
@@ -75,10 +75,10 @@ describe('conditional block', () => {
     const html = created.api.getHTML()
     expect(html).toContain('data-conditional-block')
     expect(html).toContain('data-variable="gross.salary"')
-    expect(html).toContain('data-condition="present"')
+    expect(html).toContain('data-condition="EXISTS"')
 
     const block = created.api.getJSON().doc.content?.[0]
-    expect(block?.attrs).toMatchObject({ variable: 'gross.salary', condition: 'present' })
+    expect(block?.attrs).toMatchObject({ variable: 'gross.salary', condition: 'EXISTS' })
   })
 })
 
@@ -101,14 +101,14 @@ describe('<ConditionEditor />', () => {
     expect(screen.queryByLabelText('Value')).toBeNull()
 
     await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
-    await user.selectOptions(screen.getByLabelText('Condition'), 'greaterThan')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'GREATER_THAN')
 
     // greaterThan needs a value → input appears.
     expect(screen.getByLabelText('Value')).toBeInTheDocument()
     expect((screen.getByLabelText('Variable') as HTMLSelectElement).value).toBe('gross.salary')
 
     // A value-less condition hides it again.
-    await user.selectOptions(screen.getByLabelText('Condition'), 'present')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EXISTS')
     expect(screen.queryByLabelText('Value')).toBeNull()
   })
 })
