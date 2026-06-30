@@ -27,6 +27,13 @@ describe('content validation (enableContentCheck)', () => {
     expect(() => created!.api.setJSON(docWithUnknownNode)).toThrow()
   })
 
+  it('refuses to load a document from a newer schema version (no silent re-stamp)', () => {
+    created = createEditor({ features: [BoldFeature], element: mountTarget() })
+    expect(() =>
+      created!.api.setJSON({ schemaVersion: 99, doc: { type: 'doc', content: [{ type: 'paragraph' }] } }),
+    ).toThrow(/newer than/)
+  })
+
   it('routes invalid initial content to onContentError (graceful) when provided', () => {
     const onContentError = vi.fn()
     expect(() => {

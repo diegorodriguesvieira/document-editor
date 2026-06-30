@@ -1,5 +1,6 @@
 import type { AnyExtension, Editor } from '@tiptap/core'
 import type { ReactNode } from 'react'
+import type { DocumentMigration } from './document'
 import type { EditorApi, EditorStateView } from './EditorApi'
 
 /** Runs a feature command against the editor. Returns whether it applied. */
@@ -104,4 +105,7 @@ export interface FeatureDefinition {
   contextMenu?: ContextMenuSection[]
   /** Page-edge regions (header/footer) with a hover "add" affordance. */
   pageRegions?: PageRegion[]
+  /** Schema migrations this feature owns. `migrations[n]` upgrades a v`n`
+   *  document to v`n+1` (composed with other features' migrations for `n`). */
+  migrations?: Record<number, DocumentMigration>
 }

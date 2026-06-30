@@ -28,3 +28,36 @@ export function toDocumentJSON(editor: Editor): DocumentJSON {
 export function exportHTML(editor: Editor): string {
   return editor.getHTML()
 }
+
+/** Upgrades a raw doc from one schema version to the next. */
+export type DocumentMigration = (doc: JSONContent) => JSONContent
+
+/**
+ * Bring a (possibly older) document up to {@link SCHEMA_VERSION} before loading.
+ * - A doc from a NEWER version is refused (throws) — loading it would silently
+ *   drop the fields this build doesn't understand, then a save would persist the
+ *   loss. Better to fail loudly than to corrupt the user's document.
+ * - An older doc is upgraded by running each registered step in order;
+ *   `migrations[n]` upgrades a v`n` doc to v`n+1` (features contribute their own).
+ */
+export function migrateDocument(
+  input: DocumentJSON,
+  migrations: Record<number, DocumentMigration[]> = {},
+): DocumentJSON {
+  let version = input.schemaVersion ?? 1
+  if (version > SCHEMA_VERSION) {
+    throw new Error(
+      `Document schemaVersion ${version} is newer than the supported ${SCHEMA_VERSION}; refusing to load.`,
+    )
+  }
+  let doc = input.doc
+  while (version < SCHEMA_VERSION) {
+    const steps = migrations[version]
+    if (!steps || steps.length === 0) {
+      throw new Error(`No migration registered from schemaVersion ${version} to ${version + 1}.`)
+    }
+    for (const step of steps) doc = step(doc)
+    version += 1
+  }
+  return { schemaVersion: SCHEMA_VERSION, doc }
+}

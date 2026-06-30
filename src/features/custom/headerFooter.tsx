@@ -7,8 +7,9 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from '../../editor'
-import type { Editor } from '@tiptap/core'
-import type { Node as PMNode } from '@tiptap/pm/model'
+import { Extension, type Editor } from '@tiptap/core'
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 
 /** True when a top-level node of `name` exists. */
 function docHasNode(doc: PMNode, name: string): boolean {
@@ -78,6 +79,67 @@ const DocumentHeader = regionNode('documentHeader', 'data-document-header', 'doc
 const DocumentFooter = regionNode('documentFooter', 'data-document-footer', 'doc-region doc-region--footer')
 
 /**
+ * The normalized top-level sequence: at most one header (first), at most one
+ * footer (last), any extras dropped. Returns null when the doc is already valid.
+ */
+function normalizedRegions(doc: PMNode): PMNode[] | null {
+  const headers: PMNode[] = []
+  const footers: PMNode[] = []
+  const body: PMNode[] = []
+  doc.forEach((node) => {
+    const name = node.type.name
+    if (name === 'documentHeader') headers.push(node)
+    else if (name === 'documentFooter') footers.push(node)
+    else body.push(node)
+  })
+  if (headers.length === 0 && footers.length === 0) return null
+
+  const desired: PMNode[] = []
+  if (headers.length > 0) desired.push(headers[0])
+  desired.push(...body)
+  if (footers.length > 0) desired.push(footers[footers.length - 1])
+
+  if (desired.length === doc.childCount) {
+    let same = true
+    for (let i = 0; i < desired.length; i++) {
+      if (doc.child(i) !== desired[i]) {
+        same = false
+        break
+      }
+    }
+    if (same) return null
+  }
+  return desired
+}
+
+/**
+ * Enforces the header/footer invariant the `add` commands can't mediate — paste,
+ * `setJSON`, drag can otherwise leave two headers or a footer mid-document and
+ * break the PDF contract (one header at the top, repeated per page). Owned by the
+ * feature (composes with the registry, zero consumer wiring); the schema can't
+ * express it without a custom top node that breaks when the feature is off.
+ */
+const HeaderFooterGuard = Extension.create({
+  name: 'headerFooterGuard',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('headerFooterGuard'),
+        appendTransaction: (transactions, _oldState, newState) => {
+          if (!transactions.some((tr) => tr.docChanged)) return null
+          const desired = normalizedRegions(newState.doc)
+          if (!desired) return null
+          const tr = newState.tr
+          tr.replaceWith(0, newState.doc.content.size, Fragment.fromArray(desired))
+          tr.setMeta('addToHistory', false)
+          return tr
+        },
+      }),
+    ]
+  },
+})
+
+/**
  * "Team" feature: a page header and footer. Each is a singleton block at the
  * top/bottom of the document (so it can hold rich content — text, merge fields…
  * — and the backend repeats it per PDF page). The hover "add" affordance is
@@ -85,7 +147,7 @@ const DocumentFooter = regionNode('documentFooter', 'data-document-footer', 'doc
  */
 export const HeaderFooterFeature = defineFeature({
   id: 'headerFooter',
-  extensions: () => [DocumentHeader, DocumentFooter],
+  extensions: () => [DocumentHeader, DocumentFooter, HeaderFooterGuard],
   commands: {
     'header.add': (editor) => {
       if (docHasNode(editor.state.doc, 'documentHeader')) return false

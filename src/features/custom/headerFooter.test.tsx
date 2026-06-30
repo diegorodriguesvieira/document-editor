@@ -60,6 +60,30 @@ describe('header/footer feature', () => {
     expect(html).toContain('data-document-footer')
   })
 
+  it('normalizes a malformed load to one header (first) and one footer (last)', () => {
+    newEditor()
+    const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+    const region = (type: string, text: string) => ({ type, content: [para(text)] })
+    created!.api.setJSON({
+      schemaVersion: 1,
+      doc: {
+        type: 'doc',
+        content: [
+          region('documentHeader', 'H1'),
+          para('body'),
+          region('documentHeader', 'H2'), // duplicate header
+          region('documentFooter', 'F'),
+          para('after footer'), // content after the footer
+        ],
+      },
+    })
+    const c = content()
+    expect(c.filter((n) => n.type === 'documentHeader')).toHaveLength(1)
+    expect(c.filter((n) => n.type === 'documentFooter')).toHaveLength(1)
+    expect(c[0]?.type).toBe('documentHeader')
+    expect(c[c.length - 1]?.type).toBe('documentFooter')
+  })
+
   it('exposes top/bottom page regions for the hover affordance', () => {
     expect(HeaderFooterFeature.pageRegions?.map((region) => [region.position, region.nodeName])).toEqual([
       ['top', 'documentHeader'],
