@@ -8,6 +8,9 @@ describe('<App /> toolbar', () => {
     const user = userEvent.setup()
     render(<App />)
 
+    // The bubble toolbar is the default now (shows on selection); switch to the
+    // static toolbar so we can assert on its buttons directly.
+    await user.selectOptions(screen.getByLabelText(/Toolbar/), 'default')
     const toolbar = await screen.findByRole('toolbar', { name: 'Formatação' })
     // Full preset is the default: bold + the app-level HTML button + team features.
     expect(within(toolbar).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
@@ -28,9 +31,8 @@ describe('<App /> toolbar', () => {
   it('swaps to a completely custom toolbar (Level 4) without losing features', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await screen.findByRole('toolbar', { name: 'Formatação' })
 
-    await user.selectOptions(screen.getByLabelText(/Toolbar/), 'pill')
+    await user.selectOptions(await screen.findByLabelText(/Toolbar/), 'pill')
 
     await waitFor(() => {
       const pill = document.querySelector('.pill-toolbar')
@@ -43,9 +45,8 @@ describe('<App /> toolbar', () => {
   it('zooms the document in and out via the right rail', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await screen.findByRole('toolbar', { name: 'Formatação' })
 
-    const zoomRail = screen.getByRole('toolbar', { name: 'Zoom' })
+    const zoomRail = await screen.findByRole('toolbar', { name: 'Zoom' })
     expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
 
     await user.click(within(zoomRail).getByRole('button', { name: 'Aumentar zoom' }))

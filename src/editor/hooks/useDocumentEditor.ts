@@ -5,6 +5,7 @@ import { createEditorApi, type EditorApi } from '../core/EditorApi'
 import { createEmptyDocument, type DocumentJSON } from '../core/document'
 import { resolveFeatures, type ResolvedFeatures } from '../core/registry'
 import type { FeatureDefinition } from '../core/types'
+import { createSlashCommands } from './slashCommands'
 
 export interface UseDocumentEditorOptions {
   /** Pass a stable (module-level/memoized) array — it drives editor identity. */
@@ -27,7 +28,11 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
 
   const editor = useEditor(
     {
-      extensions: buildExtensions(resolved),
+      extensions: [
+        ...buildExtensions(resolved),
+        // React-only `/` menu; mirrors the left insert rail (runnable inserts).
+        ...(resolved.inserts.some((item) => item.commandId) ? [createSlashCommands(resolved)] : []),
+      ],
       content: (options.content ?? createEmptyDocument()).doc,
     },
     [resolved],

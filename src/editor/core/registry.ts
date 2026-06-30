@@ -1,5 +1,5 @@
 import type { AnyExtension } from '@tiptap/core'
-import type { CommandFn, FeatureDefinition, SlashItem, ToolbarItem } from './types'
+import type { CommandFn, FeatureDefinition, ToolbarItem } from './types'
 
 /** The merged, conflict-checked result of composing a set of features. */
 export interface ResolvedFeatures {
@@ -9,7 +9,6 @@ export interface ResolvedFeatures {
   keymap: Record<string, string>
   toolbar: ToolbarItem[]
   inserts: ToolbarItem[]
-  slash: SlashItem[]
 }
 
 /**
@@ -63,6 +62,5 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     keymap,
     toolbar: features.flatMap((feature) => feature.toolbar ?? []),
     inserts: features.flatMap((feature) => feature.insert ?? []),
-    slash: features.flatMap((feature) => feature.slash ?? []),
   }
 }

@@ -3,7 +3,6 @@ export { defineFeature } from './core/defineFeature'
 export type {
   CommandFn,
   FeatureDefinition,
-  SlashItem,
   ToolbarItem,
   ToolbarItemContext,
 } from './core/types'

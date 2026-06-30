@@ -14,7 +14,7 @@ export default function App() {
   const [presetId, setPresetId] = useState(
     presets.find((p) => p.id === 'full')?.id ?? presets[0].id,
   )
-  const [toolbarStyle, setToolbarStyle] = useState<ToolbarStyle>('default')
+  const [toolbarStyle, setToolbarStyle] = useState<ToolbarStyle>('bubble')
   const [zoom, setZoom] = useState(1)
   const preset = presets.find((p) => p.id === presetId) ?? presets[0]
 

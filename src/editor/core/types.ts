@@ -30,17 +30,10 @@ export interface ToolbarItem {
   render?: (ctx: ToolbarItemContext) => ReactNode
 }
 
-/** Declarative entry for a "/" slash menu. */
-export interface SlashItem {
-  id: string
-  label: string
-  commandId: string
-}
-
 /**
  * The contract every feature implements. A feature bundles its TipTap
  * extension(s) with the stable, engine-independent surface the app consumes:
- * commands, keybindings and toolbar/slash contributions.
+ * commands, keybindings and toolbar/insert contributions.
  */
 export interface FeatureDefinition {
   /** Stable unique id, e.g. 'bold', 'callout'. */
@@ -54,7 +47,9 @@ export interface FeatureDefinition {
   /** Extra shortcuts, e.g. `{ 'Mod-Shift-c': 'callout.toggle' }`. */
   keymap?: Record<string, string>
   toolbar?: ToolbarItem[]
-  /** Contributions to the left insert rail (same shape as toolbar items). */
+  /**
+   * Contributions to the left insert rail (same shape as toolbar items). The
+   * `/` slash menu mirrors the runnable ones (those with a `commandId`).
+   */
   insert?: ToolbarItem[]
-  slash?: SlashItem[]
 }
