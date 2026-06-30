@@ -82,6 +82,12 @@ export default function App() {
             key={preset.id}
             features={preset.features}
             zoom={zoom}
+            // `onChange` is debounced (~250ms after edits stop) — i.e. the exact
+            // moment an autosave would fire. Here we just log the generated JSON.
+            onChange={(doc) => {
+              console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
+              console.log('document JSON:', doc)
+            }}
             renderRightBar={() => (
               <ZoomRail
                 zoom={zoom}
