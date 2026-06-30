@@ -9,7 +9,8 @@ import {
   resolveFeatures,
   type CreatedEditor,
 } from '../../editor'
-import { MergeFieldFeature, MergeFieldVariablesProvider, type MergeVariable } from './mergeField'
+import { MergeFieldFeature } from './mergeField'
+import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 let created: CreatedEditor | undefined
 
@@ -29,17 +30,17 @@ function hasNode(node: JSONContent, type: string): boolean {
   return node.content?.some((child) => hasNode(child, type)) ?? false
 }
 
-const SAMPLE: MergeVariable[] = [
+const SAMPLE: DocumentVariable[] = [
   { id: 'client.name', label: 'Nome do cliente' },
   { id: 'company.name', label: 'Empresa' },
 ]
 
 // The bar reads variables from context (the consumer), via the provider.
-function renderRail(variables: MergeVariable[], api = createMockEditor().api) {
+function renderRail(variables: DocumentVariable[], api = createMockEditor().api) {
   return render(
-    <MergeFieldVariablesProvider variables={variables}>
+    <DocumentVariablesProvider variables={variables}>
       <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
-    </MergeFieldVariablesProvider>,
+    </DocumentVariablesProvider>,
   )
 }
 
@@ -102,10 +103,10 @@ describe('mergeField', () => {
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
     const user = userEvent.setup()
     const api = createMockEditor().api
-    const ui = (variables: MergeVariable[]) => (
-      <MergeFieldVariablesProvider variables={variables}>
+    const ui = (variables: DocumentVariable[]) => (
+      <DocumentVariablesProvider variables={variables}>
         <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
-      </MergeFieldVariablesProvider>
+      </DocumentVariablesProvider>
     )
 
     // Starts empty (still "loading").

@@ -448,3 +448,100 @@ body {
   border-radius: 12px;
   white-space: nowrap;
 }
+
+/* Conditional block */
+.document-editor__surface .conditional-block {
+  margin: 0.6em 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.conditional-block__chrome {
+  background: #f8f9fa;
+}
+
+.conditional-block__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ececec;
+  user-select: none;
+}
+
+.conditional-block__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: #444746;
+  cursor: pointer;
+  text-align: left;
+}
+
+.conditional-block__icon {
+  color: #5f6368;
+}
+
+.conditional-block__cond {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ece8fd;
+  color: #5b3dd4;
+  font-size: 0.9em;
+}
+
+.conditional-block__delete {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.conditional-block__content {
+  padding: 8px 12px;
+}
+
+/* Condition editor card */
+.cond-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border-bottom: 1px solid #ececec;
+}
+
+.cond-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.cond-editor__field select,
+.cond-editor__field input {
+  font: inherit;
+  font-size: 14px;
+  color: #202124;
+  padding: 8px 10px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.cond-editor__done {
+  align-self: flex-end;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}

@@ -1,31 +1,7 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { defineFeature, mergeAttributes, Node, type EditorApi } from '../../editor'
-
-export interface MergeVariable {
-  id: string
-  label: string
-}
-
-/**
- * Variables come from the consumer via context — NOT from the feature config.
- * This keeps the feature (and therefore the `features` list / editor identity)
- * static, so loading variables async (e.g. from an API) updates only the modal
- * and NEVER recreates the editor.
- */
-const MergeVariablesContext = createContext<MergeVariable[]>([])
-
-export function MergeFieldVariablesProvider({
-  variables,
-  children,
-}: {
-  variables: MergeVariable[]
-  children: ReactNode
-}) {
-  return (
-    <MergeVariablesContext.Provider value={variables}>{children}</MergeVariablesContext.Provider>
-  )
-}
+import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 
 /**
  * Inline atomic node — the "chip". Pure-DOM node view (lighter than React for
@@ -83,8 +59,8 @@ function MergeFieldModal({
   onPick,
   onClose,
 }: {
-  variables: MergeVariable[]
-  onPick: (variable: MergeVariable) => void
+  variables: DocumentVariable[]
+  onPick: (variable: DocumentVariable) => void
   onClose: () => void
 }) {
   return (
@@ -124,7 +100,7 @@ function MergeFieldModal({
 
 function MergeFieldInsert({ api }: { api: EditorApi }) {
   const [open, setOpen] = useState(false)
-  const variables = useContext(MergeVariablesContext)
+  const variables = useDocumentVariables()
   return (
     <>
       <button
@@ -160,7 +136,7 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
 
 /**
  * Static "team" feature: @-menu that inserts inline merge-field chips. The
- * variable list comes from {@link MergeFieldVariablesProvider} (consumer-owned),
+ * variable list comes from {@link DocumentVariablesProvider} (consumer-owned),
  * so it can load async without touching the editor.
  */
 export const MergeFieldFeature = defineFeature({

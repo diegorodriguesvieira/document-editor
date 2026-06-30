@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
-import { MergeFieldVariablesProvider, type MergeVariable } from '../features'
+import { DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
@@ -21,7 +21,7 @@ export default function App() {
   // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
   // context (not the `features` list), the editor mounts immediately and does
   // NOT remount when they arrive — only the @ modal fills in.
-  const [mergeVariables, setMergeVariables] = useState<MergeVariable[]>([])
+  const [mergeVariables, setMergeVariables] = useState<DocumentVariable[]>([])
   useEffect(() => {
     const timer = setTimeout(() => {
       setMergeVariables([
@@ -73,8 +73,9 @@ export default function App() {
       </header>
 
       <main className="app__canvas">
-        {/* The merge-field variables come from here (consumer), via context. */}
-        <MergeFieldVariablesProvider variables={mergeVariables}>
+        {/* Document variables come from here (consumer), via context — shared by
+            merge fields and conditional blocks. */}
+        <DocumentVariablesProvider variables={mergeVariables}>
           {/* Same features, three different toolbar presentations — chosen by the app. */}
           <DocumentEditor
             // Remount only when the feature set changes; toolbar style just re-renders.
@@ -112,7 +113,7 @@ export default function App() {
               )
             }}
           />
-        </MergeFieldVariablesProvider>
+        </DocumentVariablesProvider>
       </main>
     </div>
   )

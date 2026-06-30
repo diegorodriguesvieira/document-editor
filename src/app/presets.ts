@@ -8,6 +8,7 @@ import {
   HeadingFeature,
   HistoryFeature,
   ImageFeature,
+  ConditionalBlockFeature,
   ItalicFeature,
   LinkFeature,
   ListsFeature,
@@ -50,8 +51,9 @@ export const presets: Preset[] = [
       CodeBlockFeature,
       DividerFeature,
       ImageFeature,
-      // Static feature — its variables come from MergeFieldVariablesProvider (the app).
+      // Static feature — its variables come from DocumentVariablesProvider (the app).
       MergeFieldFeature,
+      ConditionalBlockFeature,
     ],
   },
 ]

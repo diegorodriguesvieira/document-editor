@@ -3,14 +3,17 @@ import type { AnyExtension } from '@tiptap/core'
 import { Document as DocumentNode } from '@tiptap/extension-document'
 import { Paragraph } from '@tiptap/extension-paragraph'
 import { Text as TextNode } from '@tiptap/extension-text'
+import { TrailingNode } from '@tiptap/extensions'
 import type { ResolvedFeatures } from './registry'
 
 /**
  * The always-on schema kernel. You can't have a document without a top node,
  * paragraphs and text, so these are never opt-in — features build on top.
+ * TrailingNode keeps an empty paragraph after the last block (table, code,
+ * conditional block…) so you can always click below it and keep typing.
  */
 export function kernelExtensions(): AnyExtension[] {
-  return [DocumentNode, Paragraph, TextNode]
+  return [DocumentNode, Paragraph, TextNode, TrailingNode]
 }
 
 /**
