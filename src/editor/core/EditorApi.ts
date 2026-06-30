@@ -18,6 +18,9 @@ export interface EditorStateView {
  */
 export interface EditorApi extends EditorStateView {
   getJSON(): DocumentJSON
+  /** Replace the whole document — a heavy O(n) load (full reparse), not an
+   *  update channel. Throws if `doc` contains content invalid for the active
+   *  schema (e.g. a node whose feature is disabled). */
   setJSON(doc: DocumentJSON): void
   getHTML(): string
   /** Whether a top-level node of this type exists in the document. */
@@ -33,11 +36,11 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
   return {
     isActive: (name, attrs) => editor.isActive(name, attrs),
     hasNode: (name) => {
-      let found = false
-      editor.state.doc.forEach((node) => {
-        if (node.type.name === name) found = true
-      })
-      return found
+      const { doc } = editor.state
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === name) return true
+      }
+      return false
     },
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {

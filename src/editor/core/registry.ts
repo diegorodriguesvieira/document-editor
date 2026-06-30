@@ -63,6 +63,28 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     }
   }
 
+  // Referential integrity: every commandId a channel or keymap points at must
+  // resolve to a registered command. Catches typos / removed-from-this-preset
+  // commands at boot, instead of a button that renders enabled and no-ops on click.
+  const missing: string[] = []
+  const check = (commandId: string | undefined, where: string) => {
+    if (commandId && !(commandId in commands)) missing.push(`${where} -> "${commandId}"`)
+  }
+  for (const feature of features) {
+    for (const item of feature.toolbar ?? []) check(item.commandId, `toolbar "${item.id}"`)
+    for (const item of feature.insert ?? []) check(item.commandId, `insert "${item.id}"`)
+    for (const section of feature.contextMenu ?? []) {
+      for (const group of section.groups) {
+        for (const item of group.items) check(item.commandId, `contextMenu "${item.id}"`)
+      }
+    }
+    for (const region of feature.pageRegions ?? []) check(region.addCommandId, `pageRegion "${region.id}"`)
+  }
+  for (const commandId of Object.values(keymap)) check(commandId, 'keymap')
+  if (missing.length > 0) {
+    throw new Error(`Command id(s) referenced but never registered: ${missing.join(', ')}.`)
+  }
+
   return {
     features,
     extensions: features.flatMap((feature) => feature.extensions()),

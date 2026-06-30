@@ -47,6 +47,7 @@ describe('useToolbar', () => {
     const feature = defineFeature({
       id: 'a',
       extensions: () => [],
+      commands: { a: () => true },
       toolbar: [{ id: 'a', label: 'A', commandId: 'a' }],
     })
     created = createEditor({ features: [feature], element: mountTarget() })

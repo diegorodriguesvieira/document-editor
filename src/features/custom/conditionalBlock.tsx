@@ -161,6 +161,10 @@ const ConditionalBlock = Node.create({
   group: 'block',
   content: 'block+',
   defining: true,
+  // Isolating so a join/lift across the boundary (e.g. Backspace at the start of
+  // the first inner block) can't silently strip the wrapper — and with it the
+  // {variable,condition,value} the backend evaluates to gate the content.
+  isolating: true,
 
   addAttributes() {
     return {

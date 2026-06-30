@@ -100,11 +100,13 @@ describe('<EditorToolbar />', () => {
     const marks = defineFeature({
       id: 'marks',
       extensions: () => [],
+      commands: { bold: () => true },
       toolbar: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold' }],
     })
     const history = defineFeature({
       id: 'history',
       extensions: () => [],
+      commands: { undo: () => true },
       toolbar: [{ id: 'undo', group: 'history', label: 'Undo', commandId: 'undo' }],
     })
     const mock = createMockEditor()

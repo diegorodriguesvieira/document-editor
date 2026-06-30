@@ -41,6 +41,11 @@ describe('conditional block', () => {
     expect(hasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
   })
 
+  it('is isolating so edits across its boundary cannot strip the wrapper', () => {
+    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    expect(created.editor.schema.nodes.conditionalBlock.spec.isolating).toBe(true)
+  })
+
   it('keeps a trailing paragraph after the block so you can type below it', () => {
     created = createEditor({
       features: [ConditionalBlockFeature],

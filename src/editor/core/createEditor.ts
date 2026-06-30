@@ -10,6 +10,9 @@ export interface CreateEditorOptions {
   content?: DocumentJSON
   /** Optional mount point. Omit for a headless editor (SSR, tests, export). */
   element?: HTMLElement
+  /** Called when content fails schema validation instead of silently wiping the
+   *  document. Defaults to throwing. */
+  onContentError?: (error: Error) => void
 }
 
 export interface CreatedEditor {
@@ -29,6 +32,12 @@ export function createEditor(options: CreateEditorOptions): CreatedEditor {
     element: options.element,
     extensions: buildExtensions(resolved),
     content: (options.content ?? createEmptyDocument()).doc,
+    // Surface invalid content rather than silently collapsing the doc to empty.
+    enableContentCheck: true,
+    onContentError: ({ error }) => {
+      if (options.onContentError) options.onContentError(error)
+      else throw error
+    },
   })
   return { editor, api: createEditorApi(editor, resolved), resolved }
 }

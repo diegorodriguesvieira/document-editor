@@ -39,6 +39,12 @@ describe('resolveFeatures', () => {
     ).toThrow(/Command "shared.cmd"/)
   })
 
+  it('rejects a channel commandId that no command registers', () => {
+    expect(() =>
+      resolveFeatures([feature({ id: 'x', toolbar: [{ id: 'x', label: 'X', commandId: 'x.typo' }] })]),
+    ).toThrow(/referenced but never registered/)
+  })
+
   it('rejects conflicting keymaps', () => {
     expect(() =>
       resolveFeatures([
@@ -53,11 +59,13 @@ describe('resolveFeatures', () => {
       feature({
         id: 'a',
         extensions: () => [{} as unknown as AnyExtension],
+        commands: { 'a.cmd': () => true },
         toolbar: [{ id: 'a', label: 'A', commandId: 'a.cmd' }],
       }),
       feature({
         id: 'b',
         extensions: () => [{} as unknown as AnyExtension, {} as unknown as AnyExtension],
+        commands: { 'b.cmd': () => true },
         toolbar: [{ id: 'b', label: 'B', commandId: 'b.cmd' }],
       }),
     ])
