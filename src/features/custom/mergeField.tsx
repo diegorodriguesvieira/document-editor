@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { defineFeature, mergeAttributes, Node, type EditorApi } from '../../editor'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { createMergeFieldSuggestion } from './mergeFieldSuggestion'
 
 /**
  * Inline atomic node — the "chip". Pure-DOM node view (lighter than React for
@@ -141,7 +142,8 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
  */
 export const MergeFieldFeature = defineFeature({
   id: 'mergeField',
-  extensions: () => [MergeField],
+  // The node (chip) + the `@` typing trigger that inserts it.
+  extensions: () => [MergeField, createMergeFieldSuggestion()],
   commands: {
     'mergeField.insert': (editor, payload) => {
       const field = (payload ?? {}) as { id?: string; label?: string }
