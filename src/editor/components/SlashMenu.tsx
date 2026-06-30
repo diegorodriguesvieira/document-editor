@@ -1,9 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
+import { forwardRef } from 'react'
+import { useListKeyboardNav, type SuggestionPopupRef } from '../hooks/createSuggestionPopup'
 import type { ToolbarItem } from '../core/types'
 
-export interface SlashMenuRef {
-  onKeyDown: (props: { event: KeyboardEvent }) => boolean
-}
+/** @deprecated alias — use {@link SuggestionPopupRef}. */
+export type SlashMenuRef = SuggestionPopupRef
 
 interface SlashMenuProps {
   items: ToolbarItem[]
@@ -11,41 +11,14 @@ interface SlashMenuProps {
 }
 
 /**
- * The floating `/` command list. Keyboard nav (↑/↓/Enter) is driven by the
- * Suggestion plugin via the imperative `onKeyDown` (exposed through the ref).
+ * The floating `/` command list. Navigation is driven by the shared
+ * {@link useListKeyboardNav} (exposed through the popup ref).
  */
-export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(function SlashMenu(
+export const SlashMenu = forwardRef<SuggestionPopupRef, SlashMenuProps>(function SlashMenu(
   { items, command },
   ref,
 ) {
-  const [index, setIndex] = useState(0)
-
-  // Reset the highlight whenever the filtered list changes.
-  useEffect(() => setIndex(0), [items])
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      onKeyDown: ({ event }) => {
-        if (items.length === 0) return false
-        if (event.key === 'ArrowUp') {
-          setIndex((i) => (i + items.length - 1) % items.length)
-          return true
-        }
-        if (event.key === 'ArrowDown') {
-          setIndex((i) => (i + 1) % items.length)
-          return true
-        }
-        if (event.key === 'Enter') {
-          const item = items[index]
-          if (item) command(item)
-          return true
-        }
-        return false
-      },
-    }),
-    [items, index, command],
-  )
+  const { index, setIndex } = useListKeyboardNav(ref, items, command)
 
   if (items.length === 0) {
     return <div className="slash-menu slash-menu--empty">No results</div>

@@ -18,7 +18,7 @@ function renderMenu(
 ) {
   return render(
     <DocumentVariablesProvider variables={VARS}>
-      <MergeFieldMenu ref={ref} query={query} onPick={onPick} />
+      <MergeFieldMenu ref={ref} query={query} command={onPick} />
     </DocumentVariablesProvider>,
   )
 }
