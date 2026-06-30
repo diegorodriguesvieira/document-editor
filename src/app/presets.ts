@@ -3,6 +3,7 @@ import {
   AiAssistFeature,
   BoldFeature,
   CalloutFeature,
+  CommentsFeature,
   CodeBlockFeature,
   DividerFeature,
   HeadingFeature,
@@ -57,6 +58,7 @@ export const presets: Preset[] = [
       MergeFieldFeature,
       ConditionalBlockFeature,
       HeaderFooterFeature,
+      CommentsFeature,
     ],
   },
 ]
