@@ -1,13 +1,12 @@
-import { useEffect, useReducer } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { EditorApi } from '../core/EditorApi'
 import type { PageRegion } from '../core/types'
 
 /**
  * The hover affordances at the top/bottom of the page — "Add header +" /
- * "Add footer +". Each shows only while its region's node is absent
- * (re-checked on every document change) and runs the region's add command on
- * click. Auto-mounted by {@link DocumentEditor} when a feature contributes
- * page regions.
+ * "Add footer +". Each shows only while its region's node is absent and runs
+ * the region's add command on click. Auto-mounted by {@link DocumentEditor}
+ * when a feature contributes page regions.
  */
 export function PageAffordances({
   api,
@@ -18,11 +17,26 @@ export function PageAffordances({
   regions: PageRegion[]
   position: 'top' | 'bottom'
 }) {
-  // Re-render on document changes so presence (hasNode) stays fresh.
-  const [, bump] = useReducer((n: number) => n + 1, 0)
-  useEffect(() => api.on('update', bump), [api])
+  const compute = useCallback(
+    () => regions.filter((region) => region.position === position && !api.hasNode(region.nodeName)),
+    [api, regions, position],
+  )
 
-  const shown = regions.filter((region) => region.position === position && !api.hasNode(region.nodeName))
+  // Selector with equality-skip: re-compute presence on every change, but only
+  // re-render when the SET of shown affordances actually changes — not on every
+  // keystroke (which `getJSON`-free is cheap, but the re-render isn't free).
+  const [shown, setShown] = useState(compute)
+  useEffect(() => {
+    const recompute = () =>
+      setShown((prev) => {
+        const next = compute()
+        const same = prev.length === next.length && prev.every((r, i) => r.id === next[i].id)
+        return same ? prev : next
+      })
+    recompute() // sync in case the doc changed between init and subscribe
+    return api.on('update', recompute)
+  }, [api, compute])
+
   if (shown.length === 0) return null
 
   return (

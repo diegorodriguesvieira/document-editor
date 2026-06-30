@@ -31,6 +31,28 @@ describe('callout feature', () => {
     expect(editor.isActive('callout')).toBe(true)
   })
 
+  it('renders the emoji chrome via its pure-DOM node view', () => {
+    const target = mountTarget()
+    created = createEditor({
+      features: [CalloutFeature],
+      element: target,
+      content: {
+        schemaVersion: 1,
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'callout',
+              attrs: { emoji: '⚠️' },
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hi' }] }],
+            },
+          ],
+        },
+      },
+    })
+    expect(target.querySelector('.callout__emoji')?.textContent).toBe('⚠️')
+  })
+
   it('registers its Mod-Shift-c shortcut in the resolved keymap', () => {
     created = createEditor({ features: [CalloutFeature] })
     expect(created.resolved.keymap['Mod-Shift-c']).toBe('callout.toggle')

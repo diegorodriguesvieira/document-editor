@@ -8,7 +8,7 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from '../../editor'
-import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { useDocumentVariable, useDocumentVariables, type DocumentVariable } from './documentVariables'
 
 interface ConditionOption {
   id: string
@@ -98,9 +98,8 @@ export function ConditionEditor({
   )
 }
 
-function conditionText(value: ConditionValue, variables: DocumentVariable[]): string {
+function conditionText(value: ConditionValue, variable: DocumentVariable | undefined): string {
   if (!value.variable || !value.condition) return 'no condition'
-  const variable = variables.find((v) => v.id === value.variable)
   const condition = CONDITIONS.find((c) => c.id === value.condition)
   const label = variable?.label ?? value.variable
   const conditionLabel = condition?.label ?? value.condition
@@ -116,6 +115,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
     condition: (node.attrs.condition as string | null) ?? null,
     value: (node.attrs.value as string | null) ?? null,
   }
+  const selectedVariable = useDocumentVariable(cond.variable)
 
   return (
     <NodeViewWrapper className="conditional-block">
@@ -131,7 +131,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
               ⑂
             </span>
             <span>Show if</span>
-            <span className="conditional-block__cond">{conditionText(cond, variables)}</span>
+            <span className="conditional-block__cond">{conditionText(cond, selectedVariable)}</span>
           </button>
           <button
             type="button"
