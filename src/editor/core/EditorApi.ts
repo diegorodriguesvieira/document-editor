@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { exportHTML, migrateDocument, toDocumentJSON, type DocumentJSON } from './document'
+import { exportHTML, toDocumentJSON, type DocumentJSON } from './document'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -52,7 +52,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     },
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
-      editor.commands.setContent(migrateDocument(doc, resolved.migrations).doc)
+      editor.commands.setContent(doc.doc)
     },
     getHTML: () => exportHTML(editor),
     focus: () => {

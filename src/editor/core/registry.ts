@@ -1,5 +1,4 @@
 import type { AnyExtension } from '@tiptap/core'
-import type { DocumentMigration } from './document'
 import type {
   CommandFn,
   ContextMenuSection,
@@ -26,8 +25,6 @@ export interface ResolvedFeatures {
   inserts: ToolbarItem[]
   contextMenu: ContextMenuSection[]
   pageRegions: PageRegion[]
-  /** Per-version migration steps, composed across features. */
-  migrations: Record<number, DocumentMigration[]>
 }
 
 /**
@@ -96,13 +93,6 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     throw new Error(`Command id(s) referenced but never registered: ${missing.join(', ')}.`)
   }
 
-  const migrations: Record<number, DocumentMigration[]> = {}
-  for (const feature of features) {
-    for (const [version, migrate] of Object.entries(feature.migrations ?? {})) {
-      ;(migrations[Number(version)] ??= []).push(migrate)
-    }
-  }
-
   return {
     features,
     extensions: features.flatMap((feature) => feature.extensions()),
@@ -112,6 +102,5 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     inserts: byOrder(features.flatMap((feature) => feature.insert ?? [])),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
     pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),
-    migrations,
   }
 }

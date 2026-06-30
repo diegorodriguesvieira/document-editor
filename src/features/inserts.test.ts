@@ -24,7 +24,6 @@ function mountTarget() {
 }
 
 const docWith = (text: string) => ({
-  schemaVersion: 1,
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
 
@@ -69,7 +68,7 @@ describe('insert actions (real editor)', () => {
     created = createEditor({
       features: [LinkFeature],
       element: mountTarget(),
-      content: { schemaVersion: 1, doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
     expect(created.api.exec('link.insert', { text: 'Google', href: 'https://google.com' })).toBe(true)
 
@@ -82,7 +81,7 @@ describe('insert actions (real editor)', () => {
     created = createEditor({
       features: [LinkFeature],
       element: mountTarget(),
-      content: { schemaVersion: 1, doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
     created.api.exec('link.insert', { text: 'Google', href: 'https://google.com' })
 

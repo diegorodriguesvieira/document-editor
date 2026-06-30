@@ -34,7 +34,7 @@ describe('<PageAffordances />', () => {
 
   it('hides the affordance when the region already exists', () => {
     const mock = createMockEditor({
-      doc: { schemaVersion: 1, doc: { type: 'doc', content: [{ type: 'documentHeader' }] } },
+      doc: { doc: { type: 'doc', content: [{ type: 'documentHeader' }] } },
     })
     render(<PageAffordances api={mock.api} regions={REGIONS} position="top" />)
     expect(screen.queryByRole('button', { name: /Add header/ })).toBeNull()

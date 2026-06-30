@@ -65,7 +65,6 @@ describe('header/footer feature', () => {
     const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
     const region = (type: string, text: string) => ({ type, content: [para(text)] })
     created!.api.setJSON({
-      schemaVersion: 1,
       doc: {
         type: 'doc',
         content: [

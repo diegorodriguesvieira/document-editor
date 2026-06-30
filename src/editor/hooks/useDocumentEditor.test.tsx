@@ -41,6 +41,6 @@ describe('useDocumentEditor', () => {
     expect(onChange).not.toHaveBeenCalled() // debounced, not synchronous
 
     await waitFor(() => expect(onChange).toHaveBeenCalled())
-    expect(onChange.mock.calls.at(-1)![0]).toHaveProperty('schemaVersion')
+    expect(onChange.mock.calls.at(-1)![0]).toHaveProperty('doc')
   })
 })

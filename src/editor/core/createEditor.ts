@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core'
 import { buildExtensions } from './buildExtensions'
 import { createEditorApi, type EditorApi } from './EditorApi'
-import { createEmptyDocument, migrateDocument, type DocumentJSON } from './document'
+import { createEmptyDocument, type DocumentJSON } from './document'
 import { resolveFeatures, type ResolvedFeatures } from './registry'
 import type { FeatureDefinition } from './types'
 
@@ -31,7 +31,7 @@ export function createEditor(options: CreateEditorOptions): CreatedEditor {
   const editor = new Editor({
     element: options.element,
     extensions: buildExtensions(resolved),
-    content: migrateDocument(options.content ?? createEmptyDocument(), resolved.migrations).doc,
+    content: (options.content ?? createEmptyDocument()).doc,
     // Surface invalid content rather than silently collapsing the doc to empty.
     enableContentCheck: true,
     onContentError: ({ error }) => {

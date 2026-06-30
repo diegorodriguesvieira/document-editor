@@ -12,7 +12,6 @@ afterEach(() => {
 })
 
 const docWith = (text: string) => ({
-  schemaVersion: 1,
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
 

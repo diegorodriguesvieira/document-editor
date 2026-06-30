@@ -65,7 +65,7 @@ describe('mergeField', () => {
     created = createEditor({
       features: [MergeFieldFeature],
       element: mountTarget(),
-      content: { schemaVersion: 1, doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
 
     expect(

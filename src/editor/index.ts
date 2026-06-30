@@ -45,12 +45,7 @@ export type { DocumentEditorProps, DocumentEditorRenderContext } from './compone
 export { EditorContent } from '@tiptap/react'
 
 // Content / persistence
-export {
-  SCHEMA_VERSION,
-  createEmptyDocument,
-  toDocumentJSON,
-  exportHTML,
-} from './core/document'
+export { createEmptyDocument, toDocumentJSON, exportHTML } from './core/document'
 export type { DocumentJSON } from './core/document'
 
 // Authoring surface for custom features

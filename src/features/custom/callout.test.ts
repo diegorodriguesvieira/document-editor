@@ -10,7 +10,6 @@ afterEach(() => {
 })
 
 const docWith = (text: string) => ({
-  schemaVersion: 1,
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
 
@@ -37,7 +36,6 @@ describe('callout feature', () => {
       features: [CalloutFeature],
       element: target,
       content: {
-        schemaVersion: 1,
         doc: {
           type: 'doc',
           content: [

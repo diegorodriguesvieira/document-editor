@@ -26,7 +26,6 @@ function hasNode(node: JSONContent, type: string): boolean {
 }
 
 const docWith = (text: string) => ({
-  schemaVersion: 1,
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
 
@@ -61,7 +60,6 @@ describe('conditional block', () => {
   it('serializes the condition to data-* attrs for the backend', () => {
     created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
     created.api.setJSON({
-      schemaVersion: 1,
       doc: {
         type: 'doc',
         content: [
