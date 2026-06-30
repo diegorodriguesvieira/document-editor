@@ -10,10 +10,11 @@ import type { ResolvedFeatures } from './registry'
  * The always-on schema kernel. You can't have a document without a top node,
  * paragraphs and text, so these are never opt-in — features build on top.
  * TrailingNode keeps an empty paragraph after the last block (table, code,
- * conditional block…) so you can always click below it and keep typing.
+ * conditional block…) so you can always click below it and keep typing —
+ * except after a document footer, which is meant to stay last.
  */
 export function kernelExtensions(): AnyExtension[] {
-  return [DocumentNode, Paragraph, TextNode, TrailingNode]
+  return [DocumentNode, Paragraph, TextNode, TrailingNode.configure({ notAfter: ['documentFooter'] })]
 }
 
 /**

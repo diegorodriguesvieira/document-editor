@@ -13,7 +13,7 @@ export const LinkFeature = defineFeature({
         typeof payload === 'string'
           ? payload
           : typeof window !== 'undefined'
-            ? (window.prompt('URL do link:') ?? '')
+            ? (window.prompt('Link URL:') ?? '')
             : ''
       if (!href) {
         return editor.chain().focus().unsetLink().run()
@@ -29,14 +29,14 @@ export const LinkFeature = defineFeature({
         typeof fields.text === 'string'
           ? fields.text
           : typeof window !== 'undefined'
-            ? (window.prompt('Texto do link:') ?? '')
+            ? (window.prompt('Link text:') ?? '')
             : ''
       if (!text) return false
       const href =
         typeof fields.href === 'string'
           ? fields.href
           : typeof window !== 'undefined'
-            ? (window.prompt('URL do link:') ?? '')
+            ? (window.prompt('Link URL:') ?? '')
             : ''
       if (!href) return false
       return editor

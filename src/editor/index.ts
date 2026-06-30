@@ -6,6 +6,7 @@ export type {
   ContextMenuItem,
   ContextMenuSection,
   FeatureDefinition,
+  PageRegion,
   ToolbarItem,
   ToolbarItemContext,
 } from './core/types'
@@ -36,6 +37,7 @@ export type { BubbleToolbarProps } from './components/BubbleToolbar'
 export { InsertToolbar } from './components/InsertToolbar'
 export type { InsertToolbarProps } from './components/InsertToolbar'
 export { EditorContextMenu, ContextMenuView } from './components/EditorContextMenu'
+export { PageAffordances } from './components/PageAffordances'
 export { DocumentEditor } from './components/DocumentEditor'
 export type { DocumentEditorProps, DocumentEditorRenderContext } from './components/DocumentEditor'
 export { EditorContent } from '@tiptap/react'

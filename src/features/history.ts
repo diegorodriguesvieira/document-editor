@@ -10,7 +10,7 @@ export const HistoryFeature = defineFeature({
     'history.redo': (editor) => editor.chain().focus().redo().run(),
   },
   toolbar: [
-    { id: 'undo', group: 'history', label: 'Desfazer', icon: '↶', commandId: 'history.undo' },
-    { id: 'redo', group: 'history', label: 'Refazer', icon: '↷', commandId: 'history.redo' },
+    { id: 'undo', group: 'history', label: 'Undo', icon: '↶', commandId: 'history.undo' },
+    { id: 'redo', group: 'history', label: 'Redo', icon: '↷', commandId: 'history.redo' },
   ],
 })

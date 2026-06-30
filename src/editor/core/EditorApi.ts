@@ -20,6 +20,8 @@ export interface EditorApi extends EditorStateView {
   getJSON(): DocumentJSON
   setJSON(doc: DocumentJSON): void
   getHTML(): string
+  /** Whether a top-level node of this type exists in the document. */
+  hasNode(name: string): boolean
   /** Return focus to the editor (e.g. after a modal/popover closes). */
   focus(): void
   exec(commandId: string, payload?: unknown): boolean
@@ -30,6 +32,13 @@ export interface EditorApi extends EditorStateView {
 export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): EditorApi {
   return {
     isActive: (name, attrs) => editor.isActive(name, attrs),
+    hasNode: (name) => {
+      let found = false
+      editor.state.doc.forEach((node) => {
+        if (node.type.name === name) found = true
+      })
+      return found
+    },
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
       editor.commands.setContent(doc.doc)

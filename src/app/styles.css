@@ -667,3 +667,83 @@ body {
   width: 20px;
   font-size: 14px;
 }
+
+/* Header/footer hover affordance — "Adicionar cabeçalho +" */
+.page-affordance {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.page-affordance:hover {
+  opacity: 1;
+}
+
+.page-affordance__line {
+  flex: 1;
+  height: 1px;
+  background: #c7c7c7;
+}
+
+.page-affordance__label {
+  color: #1a73e8;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Rendered header/footer regions */
+.doc-region {
+  position: relative;
+  padding: 8px 12px;
+  border: 1px dashed #d0d0d0;
+  border-radius: 6px;
+}
+
+.doc-region--header {
+  margin-bottom: 18px;
+}
+
+.doc-region--footer {
+  margin-top: 18px;
+}
+
+.doc-region__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.doc-region__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #80868b;
+}
+
+.doc-region__remove {
+  border: none;
+  background: transparent;
+  color: #d93025;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.doc-region:hover .doc-region__remove {
+  opacity: 1;
+}
+
+.doc-region__content {
+  outline: none;
+}

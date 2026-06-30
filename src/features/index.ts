@@ -17,6 +17,7 @@ export { CalloutFeature } from './custom/callout'
 export { AiAssistFeature } from './custom/aiAssist'
 export { MergeFieldFeature } from './custom/mergeField'
 export { ConditionalBlockFeature } from './custom/conditionalBlock'
+export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'
 export type { DocumentVariable } from './custom/documentVariables'
 

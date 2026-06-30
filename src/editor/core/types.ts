@@ -38,11 +38,11 @@ export interface ContextMenuItem {
   icon?: string
   /** Command id (from some feature's `commands`) to run when picked. */
   commandId: string
-  /** Render in a destructive (red) style, e.g. "Excluir linha". */
+  /** Render in a destructive (red) style, e.g. "Delete row". */
   danger?: boolean
 }
 
-/** A labelled group of context-menu items, e.g. "Linha" / "Coluna" / "Célula". */
+/** A labelled group of context-menu items, e.g. "Row" / "Column" / "Cell". */
 export interface ContextMenuGroup {
   id: string
   label?: string
@@ -57,6 +57,22 @@ export interface ContextMenuSection {
   id: string
   when: (state: EditorStateView) => boolean
   groups: ContextMenuGroup[]
+}
+
+/**
+ * A page-edge "chrome" region (header/footer). The hover affordance to add it
+ * shows while no node of `nodeName` exists; clicking runs `addCommandId`.
+ */
+export interface PageRegion {
+  id: string
+  /** Where the affordance sits on the page. */
+  position: 'top' | 'bottom'
+  /** Affordance label, e.g. "Add header". */
+  label: string
+  /** Command run when the affordance is clicked. */
+  addCommandId: string
+  /** Doc node representing the region; the affordance hides while it exists. */
+  nodeName: string
 }
 
 /**
@@ -83,4 +99,6 @@ export interface FeatureDefinition {
   insert?: ToolbarItem[]
   /** Right-click menu shown when its `when` predicate matches the click. */
   contextMenu?: ContextMenuSection[]
+  /** Page-edge regions (header/footer) with a hover "add" affordance. */
+  pageRegions?: PageRegion[]
 }

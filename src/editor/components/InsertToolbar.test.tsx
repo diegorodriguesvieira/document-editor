@@ -10,7 +10,7 @@ const tableish = defineFeature({
   id: 'table',
   extensions: () => [],
   commands: { 'table.insert': () => true },
-  insert: [{ id: 'table', label: 'Tabela', icon: 'T', commandId: 'table.insert' }],
+  insert: [{ id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' }],
 })
 
 const quoteish = defineFeature({
@@ -20,7 +20,7 @@ const quoteish = defineFeature({
   insert: [
     {
       id: 'quote',
-      label: 'Citação',
+      label: 'Quote',
       icon: 'Q',
       commandId: 'quote.toggle',
       isActive: (state) => state.isActive('blockquote'),
@@ -35,17 +35,17 @@ describe('<InsertToolbar />', () => {
       <InsertToolbar editor={null} api={mock.api} resolved={resolveFeatures([tableish, quoteish])} />,
     )
 
-    const bar = screen.getByRole('toolbar', { name: 'Inserir' })
+    const bar = screen.getByRole('toolbar', { name: 'Insert' })
     expect(bar).toHaveAttribute('aria-orientation', 'vertical')
-    expect(screen.getByRole('button', { name: 'Tabela' })).toHaveTextContent('T')
-    expect(screen.getByRole('button', { name: 'Citação' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Table' })).toHaveTextContent('T')
+    expect(screen.getByRole('button', { name: 'Quote' })).toBeInTheDocument()
   })
 
   it('dispatches the insert command via api.exec on click', async () => {
     const mock = createMockEditor()
     render(<InsertToolbar editor={null} api={mock.api} resolved={resolveFeatures([tableish])} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Tabela' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Table' }))
     expect(mock.execCalls).toEqual([{ commandId: 'table.insert', payload: undefined }])
   })
 
@@ -53,11 +53,11 @@ describe('<InsertToolbar />', () => {
     const mock = createMockEditor()
     render(<InsertToolbar editor={null} api={mock.api} resolved={resolveFeatures([quoteish])} />)
 
-    expect(screen.getByRole('button', { name: 'Citação' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Quote' })).toHaveAttribute('aria-pressed', 'false')
     act(() => {
       mock.setActive(['blockquote'])
     })
-    expect(screen.getByRole('button', { name: 'Citação' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Quote' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('filters which inserts are shown', () => {
@@ -70,8 +70,8 @@ describe('<InsertToolbar />', () => {
         filter={(item) => item.id !== 'quote'}
       />,
     )
-    expect(screen.getByRole('button', { name: 'Tabela' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Citação' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Table' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Quote' })).toBeNull()
   })
 
   it('renders nothing when there are no inserts and no children', () => {

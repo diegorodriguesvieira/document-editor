@@ -67,7 +67,7 @@ export const CalloutFeature = defineFeature({
     {
       id: 'callout',
       group: 'blocks',
-      label: 'Destaque',
+      label: 'Callout',
       icon: '💡',
       commandId: 'callout.toggle',
       isActive: (state) => state.isActive('callout'),

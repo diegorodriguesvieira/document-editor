@@ -19,7 +19,7 @@ export const TableFeature = defineFeature({
     'table.toggleHeaderRow': (editor) => editor.chain().focus().toggleHeaderRow().run(),
     'table.delete': (editor) => editor.chain().focus().deleteTable().run(),
   },
-  insert: [{ id: 'table', label: 'Tabela', icon: 'T', commandId: 'table.insert' }],
+  insert: [{ id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' }],
   // Right-click inside a table → row/column/cell actions. Shown only when the
   // caret (set to the clicked cell) is in a table.
   contextMenu: [
@@ -29,35 +29,35 @@ export const TableFeature = defineFeature({
       groups: [
         {
           id: 'row',
-          label: 'Linha',
+          label: 'Row',
           items: [
-            { id: 'row-above', label: 'Inserir linha acima', icon: '↑', commandId: 'table.addRowBefore' },
-            { id: 'row-below', label: 'Inserir linha abaixo', icon: '↓', commandId: 'table.addRowAfter' },
-            { id: 'row-delete', label: 'Excluir linha', icon: '🗑', commandId: 'table.deleteRow', danger: true },
+            { id: 'row-above', label: 'Insert row above', icon: '↑', commandId: 'table.addRowBefore' },
+            { id: 'row-below', label: 'Insert row below', icon: '↓', commandId: 'table.addRowAfter' },
+            { id: 'row-delete', label: 'Delete row', icon: '🗑', commandId: 'table.deleteRow', danger: true },
           ],
         },
         {
           id: 'column',
-          label: 'Coluna',
+          label: 'Column',
           items: [
-            { id: 'col-left', label: 'Inserir coluna à esquerda', icon: '←', commandId: 'table.addColumnBefore' },
-            { id: 'col-right', label: 'Inserir coluna à direita', icon: '→', commandId: 'table.addColumnAfter' },
-            { id: 'col-delete', label: 'Excluir coluna', icon: '🗑', commandId: 'table.deleteColumn', danger: true },
+            { id: 'col-left', label: 'Insert column left', icon: '←', commandId: 'table.addColumnBefore' },
+            { id: 'col-right', label: 'Insert column right', icon: '→', commandId: 'table.addColumnAfter' },
+            { id: 'col-delete', label: 'Delete column', icon: '🗑', commandId: 'table.deleteColumn', danger: true },
           ],
         },
         {
           id: 'cell',
-          label: 'Célula',
+          label: 'Cell',
           items: [
-            { id: 'merge', label: 'Mesclar células', icon: '⧉', commandId: 'table.mergeCells' },
-            { id: 'split', label: 'Dividir célula', icon: '⊟', commandId: 'table.splitCell' },
-            { id: 'header', label: 'Alternar cabeçalho', icon: '▦', commandId: 'table.toggleHeaderRow' },
+            { id: 'merge', label: 'Merge cells', icon: '⧉', commandId: 'table.mergeCells' },
+            { id: 'split', label: 'Split cell', icon: '⊟', commandId: 'table.splitCell' },
+            { id: 'header', label: 'Toggle header row', icon: '▦', commandId: 'table.toggleHeaderRow' },
           ],
         },
         {
           id: 'table',
           items: [
-            { id: 'delete-table', label: 'Excluir tabela', icon: '🗑', commandId: 'table.delete', danger: true },
+            { id: 'delete-table', label: 'Delete table', icon: '🗑', commandId: 'table.delete', danger: true },
           ],
         },
       ],

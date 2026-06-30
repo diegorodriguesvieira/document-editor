@@ -88,24 +88,24 @@ describe('<EditorToolbar />', () => {
     const feature = defineFeature({
       id: 'meta',
       extensions: () => [],
-      toolbar: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">olá</span> }],
+      toolbar: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">hi</span> }],
     })
     created = createEditor({ features: [feature], element: mountTarget() })
 
     render(<EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved} />)
-    expect(screen.getByTestId('custom')).toHaveTextContent('olá')
+    expect(screen.getByTestId('custom')).toHaveTextContent('hi')
   })
 
   it('shows only the contributions that pass the filter (e.g. a bubble menu)', () => {
     const marks = defineFeature({
       id: 'marks',
       extensions: () => [],
-      toolbar: [{ id: 'bold', group: 'marks', label: 'Negrito', commandId: 'bold' }],
+      toolbar: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold' }],
     })
     const history = defineFeature({
       id: 'history',
       extensions: () => [],
-      toolbar: [{ id: 'undo', group: 'history', label: 'Desfazer', commandId: 'undo' }],
+      toolbar: [{ id: 'undo', group: 'history', label: 'Undo', commandId: 'undo' }],
     })
     const mock = createMockEditor()
 
@@ -118,7 +118,7 @@ describe('<EditorToolbar />', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Bold' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 })

@@ -31,8 +31,8 @@ function hasNode(node: JSONContent, type: string): boolean {
 }
 
 const SAMPLE: DocumentVariable[] = [
-  { id: 'client.name', label: 'Nome do cliente' },
-  { id: 'company.name', label: 'Empresa' },
+  { id: 'client.name', label: 'Client name' },
+  { id: 'company.name', label: 'Company' },
 ]
 
 // The bar reads variables from context (the consumer), via the provider.
@@ -51,13 +51,13 @@ describe('mergeField', () => {
     renderRail(SAMPLE, mock.api)
 
     expect(screen.queryByRole('dialog')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Inserir variável' }))
-    expect(screen.getByRole('dialog', { name: 'Variáveis' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Nome do cliente' }))
+    await user.click(screen.getByRole('button', { name: 'Client name' }))
     expect(mock.execCalls).toContainEqual({
       commandId: 'mergeField.insert',
-      payload: { id: 'client.name', label: 'Nome do cliente' },
+      payload: { id: 'client.name', label: 'Client name' },
     })
   })
 
@@ -69,7 +69,7 @@ describe('mergeField', () => {
     })
 
     expect(
-      created.api.exec('mergeField.insert', { id: 'client.name', label: 'Nome do cliente' }),
+      created.api.exec('mergeField.insert', { id: 'client.name', label: 'Client name' }),
     ).toBe(true)
     expect(hasNode(created.api.getJSON().doc, 'mergeField')).toBe(true)
     expect(created.api.getHTML()).toContain('data-merge-field="client.name"')
@@ -84,8 +84,8 @@ describe('mergeField', () => {
     const focusSpy = vi.spyOn(mock.api, 'focus')
     renderRail(SAMPLE, mock.api)
 
-    await user.click(screen.getByRole('button', { name: 'Inserir variável' }))
-    await user.click(screen.getByRole('button', { name: 'Fechar' }))
+    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(focusSpy).toHaveBeenCalled()
@@ -93,11 +93,11 @@ describe('mergeField', () => {
 
   it('shows exactly the variables the consumer provides via context', async () => {
     const user = userEvent.setup()
-    renderRail([{ id: 'custom.var', label: 'Variável Custom' }])
+    renderRail([{ id: 'custom.var', label: 'Custom Variable' }])
 
-    await user.click(screen.getByRole('button', { name: 'Inserir variável' }))
-    expect(screen.getByRole('button', { name: 'Variável Custom' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Nome do cliente' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    expect(screen.getByRole('button', { name: 'Custom Variable' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Client name' })).toBeNull()
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
@@ -111,12 +111,12 @@ describe('mergeField', () => {
 
     // Starts empty (still "loading").
     const { rerender } = render(ui([]))
-    await user.click(screen.getByRole('button', { name: 'Inserir variável' }))
-    expect(screen.getByText('Carregando variáveis…')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    expect(screen.getByText('Loading variables…')).toBeInTheDocument()
 
     // Variables arrive from the "API": only the context value changes.
-    rerender(ui([{ id: 'a', label: 'Chegou Depois' }]))
+    rerender(ui([{ id: 'a', label: 'Arrived later' }]))
     // Modal stayed open (no remount) and now shows the loaded variable.
-    expect(screen.getByRole('button', { name: 'Chegou Depois' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Arrived later' })).toBeInTheDocument()
   })
 })

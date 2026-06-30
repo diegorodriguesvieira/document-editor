@@ -11,20 +11,20 @@ describe('<App /> toolbar', () => {
     // The bubble toolbar is the default now (shows on selection); switch to the
     // static toolbar so we can assert on its buttons directly.
     await user.selectOptions(screen.getByLabelText(/Toolbar/), 'default')
-    const toolbar = await screen.findByRole('toolbar', { name: 'Formatação' })
+    const toolbar = await screen.findByRole('toolbar', { name: 'Formatting' })
     // Full preset is the default: bold + the app-level HTML button + team features.
-    expect(within(toolbar).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     expect(within(toolbar).getByRole('button', { name: /HTML/ })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: 'Destaque' })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: /IA/ })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Callout' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /AI/ })).toBeInTheDocument()
 
     // Switch to the basic preset → the full-only features disappear.
     await user.selectOptions(screen.getByLabelText(/Features/), 'basic')
     await waitFor(() => {
-      const tb = screen.getByRole('toolbar', { name: 'Formatação' })
-      expect(within(tb).queryByRole('button', { name: 'Destaque' })).toBeNull()
-      expect(within(tb).queryByRole('button', { name: /IA/ })).toBeNull()
-      expect(within(tb).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
+      const tb = screen.getByRole('toolbar', { name: 'Formatting' })
+      expect(within(tb).queryByRole('button', { name: 'Callout' })).toBeNull()
+      expect(within(tb).queryByRole('button', { name: /AI/ })).toBeNull()
+      expect(within(tb).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     })
   })
 
@@ -38,7 +38,7 @@ describe('<App /> toolbar', () => {
       const pill = document.querySelector('.pill-toolbar')
       expect(pill).not.toBeNull()
       // Same registry data, different skin: bold is still there.
-      expect(within(pill as HTMLElement).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
+      expect(within(pill as HTMLElement).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     })
   })
 
@@ -49,10 +49,10 @@ describe('<App /> toolbar', () => {
     const zoomRail = await screen.findByRole('toolbar', { name: 'Zoom' })
     expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
 
-    await user.click(within(zoomRail).getByRole('button', { name: 'Aumentar zoom' }))
+    await user.click(within(zoomRail).getByRole('button', { name: 'Zoom in' }))
     expect(within(zoomRail).getByText('110%')).toBeInTheDocument()
 
-    await user.click(within(zoomRail).getByRole('button', { name: 'Diminuir zoom' }))
+    await user.click(within(zoomRail).getByRole('button', { name: 'Zoom out' }))
     expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
   })
 })

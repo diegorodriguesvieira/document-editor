@@ -11,7 +11,7 @@ export const CodeBlockFeature = defineFeature({
   insert: [
     {
       id: 'codeBlock',
-      label: 'Bloco de código',
+      label: 'Code block',
       icon: 'C',
       commandId: 'codeBlock.toggle',
       isActive: (state) => state.isActive('codeBlock'),

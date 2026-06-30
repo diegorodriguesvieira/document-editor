@@ -5,6 +5,7 @@ import type { EditorApi } from '../core/EditorApi'
 import { EditorContextMenu } from './EditorContextMenu'
 import { EditorToolbar } from './EditorToolbar'
 import { InsertToolbar } from './InsertToolbar'
+import { PageAffordances } from './PageAffordances'
 import type { ResolvedFeatures } from '../core/registry'
 import { useDocumentEditor, type UseDocumentEditorOptions } from '../hooks/useDocumentEditor'
 
@@ -66,7 +67,13 @@ export function DocumentEditor({
         {/* The page scrolls inside its column when zoomed — the rails stay put. */}
         <div className="document-editor__zoom">
           <div className="document-editor__scale" style={{ zoom }}>
+            {ctx && resolved.pageRegions.length > 0 ? (
+              <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="top" />
+            ) : null}
             <EditorContent editor={editor} className="document-editor__surface" />
+            {ctx && resolved.pageRegions.length > 0 ? (
+              <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="bottom" />
+            ) : null}
           </div>
         </div>
       </div>

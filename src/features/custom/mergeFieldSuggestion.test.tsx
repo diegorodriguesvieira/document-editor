@@ -6,9 +6,9 @@ import { MergeFieldMenu, type MergeFieldMenuRef } from './mergeFieldSuggestion'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const VARS: DocumentVariable[] = [
-  { id: 'cliente.nome', label: 'Nome do cliente' },
-  { id: 'cliente.cnpj', label: 'CNPJ' },
-  { id: 'contrato.numero', label: 'Número do contrato' },
+  { id: 'cliente.nome', label: 'Client name' },
+  { id: 'cliente.cnpj', label: 'Tax ID' },
+  { id: 'contrato.numero', label: 'Contract number' },
 ]
 
 function renderMenu(
@@ -31,13 +31,13 @@ describe('<MergeFieldMenu />', () => {
 
   it('filters to labels that start with the typed query', () => {
     renderMenu('cli') // the "cliente" word of "Nome do cliente"
-    expect(screen.getByRole('option', { name: /Nome do cliente/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /CNPJ/ })).toBeNull()
+    expect(screen.getByRole('option', { name: /Client name/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Tax ID/ })).toBeNull()
   })
 
   it('shows an empty state when nothing matches', () => {
     renderMenu('zzz')
-    expect(screen.getByText('Nenhuma variável encontrada')).toBeInTheDocument()
+    expect(screen.getByText('No variables found')).toBeInTheDocument()
     expect(screen.queryByRole('option')).toBeNull()
   })
 
@@ -45,7 +45,7 @@ describe('<MergeFieldMenu />', () => {
     const user = userEvent.setup()
     const onPick = vi.fn()
     renderMenu('', onPick)
-    await user.click(screen.getByRole('option', { name: /CNPJ/ }))
+    await user.click(screen.getByRole('option', { name: /Tax ID/ }))
     expect(onPick).toHaveBeenCalledWith(VARS[1])
   })
 
@@ -58,7 +58,7 @@ describe('<MergeFieldMenu />', () => {
         ref.current?.onKeyDown({ event: new KeyboardEvent('keydown', { key }) })
       })
 
-    press('ArrowDown') // → CNPJ
+    press('ArrowDown') // → Tax ID
     press('Enter')
     expect(onPick).toHaveBeenCalledWith(VARS[1])
   })

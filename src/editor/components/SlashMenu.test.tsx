@@ -6,9 +6,9 @@ import { SlashMenu, type SlashMenuRef } from './SlashMenu'
 import type { ToolbarItem } from '../core/types'
 
 const ITEMS: ToolbarItem[] = [
-  { id: 'h1', label: 'Título 1', icon: 'H1', commandId: 'heading.h1' },
-  { id: 'quote', label: 'Citação', icon: 'Q', commandId: 'quote.toggle' },
-  { id: 'table', label: 'Tabela', icon: 'T', commandId: 'table.insert' },
+  { id: 'h1', label: 'Heading 1', icon: 'H1', commandId: 'heading.h1' },
+  { id: 'quote', label: 'Quote', icon: 'Q', commandId: 'quote.toggle' },
+  { id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' },
 ]
 
 describe('<SlashMenu />', () => {
@@ -17,8 +17,8 @@ describe('<SlashMenu />', () => {
     const command = vi.fn()
     render(<SlashMenu items={ITEMS} command={command} />)
 
-    expect(screen.getByRole('option', { name: /Título 1/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('option', { name: /Tabela/ }))
+    expect(screen.getByRole('option', { name: /Heading 1/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: /Table/ }))
     expect(command).toHaveBeenCalledWith(ITEMS[2])
   })
 
@@ -32,11 +32,11 @@ describe('<SlashMenu />', () => {
         ref.current?.onKeyDown({ event: new KeyboardEvent('keydown', { key }) })
       })
 
-    expect(screen.getByRole('option', { name: /Título 1/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('option', { name: /Heading 1/ })).toHaveAttribute('aria-selected', 'true')
 
-    press('ArrowDown') // → Citação
-    press('ArrowDown') // → Tabela
-    expect(screen.getByRole('option', { name: /Tabela/ })).toHaveAttribute('aria-selected', 'true')
+    press('ArrowDown') // → Quote
+    press('ArrowDown') // → Table
+    expect(screen.getByRole('option', { name: /Table/ })).toHaveAttribute('aria-selected', 'true')
 
     press('Enter')
     expect(command).toHaveBeenCalledWith(ITEMS[2])
@@ -44,6 +44,6 @@ describe('<SlashMenu />', () => {
 
   it('shows an empty state when nothing matches', () => {
     render(<SlashMenu items={[]} command={() => {}} />)
-    expect(screen.getByText('Nada encontrado')).toBeInTheDocument()
+    expect(screen.getByText('No results')).toBeInTheDocument()
   })
 })

@@ -8,5 +8,5 @@ export const DividerFeature = defineFeature({
   commands: {
     'divider.insert': (editor) => editor.chain().focus().setHorizontalRule().run(),
   },
-  insert: [{ id: 'divider', label: 'Divisor', icon: 'D', commandId: 'divider.insert' }],
+  insert: [{ id: 'divider', label: 'Divider', icon: 'D', commandId: 'divider.insert' }],
 })

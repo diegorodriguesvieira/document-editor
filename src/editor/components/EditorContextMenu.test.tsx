@@ -7,15 +7,15 @@ import type { ContextMenuGroup } from '../core/types'
 const GROUPS: ContextMenuGroup[] = [
   {
     id: 'row',
-    label: 'Linha',
+    label: 'Row',
     items: [
-      { id: 'above', label: 'Inserir linha acima', icon: '↑', commandId: 'table.addRowBefore' },
-      { id: 'del-row', label: 'Excluir linha', icon: '🗑', commandId: 'table.deleteRow', danger: true },
+      { id: 'above', label: 'Insert row above', icon: '↑', commandId: 'table.addRowBefore' },
+      { id: 'del-row', label: 'Delete row', icon: '🗑', commandId: 'table.deleteRow', danger: true },
     ],
   },
   {
     id: 'table',
-    items: [{ id: 'del-table', label: 'Excluir tabela', commandId: 'table.delete', danger: true }],
+    items: [{ id: 'del-table', label: 'Delete table', commandId: 'table.delete', danger: true }],
   },
 ]
 
@@ -25,16 +25,16 @@ describe('<ContextMenuView />', () => {
     const onRun = vi.fn()
     render(<ContextMenuView x={10} y={10} groups={GROUPS} onRun={onRun} onClose={() => {}} />)
 
-    expect(screen.getByText('Linha')).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /Inserir linha acima/ })).toBeInTheDocument()
+    expect(screen.getByText('Row')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Insert row above/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('menuitem', { name: /Excluir tabela/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Delete table/ }))
     expect(onRun).toHaveBeenCalledWith('table.delete')
   })
 
   it('marks destructive items with the danger class', () => {
     render(<ContextMenuView x={0} y={0} groups={GROUPS} onRun={() => {}} onClose={() => {}} />)
-    expect(screen.getByRole('menuitem', { name: /Excluir linha/ })).toHaveClass(
+    expect(screen.getByRole('menuitem', { name: /Delete row/ })).toHaveClass(
       'context-menu__item--danger',
     )
   })

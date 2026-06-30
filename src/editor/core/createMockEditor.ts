@@ -43,6 +43,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
 
   const api: EditorApi = {
     isActive: (name) => active.has(name),
+    hasNode: (name) => (doc.doc.content ?? []).some((node) => node.type === name),
     getJSON: () => doc,
     setJSON: (next) => {
       doc = next

@@ -18,12 +18,12 @@ interface ConditionOption {
 
 /** Operators the backend evaluates. `needsValue` toggles the value input. */
 const CONDITIONS: ConditionOption[] = [
-  { id: 'present', label: 'está no documento', needsValue: false },
-  { id: 'absent', label: 'não está no documento', needsValue: false },
-  { id: 'equals', label: 'é igual a', needsValue: true },
-  { id: 'notEquals', label: 'é diferente de', needsValue: true },
-  { id: 'greaterThan', label: 'é maior que', needsValue: true },
-  { id: 'lessThan', label: 'é menor que', needsValue: true },
+  { id: 'present', label: 'is in the document', needsValue: false },
+  { id: 'absent', label: 'is not in the document', needsValue: false },
+  { id: 'equals', label: 'is equal to', needsValue: true },
+  { id: 'notEquals', label: 'is not equal to', needsValue: true },
+  { id: 'greaterThan', label: 'is greater than', needsValue: true },
+  { id: 'lessThan', label: 'is less than', needsValue: true },
 ]
 
 export interface ConditionValue {
@@ -48,13 +48,13 @@ export function ConditionEditor({
   return (
     <div className="cond-editor">
       <label className="cond-editor__field">
-        <span>Variável</span>
+        <span>Variable</span>
         <select
-          aria-label="Variável"
+          aria-label="Variable"
           value={value.variable ?? ''}
           onChange={(event) => onChange({ ...value, variable: event.target.value || null })}
         >
-          <option value="">Selecione uma variável *</option>
+          <option value="">Select a variable *</option>
           {variables.map((variable) => (
             <option key={variable.id} value={variable.id}>
               {variable.label}
@@ -64,13 +64,13 @@ export function ConditionEditor({
       </label>
 
       <label className="cond-editor__field">
-        <span>Condição</span>
+        <span>Condition</span>
         <select
-          aria-label="Condição"
+          aria-label="Condition"
           value={value.condition ?? ''}
           onChange={(event) => onChange({ ...value, condition: event.target.value || null })}
         >
-          <option value="">Selecione a condição *</option>
+          <option value="">Select a condition *</option>
           {CONDITIONS.map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
@@ -81,9 +81,9 @@ export function ConditionEditor({
 
       {condition?.needsValue ? (
         <label className="cond-editor__field">
-          <span>Valor</span>
+          <span>Value</span>
           <input
-            aria-label="Valor"
+            aria-label="Value"
             type="text"
             value={value.value ?? ''}
             onChange={(event) => onChange({ ...value, value: event.target.value || null })}
@@ -99,7 +99,7 @@ export function ConditionEditor({
 }
 
 function conditionText(value: ConditionValue, variables: DocumentVariable[]): string {
-  if (!value.variable || !value.condition) return 'nenhuma condição'
+  if (!value.variable || !value.condition) return 'no condition'
   const variable = variables.find((v) => v.id === value.variable)
   const condition = CONDITIONS.find((c) => c.id === value.condition)
   const label = variable?.label ?? value.variable
@@ -130,13 +130,13 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
             <span className="conditional-block__icon" aria-hidden>
               ⑂
             </span>
-            <span>Mostrar se</span>
+            <span>Show if</span>
             <span className="conditional-block__cond">{conditionText(cond, variables)}</span>
           </button>
           <button
             type="button"
             className="conditional-block__delete"
-            aria-label="Remover bloco condicional"
+            aria-label="Remove conditional block"
             onClick={() => deleteNode()}
           >
             🗑
@@ -216,6 +216,6 @@ export const ConditionalBlockFeature = defineFeature({
     'conditional.toggle': (editor) => editor.chain().focus().toggleWrap('conditionalBlock').run(),
   },
   insert: [
-    { id: 'conditional', label: 'Bloco condicional', icon: '⑂', commandId: 'conditional.toggle' },
+    { id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.toggle' },
   ],
 })

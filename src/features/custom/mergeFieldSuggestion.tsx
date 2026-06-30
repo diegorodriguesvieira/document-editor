@@ -60,11 +60,11 @@ export const MergeFieldMenu = forwardRef<
   )
 
   if (items.length === 0) {
-    return <div className="slash-menu slash-menu--empty">Nenhuma variável encontrada</div>
+    return <div className="slash-menu slash-menu--empty">No variables found</div>
   }
 
   return (
-    <div className="slash-menu" role="listbox" aria-label="Variáveis">
+    <div className="slash-menu" role="listbox" aria-label="Variables">
       {items.map((variable, i) => (
         <button
           key={variable.id}

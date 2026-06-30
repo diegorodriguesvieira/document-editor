@@ -11,11 +11,11 @@ export const ImageFeature = defineFeature({
         typeof payload === 'string'
           ? payload
           : typeof window !== 'undefined'
-            ? (window.prompt('URL da imagem:') ?? '')
+            ? (window.prompt('Image URL:') ?? '')
             : ''
       if (!src) return false
       return editor.chain().focus().setImage({ src }).run()
     },
   },
-  insert: [{ id: 'image', label: 'Imagem', icon: 'I', commandId: 'image.insert' }],
+  insert: [{ id: 'image', label: 'Image', icon: 'I', commandId: 'image.insert' }],
 })

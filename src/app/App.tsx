@@ -25,11 +25,11 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMergeVariables([
-        { id: 'cliente.nome', label: 'Nome do cliente' },
-        { id: 'cliente.cnpj', label: 'CNPJ' },
-        { id: 'contrato.numero', label: 'Número do contrato' },
-        { id: 'contrato.vigencia', label: 'Vigência' },
-        { id: 'valor.mensal', label: 'Valor mensal' },
+        { id: 'cliente.nome', label: 'Client name' },
+        { id: 'cliente.cnpj', label: 'Tax ID' },
+        { id: 'contrato.numero', label: 'Contract number' },
+        { id: 'contrato.vigencia', label: 'Term' },
+        { id: 'valor.mensal', label: 'Monthly amount' },
       ])
     }, 1500)
     return () => clearTimeout(timer)
@@ -38,10 +38,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__bar">
-        <span className="app__title">Documento sem título</span>
+        <span className="app__title">Untitled document</span>
         <div className="app__controls">
           <span className="app__hint">
-            @ variáveis: {mergeVariables.length ? `${mergeVariables.length} carregadas` : 'carregando…'}
+            @ variables: {mergeVariables.length ? `${mergeVariables.length} loaded` : 'loading…'}
           </span>
           <label className="app__preset">
             Features:{' '}
@@ -64,9 +64,9 @@ export default function App() {
               value={toolbarStyle}
               onChange={(event) => setToolbarStyle(event.target.value as ToolbarStyle)}
             >
-              <option value="default">Padrão (+ botão custom)</option>
+              <option value="default">Default (+ custom button)</option>
               <option value="pill">Pill (custom via useToolbar)</option>
-              <option value="bubble">Bubble (na seleção)</option>
+              <option value="bubble">Bubble (on selection)</option>
             </select>
           </label>
         </div>

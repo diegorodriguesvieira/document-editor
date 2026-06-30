@@ -5,11 +5,11 @@ function AiButton({ onRun }: { onRun: () => void }) {
     <button
       type="button"
       className="ai-button"
-      title="Inserir um rascunho da IA"
+      title="Insert an AI draft"
       onMouseDown={(event) => event.preventDefault()}
       onClick={onRun}
     >
-      ✨ IA
+      ✨ AI
     </button>
   )
 }
@@ -23,13 +23,13 @@ export const AiAssistFeature = defineFeature({
   id: 'aiAssist',
   extensions: () => [],
   commands: {
-    'ai.insert': (editor) => editor.chain().focus().insertContent(' [rascunho da IA] ').run(),
+    'ai.insert': (editor) => editor.chain().focus().insertContent(' [AI draft] ').run(),
   },
   toolbar: [
     {
       id: 'aiAssist',
       group: 'actions',
-      label: 'IA',
+      label: 'AI',
       render: ({ api }) => <AiButton onRun={() => api.exec('ai.insert')} />,
     },
   ],

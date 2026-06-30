@@ -14,7 +14,7 @@ export const HeadingFeature = defineFeature({
     {
       id: 'h1',
       group: 'blocks',
-      label: 'Título 1',
+      label: 'Heading 1',
       icon: 'H1',
       commandId: 'heading.h1',
       isActive: (state) => state.isActive('heading', { level: 1 }),
@@ -22,7 +22,7 @@ export const HeadingFeature = defineFeature({
     {
       id: 'h2',
       group: 'blocks',
-      label: 'Título 2',
+      label: 'Heading 2',
       icon: 'H2',
       commandId: 'heading.h2',
       isActive: (state) => state.isActive('heading', { level: 2 }),
@@ -30,7 +30,7 @@ export const HeadingFeature = defineFeature({
     {
       id: 'h3',
       group: 'blocks',
-      label: 'Título 3',
+      label: 'Heading 3',
       icon: 'H3',
       commandId: 'heading.h3',
       isActive: (state) => state.isActive('heading', { level: 3 }),

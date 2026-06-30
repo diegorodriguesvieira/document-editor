@@ -6,6 +6,7 @@ import {
   CodeBlockFeature,
   DividerFeature,
   HeadingFeature,
+  HeaderFooterFeature,
   HistoryFeature,
   ImageFeature,
   ConditionalBlockFeature,
@@ -27,16 +28,17 @@ export interface Preset {
  * Two products, two opt-in feature sets. Switching between them shows the
  * toolbar, inserts and commands appearing/disappearing — the whole point of
  * the SDK. Module-level constants so each `features` array is stable.
+ * `basic` keeps it minimal; `full` enables every team feature.
  */
 export const presets: Preset[] = [
   {
     id: 'basic',
-    label: 'Básico — negrito, itálico, títulos, desfazer',
+    label: 'Basic — bold, italic, headings, undo',
     features: [HistoryFeature, BoldFeature, ItalicFeature, HeadingFeature],
   },
   {
     id: 'full',
-    label: 'Completo — + listas, inserts (tabela/citação/código/divisor/imagem), link, destaque e IA',
+    label: 'Full — + lists, inserts (table/quote/code/divider/image), link, callout and AI',
     features: [
       HistoryFeature,
       BoldFeature,
@@ -54,6 +56,7 @@ export const presets: Preset[] = [
       // Static feature — its variables come from DocumentVariablesProvider (the app).
       MergeFieldFeature,
       ConditionalBlockFeature,
+      HeaderFooterFeature,
     ],
   },
 ]

@@ -21,7 +21,7 @@ const bold = defineFeature({
   id: 'bold',
   extensions: () => [],
   commands: { 'bold.toggle': () => true },
-  toolbar: [{ id: 'bold', group: 'marks', label: 'Negrito', commandId: 'bold.toggle' }],
+  toolbar: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold.toggle' }],
 })
 
 describe('<BubbleToolbar />', () => {

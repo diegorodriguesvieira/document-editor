@@ -60,7 +60,7 @@ export function ContextMenuView({
       ref={ref}
       className="context-menu"
       role="menu"
-      aria-label="Menu de contexto"
+      aria-label="Context menu"
       style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 1100 }}
     >
       {groups.map((group, gi) => (
@@ -123,7 +123,7 @@ export function EditorContextMenu({
       const coords = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
       if (!coords) return
       // Target the right-clicked spot — unless a (multi-cell) selection already
-      // covers it, which we keep so "Mesclar células" still sees every cell.
+      // covers it, which we keep so "Merge cells" still sees every cell.
       const { from, to } = editor.state.selection
       if (coords.pos < from || coords.pos > to) {
         editor.chain().focus().setTextSelection(coords.pos).run()

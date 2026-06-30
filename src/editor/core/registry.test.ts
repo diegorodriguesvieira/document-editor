@@ -19,7 +19,7 @@ describe('resolveFeatures', () => {
   it('throws when one id has two different definitions', () => {
     expect(() =>
       resolveFeatures([feature({ id: 'bold' }), feature({ id: 'bold' })]),
-    ).toThrow(/duas definições/)
+    ).toThrow(/two different definitions/)
   })
 
   it('accepts a satisfied dependency and rejects a missing one', () => {
@@ -27,7 +27,7 @@ describe('resolveFeatures', () => {
     const lists = feature({ id: 'lists', dependsOn: ['listItem'] })
 
     expect(() => resolveFeatures([listItem, lists])).not.toThrow()
-    expect(() => resolveFeatures([lists])).toThrow(/depende de "listItem"/)
+    expect(() => resolveFeatures([lists])).toThrow(/depends on "listItem"/)
   })
 
   it('rejects duplicate command ids across features', () => {
@@ -36,7 +36,7 @@ describe('resolveFeatures', () => {
         feature({ id: 'a', commands: { 'shared.cmd': () => true } }),
         feature({ id: 'b', commands: { 'shared.cmd': () => true } }),
       ]),
-    ).toThrow(/Comando "shared.cmd"/)
+    ).toThrow(/Command "shared.cmd"/)
   })
 
   it('rejects conflicting keymaps', () => {
@@ -45,7 +45,7 @@ describe('resolveFeatures', () => {
         feature({ id: 'a', keymap: { 'Mod-k': 'a.cmd' } }),
         feature({ id: 'b', keymap: { 'Mod-k': 'b.cmd' } }),
       ]),
-    ).toThrow(/Conflito de atalho/)
+    ).toThrow(/Shortcut conflict/)
   })
 
   it('aggregates extensions and toolbar contributions in order', () => {

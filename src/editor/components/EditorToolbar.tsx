@@ -42,7 +42,7 @@ export function EditorToolbar({
   const shown = filter ? buttons.filter((button) => filter(button.item)) : buttons
 
   return (
-    <div className={className ?? 'editor-toolbar'} role="toolbar" aria-label="Formatação">
+    <div className={className ?? 'editor-toolbar'} role="toolbar" aria-label="Formatting">
       {shown.map((button) => {
         // A feature can ship its own control.
         if (button.item.render) {

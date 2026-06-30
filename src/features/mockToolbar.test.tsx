@@ -15,10 +15,10 @@ describe('real features with createMockEditor', () => {
 
     render(<EditorToolbar editor={null} api={mock.api} resolved={resolved} />)
 
-    expect(screen.getByRole('button', { name: 'Negrito' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Título 1' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Heading 1' })).toHaveAttribute('aria-pressed', 'false')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Título 1' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Heading 1' }))
     expect(mock.execCalls.map((call) => call.commandId)).toContain('heading.h1')
   })
 })

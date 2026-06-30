@@ -12,7 +12,7 @@ export const BoldFeature = defineFeature({
     {
       id: 'bold',
       group: 'marks',
-      label: 'Negrito',
+      label: 'Bold',
       icon: 'B',
       commandId: 'bold.toggle',
       isActive: (state) => state.isActive('bold'),

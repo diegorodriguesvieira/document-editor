@@ -15,7 +15,7 @@ export const ListsFeature = defineFeature({
     {
       id: 'bulletList',
       group: 'blocks',
-      label: 'Lista com marcadores',
+      label: 'Bullet list',
       icon: '•',
       commandId: 'lists.bullet',
       isActive: (state) => state.isActive('bulletList'),
@@ -23,7 +23,7 @@ export const ListsFeature = defineFeature({
     {
       id: 'orderedList',
       group: 'blocks',
-      label: 'Lista numerada',
+      label: 'Numbered list',
       icon: '1.',
       commandId: 'lists.ordered',
       isActive: (state) => state.isActive('orderedList'),

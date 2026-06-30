@@ -35,7 +35,7 @@ describe('conditional block', () => {
     created = createEditor({
       features: [ConditionalBlockFeature],
       element: mountTarget(),
-      content: docWith('cláusula'),
+      content: docWith('clause'),
     })
     expect(created.api.exec('conditional.toggle')).toBe(true)
     expect(hasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
@@ -45,7 +45,7 @@ describe('conditional block', () => {
     created = createEditor({
       features: [ConditionalBlockFeature],
       element: mountTarget(),
-      content: docWith('cláusula'),
+      content: docWith('clause'),
     })
     created.api.exec('conditional.toggle') // the block becomes the last node
 
@@ -81,7 +81,7 @@ describe('conditional block', () => {
 
 const VARS: DocumentVariable[] = [
   { id: 'gross.salary', label: 'Gross salary' },
-  { id: 'company.name', label: 'Empresa' },
+  { id: 'company.name', label: 'Company' },
 ]
 
 function ControlledEditor({ variables }: { variables: DocumentVariable[] }) {
@@ -95,17 +95,17 @@ describe('<ConditionEditor />', () => {
     render(<ControlledEditor variables={VARS} />)
 
     // No value input for a value-less condition.
-    expect(screen.queryByLabelText('Valor')).toBeNull()
+    expect(screen.queryByLabelText('Value')).toBeNull()
 
-    await user.selectOptions(screen.getByLabelText('Variável'), 'gross.salary')
-    await user.selectOptions(screen.getByLabelText('Condição'), 'greaterThan')
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'greaterThan')
 
     // greaterThan needs a value → input appears.
-    expect(screen.getByLabelText('Valor')).toBeInTheDocument()
-    expect((screen.getByLabelText('Variável') as HTMLSelectElement).value).toBe('gross.salary')
+    expect(screen.getByLabelText('Value')).toBeInTheDocument()
+    expect((screen.getByLabelText('Variable') as HTMLSelectElement).value).toBe('gross.salary')
 
     // A value-less condition hides it again.
-    await user.selectOptions(screen.getByLabelText('Condição'), 'present')
-    expect(screen.queryByLabelText('Valor')).toBeNull()
+    await user.selectOptions(screen.getByLabelText('Condition'), 'present')
+    expect(screen.queryByLabelText('Value')).toBeNull()
   })
 })

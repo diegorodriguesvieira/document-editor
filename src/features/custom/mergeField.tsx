@@ -69,18 +69,18 @@ function MergeFieldModal({
       <div
         className="mf-modal"
         role="dialog"
-        aria-label="Variáveis"
+        aria-label="Variables"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="mf-modal__header">
-          <strong>Variáveis</strong>
-          <button type="button" className="mf-modal__close" aria-label="Fechar" onClick={onClose}>
+          <strong>Variables</strong>
+          <button type="button" className="mf-modal__close" aria-label="Close" onClick={onClose}>
             ×
           </button>
         </div>
         <div className="mf-modal__chips">
           {variables.length === 0 ? (
-            <span className="mf-modal__empty">Carregando variáveis…</span>
+            <span className="mf-modal__empty">Loading variables…</span>
           ) : (
             variables.map((variable) => (
               <button
@@ -107,8 +107,8 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
       <button
         type="button"
         className="insert-rail__btn"
-        title="Inserir variável"
-        aria-label="Inserir variável"
+        title="Insert variable"
+        aria-label="Insert variable"
         aria-haspopup="dialog"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen(true)}
@@ -162,7 +162,7 @@ export const MergeFieldFeature = defineFeature({
   insert: [
     {
       id: 'mergeField',
-      label: 'Variável',
+      label: 'Variable',
       icon: '@',
       render: ({ api }) => <MergeFieldInsert api={api} />,
     },

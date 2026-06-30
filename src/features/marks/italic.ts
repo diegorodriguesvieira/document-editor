@@ -12,7 +12,7 @@ export const ItalicFeature = defineFeature({
     {
       id: 'italic',
       group: 'marks',
-      label: 'Itálico',
+      label: 'Italic',
       icon: 'I',
       commandId: 'italic.toggle',
       isActive: (state) => state.isActive('italic'),

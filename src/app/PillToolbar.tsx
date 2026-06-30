@@ -9,7 +9,7 @@ export function PillToolbar({ editor, api, resolved }: DocumentEditorRenderConte
   const buttons = useToolbar(editor, api, resolved)
 
   return (
-    <div className="pill-toolbar" role="toolbar" aria-label="Formatação">
+    <div className="pill-toolbar" role="toolbar" aria-label="Formatting">
       {buttons.map((button) =>
         button.item.render ? (
           <span key={button.item.id} className="pill-toolbar__custom">

@@ -47,7 +47,7 @@ export function InsertToolbar({
       className={className ?? 'insert-rail'}
       role="toolbar"
       aria-orientation="vertical"
-      aria-label="Inserir"
+      aria-label="Insert"
     >
       {shown.map((button) => {
         if (button.item.render) {

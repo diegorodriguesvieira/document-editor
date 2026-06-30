@@ -15,8 +15,8 @@ export function ZoomRail({ zoom, onZoomIn, onZoomOut }: ZoomRailProps) {
       <button
         type="button"
         className="insert-rail__btn"
-        title="Aumentar zoom"
-        aria-label="Aumentar zoom"
+        title="Zoom in"
+        aria-label="Zoom in"
         onMouseDown={(event) => event.preventDefault()}
         onClick={onZoomIn}
       >
@@ -28,8 +28,8 @@ export function ZoomRail({ zoom, onZoomIn, onZoomOut }: ZoomRailProps) {
       <button
         type="button"
         className="insert-rail__btn"
-        title="Diminuir zoom"
-        aria-label="Diminuir zoom"
+        title="Zoom out"
+        aria-label="Zoom out"
         onMouseDown={(event) => event.preventDefault()}
         onClick={onZoomOut}
       >

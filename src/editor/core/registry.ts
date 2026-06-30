@@ -3,6 +3,7 @@ import type {
   CommandFn,
   ContextMenuSection,
   FeatureDefinition,
+  PageRegion,
   ToolbarItem,
 } from './types'
 
@@ -15,6 +16,7 @@ export interface ResolvedFeatures {
   toolbar: ToolbarItem[]
   inserts: ToolbarItem[]
   contextMenu: ContextMenuSection[]
+  pageRegions: PageRegion[]
 }
 
 /**
@@ -27,7 +29,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
   for (const feature of input) {
     const existing = byId.get(feature.id)
     if (existing && existing !== feature) {
-      throw new Error(`Feature "${feature.id}" foi registrada com duas definições diferentes.`)
+      throw new Error(`Feature "${feature.id}" was registered with two different definitions.`)
     }
     byId.set(feature.id, feature)
   }
@@ -36,7 +38,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
   for (const feature of features) {
     for (const dep of feature.dependsOn ?? []) {
       if (!byId.has(dep)) {
-        throw new Error(`Feature "${feature.id}" depende de "${dep}", que não está habilitada.`)
+        throw new Error(`Feature "${feature.id}" depends on "${dep}", which is not enabled.`)
       }
     }
   }
@@ -45,7 +47,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
   for (const feature of features) {
     for (const [commandId, fn] of Object.entries(feature.commands ?? {})) {
       if (commandId in commands) {
-        throw new Error(`Comando "${commandId}" foi declarado por mais de uma feature.`)
+        throw new Error(`Command "${commandId}" was declared by more than one feature.`)
       }
       commands[commandId] = fn
     }
@@ -55,7 +57,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
   for (const feature of features) {
     for (const [key, commandId] of Object.entries(feature.keymap ?? {})) {
       if (key in keymap) {
-        throw new Error(`Conflito de atalho: "${key}" foi mapeado por mais de uma feature.`)
+        throw new Error(`Shortcut conflict: "${key}" was mapped by more than one feature.`)
       }
       keymap[key] = commandId
     }
@@ -69,5 +71,6 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     toolbar: features.flatMap((feature) => feature.toolbar ?? []),
     inserts: features.flatMap((feature) => feature.insert ?? []),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
+    pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),
   }
 }

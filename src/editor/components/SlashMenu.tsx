@@ -48,11 +48,11 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(function Slash
   )
 
   if (items.length === 0) {
-    return <div className="slash-menu slash-menu--empty">Nada encontrado</div>
+    return <div className="slash-menu slash-menu--empty">No results</div>
   }
 
   return (
-    <div className="slash-menu" role="listbox" aria-label="Comandos">
+    <div className="slash-menu" role="listbox" aria-label="Commands">
       {items.map((item, i) => (
         <button
           key={item.id}

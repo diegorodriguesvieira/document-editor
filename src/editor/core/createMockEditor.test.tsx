@@ -11,7 +11,7 @@ const boldish = defineFeature({
   extensions: () => [],
   commands: { 'bold.toggle': () => true },
   toolbar: [
-    { id: 'bold', label: 'Negrito', icon: 'B', commandId: 'bold.toggle', isActive: (s) => s.isActive('bold') },
+    { id: 'bold', label: 'Bold', icon: 'B', commandId: 'bold.toggle', isActive: (s) => s.isActive('bold') },
   ],
 })
 
@@ -22,7 +22,7 @@ describe('createMockEditor', () => {
     const mock = createMockEditor()
     render(<EditorToolbar editor={null} api={mock.api} resolved={resolved()} />)
 
-    const button = screen.getByRole('button', { name: 'Negrito' })
+    const button = screen.getByRole('button', { name: 'Bold' })
     expect(button).toHaveAttribute('aria-pressed', 'false')
 
     await userEvent.click(button)
@@ -33,16 +33,16 @@ describe('createMockEditor', () => {
     const mock = createMockEditor()
     render(<EditorToolbar editor={null} api={mock.api} resolved={resolved()} />)
 
-    expect(screen.getByRole('button', { name: 'Negrito' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'false')
     act(() => {
       mock.setActive(['bold'])
     })
-    expect(screen.getByRole('button', { name: 'Negrito' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('starts from the given active set', () => {
     const mock = createMockEditor({ active: ['bold'] })
     render(<EditorToolbar editor={null} api={mock.api} resolved={resolved()} />)
-    expect(screen.getByRole('button', { name: 'Negrito' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
