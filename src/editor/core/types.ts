@@ -15,6 +15,9 @@ export interface ToolbarItemContext {
 export interface ToolbarItem {
   id: string
   group?: string
+  /** Sort hint within a bar (ascending; default 0, stable for ties). Lets two
+   *  features interleave their buttons deterministically. */
+  order?: number
   label: string
   /** Short text/emoji icon; the host decides how to render it. */
   icon?: string

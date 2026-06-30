@@ -9,6 +9,11 @@ import type { ResolvedFeatures } from './registry'
  */
 export interface EditorStateView {
   isActive(name: string, attrs?: Record<string, unknown>): boolean
+  /** Whether there is history to undo / redo (drives a real disabled state). */
+  canUndo(): boolean
+  canRedo(): boolean
+  /** Whether the document is effectively empty. */
+  isEmpty(): boolean
 }
 
 /**
@@ -35,6 +40,9 @@ export interface EditorApi extends EditorStateView {
 export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): EditorApi {
   return {
     isActive: (name, attrs) => editor.isActive(name, attrs),
+    canUndo: () => editor.can().undo?.() ?? false,
+    canRedo: () => editor.can().redo?.() ?? false,
+    isEmpty: () => editor.isEmpty,
     hasNode: (name) => {
       const { doc } = editor.state
       for (let i = 0; i < doc.childCount; i++) {

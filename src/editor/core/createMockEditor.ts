@@ -6,6 +6,9 @@ export interface MockEditorInit {
   active?: string[]
   doc?: DocumentJSON
   html?: string
+  canUndo?: boolean
+  canRedo?: boolean
+  isEmpty?: boolean
   /** Per-command implementations; default records the call and returns true. */
   commands?: Record<string, (payload?: unknown) => boolean>
 }
@@ -43,6 +46,9 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
 
   const api: EditorApi = {
     isActive: (name) => active.has(name),
+    canUndo: () => init.canUndo ?? false,
+    canRedo: () => init.canRedo ?? false,
+    isEmpty: () => init.isEmpty ?? false,
     hasNode: (name) => (doc.doc.content ?? []).some((node) => node.type === name),
     getJSON: () => doc,
     setJSON: (next) => {

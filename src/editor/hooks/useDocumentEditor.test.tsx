@@ -1,5 +1,5 @@
-import { renderHook } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { useDocumentEditor } from './useDocumentEditor'
 import { BoldFeature, ItalicFeature } from '../../features'
 
@@ -19,5 +19,28 @@ describe('useDocumentEditor', () => {
     // Changing the set of feature ids DOES recreate.
     rerender({ features: [BoldFeature] })
     expect(result.current.resolved).not.toBe(firstResolved)
+  })
+
+  it('calls onReady once with the api', async () => {
+    const onReady = vi.fn()
+    renderHook(() => useDocumentEditor({ features: [BoldFeature], onReady }))
+
+    await waitFor(() => expect(onReady).toHaveBeenCalled())
+    expect(onReady).toHaveBeenCalledTimes(1)
+    expect(onReady.mock.calls[0][0]).toHaveProperty('getJSON')
+  })
+
+  it('calls onChange (debounced) with the serialized doc after an edit', async () => {
+    const onChange = vi.fn()
+    const { result } = renderHook(() => useDocumentEditor({ features: [BoldFeature], onChange }))
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+
+    act(() => {
+      result.current.editor!.commands.insertContent('hi')
+    })
+    expect(onChange).not.toHaveBeenCalled() // debounced, not synchronous
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    expect(onChange.mock.calls.at(-1)![0]).toHaveProperty('schemaVersion')
   })
 })

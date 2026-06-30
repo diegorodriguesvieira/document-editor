@@ -7,6 +7,14 @@ import type {
   ToolbarItem,
 } from './types'
 
+/** Stable ascending sort by `order` (default 0), preserving input order on ties. */
+function byOrder(items: ToolbarItem[]): ToolbarItem[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (a.item.order ?? 0) - (b.item.order ?? 0) || a.index - b.index)
+    .map(({ item }) => item)
+}
+
 /** The merged, conflict-checked result of composing a set of features. */
 export interface ResolvedFeatures {
   features: FeatureDefinition[]
@@ -90,8 +98,8 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     extensions: features.flatMap((feature) => feature.extensions()),
     commands,
     keymap,
-    toolbar: features.flatMap((feature) => feature.toolbar ?? []),
-    inserts: features.flatMap((feature) => feature.insert ?? []),
+    toolbar: byOrder(features.flatMap((feature) => feature.toolbar ?? [])),
+    inserts: byOrder(features.flatMap((feature) => feature.insert ?? [])),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
     pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),
   }

@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import { createEditor, type CreatedEditor } from '../../editor'
+import { createEditor, type CreatedEditor, type EditorStateView } from '../../editor'
 import { TableFeature } from './table'
+
+/** Minimal EditorStateView for testing a context-menu `when` predicate. */
+const stateView = (isActive: (name: string) => boolean): EditorStateView => ({
+  isActive,
+  canUndo: () => false,
+  canRedo: () => false,
+  isEmpty: () => false,
+})
 
 let created: CreatedEditor | undefined
 
@@ -68,8 +76,8 @@ describe('table feature', () => {
     const section = TableFeature.contextMenu?.[0]
     expect(section).toBeDefined()
     // Shown only inside a table.
-    expect(section!.when({ isActive: (name) => name === 'table' })).toBe(true)
-    expect(section!.when({ isActive: () => false })).toBe(false)
+    expect(section!.when(stateView((name) => name === 'table'))).toBe(true)
+    expect(section!.when(stateView(() => false))).toBe(false)
 
     // Every menu item points at a command the feature actually registers.
     created = createEditor({ features: [TableFeature], element: mountTarget() })

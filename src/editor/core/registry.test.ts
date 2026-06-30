@@ -72,4 +72,20 @@ describe('resolveFeatures', () => {
     expect(resolved.extensions).toHaveLength(3)
     expect(resolved.toolbar.map((t) => t.id)).toEqual(['a', 'b'])
   })
+
+  it('orders toolbar items by their optional `order` (stable for ties)', () => {
+    const resolved = resolveFeatures([
+      feature({
+        id: 'a',
+        commands: { 'a.c': () => true },
+        toolbar: [{ id: 'a', label: 'A', commandId: 'a.c', order: 2 }],
+      }),
+      feature({
+        id: 'b',
+        commands: { 'b.c': () => true },
+        toolbar: [{ id: 'b', label: 'B', commandId: 'b.c', order: 1 }],
+      }),
+    ])
+    expect(resolved.toolbar.map((t) => t.id)).toEqual(['b', 'a'])
+  })
 })
