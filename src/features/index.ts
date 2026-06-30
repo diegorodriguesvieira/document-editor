@@ -19,6 +19,7 @@ export { MergeFieldFeature } from './custom/mergeField'
 export { ConditionalBlockFeature } from './custom/conditionalBlock'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { CommentsFeature } from './custom/comments'
+export { CommentsPanel, useDocumentComments } from './custom/commentsPanel'
 export { DocumentVariablesProvider } from './custom/documentVariables'
 export type { DocumentVariable } from './custom/documentVariables'
 

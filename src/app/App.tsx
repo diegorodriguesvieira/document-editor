@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
-import { DocumentVariablesProvider, type DocumentVariable } from '../features'
+import { CommentsPanel, DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
@@ -88,12 +88,15 @@ export default function App() {
               console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
               console.log('document JSON:', doc)
             }}
-            renderRightBar={() => (
-              <ZoomRail
-                zoom={zoom}
-                onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
-                onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
-              />
+            renderRightBar={(ctx) => (
+              <div className="right-rail">
+                <ZoomRail
+                  zoom={zoom}
+                  onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
+                  onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
+                />
+                <CommentsPanel editor={ctx.editor} />
+              </div>
             )}
             renderToolbar={(ctx) => {
               if (toolbarStyle === 'bubble') {

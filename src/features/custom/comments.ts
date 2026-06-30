@@ -1,7 +1,7 @@
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { defineFeature, Mark, mergeAttributes } from '../../editor'
 
-interface CommentThread {
+export interface CommentThread {
   id: string
   text: string
   quote: string
