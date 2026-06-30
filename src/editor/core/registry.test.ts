@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest'
+import type { AnyExtension } from '@tiptap/core'
+import { resolveFeatures } from './registry'
+import { defineFeature } from './defineFeature'
+import type { FeatureDefinition } from './types'
+
+const ext = () => [{} as unknown as AnyExtension]
+
+const feature = (over: Partial<FeatureDefinition> & { id: string }): FeatureDefinition =>
+  defineFeature({ extensions: ext, ...over })
+
+describe('resolveFeatures', () => {
+  it('deduplicates the same feature included twice', () => {
+    const bold = feature({ id: 'bold' })
+    const resolved = resolveFeatures([bold, bold])
+    expect(resolved.features).toHaveLength(1)
+  })
+
+  it('throws when one id has two different definitions', () => {
+    expect(() =>
+      resolveFeatures([feature({ id: 'bold' }), feature({ id: 'bold' })]),
+    ).toThrow(/duas definições/)
+  })
+
+  it('accepts a satisfied dependency and rejects a missing one', () => {
+    const listItem = feature({ id: 'listItem' })
+    const lists = feature({ id: 'lists', dependsOn: ['listItem'] })
+
+    expect(() => resolveFeatures([listItem, lists])).not.toThrow()
+    expect(() => resolveFeatures([lists])).toThrow(/depende de "listItem"/)
+  })
+
+  it('rejects duplicate command ids across features', () => {
+    expect(() =>
+      resolveFeatures([
+        feature({ id: 'a', commands: { 'shared.cmd': () => true } }),
+        feature({ id: 'b', commands: { 'shared.cmd': () => true } }),
+      ]),
+    ).toThrow(/Comando "shared.cmd"/)
+  })
+
+  it('rejects conflicting keymaps', () => {
+    expect(() =>
+      resolveFeatures([
+        feature({ id: 'a', keymap: { 'Mod-k': 'a.cmd' } }),
+        feature({ id: 'b', keymap: { 'Mod-k': 'b.cmd' } }),
+      ]),
+    ).toThrow(/Conflito de atalho/)
+  })
+
+  it('aggregates extensions and toolbar contributions in order', () => {
+    const resolved = resolveFeatures([
+      feature({
+        id: 'a',
+        extensions: () => [{} as unknown as AnyExtension],
+        toolbar: [{ id: 'a', label: 'A', commandId: 'a.cmd' }],
+      }),
+      feature({
+        id: 'b',
+        extensions: () => [{} as unknown as AnyExtension, {} as unknown as AnyExtension],
+        toolbar: [{ id: 'b', label: 'B', commandId: 'b.cmd' }],
+      }),
+    ])
+    expect(resolved.extensions).toHaveLength(3)
+    expect(resolved.toolbar.map((t) => t.id)).toEqual(['a', 'b'])
+  })
+})

@@ -1,0 +1,346 @@
+:root {
+  font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  color: #202124;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f9fbfd;
+}
+
+/* ---- App chrome ---- */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 56px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app__title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.app__preset {
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.app__preset select {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.app__canvas {
+  flex: 1;
+  padding: 24px 16px 80px;
+}
+
+/* ---- Editor ---- */
+.document-editor {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.document-editor__column {
+  width: 100%;
+  max-width: 816px; /* US Letter @96dpi, like Google Docs */
+}
+
+/* Insert rail — vertical toolbar to the left of the page */
+.insert-rail {
+  position: sticky;
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.15);
+}
+
+.insert-rail__btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444746;
+  cursor: pointer;
+}
+
+.insert-rail__btn:hover {
+  background: #f1f3f4;
+}
+
+.editor-toolbar {
+  position: sticky;
+  top: 56px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 8px;
+  margin-bottom: 16px;
+  background: #edf2fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 24px;
+}
+
+.editor-toolbar__btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444746;
+  cursor: pointer;
+}
+
+.editor-toolbar__btn:hover {
+  background: #e2e7ef;
+}
+
+.editor-toolbar__btn[aria-pressed='true'] {
+  background: #d3e3fd;
+  color: #0b57d0;
+}
+
+.editor-toolbar__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The white page */
+.document-editor__surface .ProseMirror {
+  min-height: 1056px;
+  padding: 96px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.15);
+  outline: none;
+}
+
+.document-editor__surface .ProseMirror > * + * {
+  margin-top: 0.6em;
+}
+
+.document-editor__surface h1 {
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.document-editor__surface h2 {
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.document-editor__surface h3 {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.document-editor__surface a {
+  color: #0b57d0;
+}
+
+/* Callout node view (the "team" feature) */
+.callout {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fef7e0;
+  border: 1px solid #feefc3;
+  border-left: 4px solid #f9ab00;
+  border-radius: 8px;
+}
+
+.callout__emoji {
+  font-size: 18px;
+  line-height: 1.6;
+  user-select: none;
+}
+
+.callout__content {
+  flex: 1;
+}
+
+/* ---- App controls ---- */
+.app__controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Level 3 — a team button shipped via a feature's ToolbarItem.render */
+.ai-button {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #7b5cff, #d36bff);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-button:hover {
+  filter: brightness(1.05);
+}
+
+/* Level 4 — a team's own toolbar (dark pill, bubble-menu style) via useToolbar */
+.pill-toolbar {
+  position: sticky;
+  top: 56px;
+  z-index: 10;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  margin-bottom: 16px;
+  background: #1b1b1b;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32);
+}
+
+.pill-toolbar__btn {
+  min-width: 32px;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e3e3e3;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill-toolbar__btn:hover {
+  background: #343434;
+}
+
+.pill-toolbar__btn[data-on='true'] {
+  background: #8ab4f8;
+  color: #1b1b1b;
+}
+
+.pill-toolbar__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pill-toolbar__custom {
+  display: inline-flex;
+}
+
+/* Bubble menu — formatting on text selection (floated by TipTap) */
+.bubble-toolbar__inner {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 4px;
+  background: #1b1b1b;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.36);
+}
+
+.bubble-toolbar__inner .editor-toolbar__btn {
+  color: #e3e3e3;
+}
+
+.bubble-toolbar__inner .editor-toolbar__btn:hover {
+  background: #343434;
+}
+
+.bubble-toolbar__inner .editor-toolbar__btn[aria-pressed='true'] {
+  background: #8ab4f8;
+  color: #1b1b1b;
+}
+
+.bubble-toolbar__inner .ai-button {
+  height: 28px;
+}
+
+/* ---- Rich nodes inside the page ---- */
+.document-editor__surface table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.document-editor__surface th,
+.document-editor__surface td {
+  border: 1px solid #c7c7c7;
+  padding: 6px 10px;
+  vertical-align: top;
+}
+
+.document-editor__surface th {
+  background: #f1f3f4;
+  font-weight: 600;
+  text-align: left;
+}
+
+.document-editor__surface blockquote {
+  margin: 0.5em 0;
+  padding-left: 16px;
+  border-left: 4px solid #dadce0;
+  color: #5f6368;
+}
+
+.document-editor__surface pre {
+  margin: 0.5em 0;
+  padding: 12px 16px;
+  background: #1b1b1b;
+  color: #e3e3e3;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.document-editor__surface hr {
+  border: none;
+  border-top: 1px solid #dadce0;
+  margin: 1em 0;
+}
+
+.document-editor__surface img {
+  max-width: 100%;
+  height: auto;
+}

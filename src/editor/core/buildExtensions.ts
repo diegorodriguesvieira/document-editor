@@ -1,0 +1,40 @@
+import { Extension } from '@tiptap/core'
+import type { AnyExtension } from '@tiptap/core'
+import { Document as DocumentNode } from '@tiptap/extension-document'
+import { Paragraph } from '@tiptap/extension-paragraph'
+import { Text as TextNode } from '@tiptap/extension-text'
+import type { ResolvedFeatures } from './registry'
+
+/**
+ * The always-on schema kernel. You can't have a document without a top node,
+ * paragraphs and text, so these are never opt-in — features build on top.
+ */
+export function kernelExtensions(): AnyExtension[] {
+  return [DocumentNode, Paragraph, TextNode]
+}
+
+/**
+ * One synthetic extension that installs every feature's extra keybinding,
+ * routing each to its registered command. Keeps keymap ownership in our SDK.
+ */
+function registryKeymap(resolved: ResolvedFeatures): Extension {
+  return Extension.create({
+    name: 'registryKeymap',
+    addKeyboardShortcuts() {
+      const { editor } = this
+      const shortcuts: Record<string, () => boolean> = {}
+      for (const [key, commandId] of Object.entries(resolved.keymap)) {
+        const command = resolved.commands[commandId]
+        if (command) {
+          shortcuts[key] = () => command(editor)
+        }
+      }
+      return shortcuts
+    },
+  })
+}
+
+/** Kernel + feature extensions + the synthetic keymap extension. */
+export function buildExtensions(resolved: ResolvedFeatures): AnyExtension[] {
+  return [...kernelExtensions(), ...resolved.extensions, registryKeymap(resolved)]
+}
