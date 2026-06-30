@@ -15,6 +15,8 @@ export { ImageFeature } from './blocks/image'
 // Example "team" features
 export { CalloutFeature } from './custom/callout'
 export { AiAssistFeature } from './custom/aiAssist'
+export { MergeFieldFeature, MergeFieldVariablesProvider } from './custom/mergeField'
+export type { MergeVariable } from './custom/mergeField'
 
 // Editor tooling
 export { HistoryFeature } from './history'

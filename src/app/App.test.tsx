@@ -4,25 +4,24 @@ import { describe, expect, it } from 'vitest'
 import App from './App'
 
 describe('<App /> toolbar', () => {
-  it('shows opted-in features, an app-level custom button, and the team IA control', async () => {
+  it('defaults to the full preset; switching to basic hides the full-only features', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     const toolbar = await screen.findByRole('toolbar', { name: 'Formatação' })
-    // Feature opt-in.
+    // Full preset is the default: bold + the app-level HTML button + team features.
     expect(within(toolbar).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
-    // Level 2: app-level custom button via the children slot.
     expect(within(toolbar).getByRole('button', { name: /HTML/ })).toBeInTheDocument()
-    // Full-only features are absent in the basic preset.
-    expect(within(toolbar).queryByRole('button', { name: 'Destaque' })).toBeNull()
-    expect(within(toolbar).queryByRole('button', { name: /IA/ })).toBeNull()
+    expect(within(toolbar).getByRole('button', { name: 'Destaque' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /IA/ })).toBeInTheDocument()
 
-    // Opt into the full preset → callout + the team's custom-render IA button appear.
-    await user.selectOptions(screen.getByLabelText(/Features/), 'full')
+    // Switch to the basic preset → the full-only features disappear.
+    await user.selectOptions(screen.getByLabelText(/Features/), 'basic')
     await waitFor(() => {
       const tb = screen.getByRole('toolbar', { name: 'Formatação' })
-      expect(within(tb).getByRole('button', { name: 'Destaque' })).toBeInTheDocument()
-      expect(within(tb).getByRole('button', { name: /IA/ })).toBeInTheDocument()
+      expect(within(tb).queryByRole('button', { name: 'Destaque' })).toBeNull()
+      expect(within(tb).queryByRole('button', { name: /IA/ })).toBeNull()
+      expect(within(tb).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
     })
   })
 
@@ -39,5 +38,20 @@ describe('<App /> toolbar', () => {
       // Same registry data, different skin: bold is still there.
       expect(within(pill as HTMLElement).getByRole('button', { name: 'Negrito' })).toBeInTheDocument()
     })
+  })
+
+  it('zooms the document in and out via the right rail', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByRole('toolbar', { name: 'Formatação' })
+
+    const zoomRail = screen.getByRole('toolbar', { name: 'Zoom' })
+    expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
+
+    await user.click(within(zoomRail).getByRole('button', { name: 'Aumentar zoom' }))
+    expect(within(zoomRail).getByText('110%')).toBeInTheDocument()
+
+    await user.click(within(zoomRail).getByRole('button', { name: 'Diminuir zoom' }))
+    expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
   })
 })

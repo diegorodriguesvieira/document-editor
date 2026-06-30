@@ -20,16 +20,22 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
   /** Replace the left insert rail. Defaults to {@link InsertToolbar}, which is
    *  shown automatically whenever an opted-in feature contributes inserts. */
   renderInsertBar?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Vertical rail to the right of the page (e.g. zoom / view controls). */
+  renderRightBar?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Visual scale of the page (1 = 100%). */
+  zoom?: number
 }
 
 /**
- * Drop-in editor: resolves the opt-in features, renders the toolbar, an
- * optional left insert rail and the editable surface. Both bars are swappable;
- * the app never touches `@tiptap/*` itself.
+ * Drop-in editor: resolves the opt-in features, renders the toolbar, optional
+ * left/right rails and the editable surface. Bars are swappable; the app never
+ * touches `@tiptap/*` itself.
  */
 export function DocumentEditor({
   renderToolbar,
   renderInsertBar,
+  renderRightBar,
+  zoom = 1,
   ...options
 }: DocumentEditorProps) {
   const { editor, api, resolved } = useDocumentEditor(options)
@@ -49,13 +55,23 @@ export function DocumentEditor({
         : null
     : null
 
+  const rightBar = ctx && renderRightBar ? renderRightBar(ctx) : null
+
   return (
     <div className="document-editor">
       {insertBar ? <aside className="document-editor__rail">{insertBar}</aside> : null}
       <div className="document-editor__column">
         {toolbar}
-        <EditorContent editor={editor} className="document-editor__surface" />
+        {/* The page scrolls inside its column when zoomed — the rails stay put. */}
+        <div className="document-editor__zoom">
+          <div className="document-editor__scale" style={{ zoom }}>
+            <EditorContent editor={editor} className="document-editor__surface" />
+          </div>
+        </div>
       </div>
+      {rightBar ? (
+        <aside className="document-editor__rail document-editor__rail--right">{rightBar}</aside>
+      ) : null}
     </div>
   )
 }

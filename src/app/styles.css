@@ -59,6 +59,7 @@ body {
 
 /* ---- Editor ---- */
 .document-editor {
+  --page-width: 816px; /* US Letter @96dpi, like Google Docs */
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -67,7 +68,8 @@ body {
 
 .document-editor__column {
   width: 100%;
-  max-width: 816px; /* US Letter @96dpi, like Google Docs */
+  max-width: var(--page-width);
+  min-width: 0;
 }
 
 /* Insert rail — vertical toolbar to the left of the page */
@@ -98,6 +100,23 @@ body {
 
 .insert-rail__btn:hover {
   background: #f1f3f4;
+}
+
+.insert-rail__zoom {
+  font-size: 11px;
+  color: #5f6368;
+  text-align: center;
+  user-select: none;
+}
+
+/* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
+.document-editor__zoom {
+  overflow-x: auto;
+}
+
+.document-editor__scale {
+  width: var(--page-width);
+  transition: zoom 0.1s ease;
 }
 
 .editor-toolbar {
@@ -343,4 +362,89 @@ body {
 .document-editor__surface img {
   max-width: 100%;
   height: auto;
+}
+
+/* Merge-field chip inside the page */
+.document-editor__surface .merge-field {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: #e8f0fe;
+  border: 1px solid #c6dafc;
+  color: #1967d2;
+  font-size: 0.9em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Merge-field modal (minimal — style later) */
+.mf-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mf-modal {
+  width: min(420px, 90vw);
+  max-height: 70vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+}
+
+.mf-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mf-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: #5f6368;
+  cursor: pointer;
+}
+
+.mf-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mf-chip {
+  padding: 6px 12px;
+  border: 1px solid #c6dafc;
+  border-radius: 16px;
+  background: #e8f0fe;
+  color: #1967d2;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mf-chip:hover {
+  background: #d2e3fc;
+}
+
+.mf-modal__empty {
+  color: #80868b;
+  font-size: 13px;
+}
+
+.app__hint {
+  font-size: 12px;
+  color: #5f6368;
+  padding: 4px 8px;
+  background: #f1f3f4;
+  border-radius: 12px;
+  white-space: nowrap;
 }

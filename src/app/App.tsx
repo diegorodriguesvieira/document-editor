@@ -1,21 +1,48 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
+import { MergeFieldVariablesProvider, type MergeVariable } from '../features'
 import { PillToolbar } from './PillToolbar'
+import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
 import './styles.css'
 
 type ToolbarStyle = 'default' | 'pill' | 'bubble'
 
+const clampZoom = (z: number) => Math.min(Math.max(Math.round(z * 10) / 10, 0.5), 2)
+
 export default function App() {
-  const [presetId, setPresetId] = useState(presets[0].id)
+  const [presetId, setPresetId] = useState(
+    presets.find((p) => p.id === 'full')?.id ?? presets[0].id,
+  )
   const [toolbarStyle, setToolbarStyle] = useState<ToolbarStyle>('default')
+  const [zoom, setZoom] = useState(1)
   const preset = presets.find((p) => p.id === presetId) ?? presets[0]
+
+  // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
+  // context (not the `features` list), the editor mounts immediately and does
+  // NOT remount when they arrive — only the @ modal fills in.
+  const [mergeVariables, setMergeVariables] = useState<MergeVariable[]>([])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMergeVariables([
+        { id: 'cliente.nome', label: 'Nome do cliente' },
+        { id: 'cliente.cnpj', label: 'CNPJ' },
+        { id: 'contrato.numero', label: 'Número do contrato' },
+        { id: 'contrato.vigencia', label: 'Vigência' },
+        { id: 'valor.mensal', label: 'Valor mensal' },
+      ])
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [])
 
   return (
     <div className="app">
       <header className="app__bar">
         <span className="app__title">Documento sem título</span>
         <div className="app__controls">
+          <span className="app__hint">
+            @ variáveis: {mergeVariables.length ? `${mergeVariables.length} carregadas` : 'carregando…'}
+          </span>
           <label className="app__preset">
             Features:{' '}
             <select
@@ -46,35 +73,46 @@ export default function App() {
       </header>
 
       <main className="app__canvas">
-        {/* Same features, three different toolbar presentations — chosen by the app. */}
-        <DocumentEditor
-          // Remount only when the feature set changes; toolbar style just re-renders.
-          key={preset.id}
-          features={preset.features}
-          renderToolbar={(ctx) => {
-            if (toolbarStyle === 'bubble') {
-              // Formatting on selection; skip undo/redo (not selection-scoped).
-              return <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
-            }
-            if (toolbarStyle === 'pill') {
-              return <PillToolbar {...ctx} />
-            }
-            return (
-              <EditorToolbar {...ctx}>
-                {/* Level 2: an app-level custom button dropped into the default toolbar */}
-                <button
-                  type="button"
-                  className="editor-toolbar__btn"
-                  title="Exportar HTML (console)"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => console.log(ctx.api.getHTML())}
-                >
-                  ⤓ HTML
-                </button>
-              </EditorToolbar>
-            )
-          }}
-        />
+        {/* The merge-field variables come from here (consumer), via context. */}
+        <MergeFieldVariablesProvider variables={mergeVariables}>
+          {/* Same features, three different toolbar presentations — chosen by the app. */}
+          <DocumentEditor
+            // Remount only when the feature set changes; toolbar style just re-renders.
+            key={preset.id}
+            features={preset.features}
+            zoom={zoom}
+            renderRightBar={() => (
+              <ZoomRail
+                zoom={zoom}
+                onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
+                onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
+              />
+            )}
+            renderToolbar={(ctx) => {
+              if (toolbarStyle === 'bubble') {
+                // Formatting on selection; skip undo/redo (not selection-scoped).
+                return <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
+              }
+              if (toolbarStyle === 'pill') {
+                return <PillToolbar {...ctx} />
+              }
+              return (
+                <EditorToolbar {...ctx}>
+                  {/* Level 2: an app-level custom button dropped into the default toolbar */}
+                  <button
+                    type="button"
+                    className="editor-toolbar__btn"
+                    title="Exportar HTML (console)"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => console.log(ctx.api.getHTML())}
+                  >
+                    ⤓ HTML
+                  </button>
+                </EditorToolbar>
+              )
+            }}
+          />
+        </MergeFieldVariablesProvider>
       </main>
     </div>
   )

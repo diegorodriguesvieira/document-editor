@@ -11,6 +11,7 @@ import {
   ItalicFeature,
   LinkFeature,
   ListsFeature,
+  MergeFieldFeature,
   QuoteFeature,
   TableFeature,
 } from '../features'
@@ -49,6 +50,8 @@ export const presets: Preset[] = [
       CodeBlockFeature,
       DividerFeature,
       ImageFeature,
+      // Static feature — its variables come from MergeFieldVariablesProvider (the app).
+      MergeFieldFeature,
     ],
   },
 ]

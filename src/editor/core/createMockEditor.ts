@@ -49,6 +49,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
       emit('update')
     },
     getHTML: () => html,
+    focus: () => {},
     exec: (commandId, payload) => {
       execCalls.push({ commandId, payload })
       const result = init.commands?.[commandId]?.(payload) ?? true
