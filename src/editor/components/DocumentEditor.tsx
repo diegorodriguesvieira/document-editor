@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
 import { EditorContent } from '@tiptap/react'
 import type { EditorApi } from '../core/EditorApi'
+import { EditorContextMenu } from './EditorContextMenu'
 import { EditorToolbar } from './EditorToolbar'
 import { InsertToolbar } from './InsertToolbar'
 import type { ResolvedFeatures } from '../core/registry'
@@ -71,6 +72,9 @@ export function DocumentEditor({
       </div>
       {rightBar ? (
         <aside className="document-editor__rail document-editor__rail--right">{rightBar}</aside>
+      ) : null}
+      {ctx && resolved.contextMenu.length > 0 ? (
+        <EditorContextMenu editor={ctx.editor} api={ctx.api} sections={resolved.contextMenu} />
       ) : null}
     </div>
   )

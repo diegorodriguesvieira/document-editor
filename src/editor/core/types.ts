@@ -30,6 +30,35 @@ export interface ToolbarItem {
   render?: (ctx: ToolbarItemContext) => ReactNode
 }
 
+/** A single right-click (context menu) action. */
+export interface ContextMenuItem {
+  id: string
+  label: string
+  /** Short text/emoji icon; the host decides how to render it. */
+  icon?: string
+  /** Command id (from some feature's `commands`) to run when picked. */
+  commandId: string
+  /** Render in a destructive (red) style, e.g. "Excluir linha". */
+  danger?: boolean
+}
+
+/** A labelled group of context-menu items, e.g. "Linha" / "Coluna" / "Célula". */
+export interface ContextMenuGroup {
+  id: string
+  label?: string
+  items: ContextMenuItem[]
+}
+
+/**
+ * A context menu a feature shows on right-click, when `when` matches the
+ * engine-agnostic state at the clicked spot (e.g. the caret is in a table).
+ */
+export interface ContextMenuSection {
+  id: string
+  when: (state: EditorStateView) => boolean
+  groups: ContextMenuGroup[]
+}
+
 /**
  * The contract every feature implements. A feature bundles its TipTap
  * extension(s) with the stable, engine-independent surface the app consumes:
@@ -52,4 +81,6 @@ export interface FeatureDefinition {
    * `/` slash menu mirrors the runnable ones (those with a `commandId`).
    */
   insert?: ToolbarItem[]
+  /** Right-click menu shown when its `when` predicate matches the click. */
+  contextMenu?: ContextMenuSection[]
 }

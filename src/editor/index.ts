@@ -2,6 +2,9 @@
 export { defineFeature } from './core/defineFeature'
 export type {
   CommandFn,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSection,
   FeatureDefinition,
   ToolbarItem,
   ToolbarItemContext,
@@ -32,6 +35,7 @@ export { BubbleToolbar } from './components/BubbleToolbar'
 export type { BubbleToolbarProps } from './components/BubbleToolbar'
 export { InsertToolbar } from './components/InsertToolbar'
 export type { InsertToolbarProps } from './components/InsertToolbar'
+export { EditorContextMenu, ContextMenuView } from './components/EditorContextMenu'
 export { DocumentEditor } from './components/DocumentEditor'
 export type { DocumentEditorProps, DocumentEditorRenderContext } from './components/DocumentEditor'
 export { EditorContent } from '@tiptap/react'
