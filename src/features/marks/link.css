@@ -1,0 +1,6 @@
+/* LinkFeature — anchor colour inside the page. */
+@layer editor {
+  .document-editor__surface a {
+    color: var(--editor-accent-ink);
+  }
+}

@@ -1,0 +1,68 @@
+/* Right-click context menu (e.g. table actions). Portals to <body>. */
+@layer editor {
+  .context-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 240px;
+    max-height: min(80vh, 520px);
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--editor-surface);
+    border: 1px solid var(--editor-border);
+    border-radius: 8px;
+    box-shadow: var(--editor-shadow-pop);
+  }
+
+  .context-menu__group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .context-menu__heading {
+    padding: 8px 10px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--editor-text-subtle);
+  }
+
+  .context-menu__sep {
+    height: 1px;
+    margin: 6px 8px;
+    background: #e8eaed;
+  }
+
+  .context-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    color: var(--editor-text);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .context-menu__item:hover {
+    background: var(--editor-menu-active-bg);
+  }
+
+  .context-menu__item--danger {
+    color: var(--editor-danger);
+  }
+
+  .context-menu__item--danger:hover {
+    background: var(--editor-danger-bg);
+  }
+
+  .context-menu__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    font-size: 14px;
+  }
+}

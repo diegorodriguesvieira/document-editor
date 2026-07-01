@@ -1,0 +1,8 @@
+/* DividerFeature — horizontal rule inside the page. */
+@layer editor {
+  .document-editor__surface hr {
+    border: none;
+    border-top: 1px solid var(--editor-border-muted);
+    margin: 1em 0;
+  }
+}

@@ -1,0 +1,87 @@
+/**
+ * Base tokens + reset for the editor SDK skin. Every other partial builds on
+ * these `--editor-*` custom properties — override them (unlayered) to theme.
+ * Aggregated by `./editor.css`; see THEMING.md for the full token contract.
+ */
+@layer editor {
+  :root {
+    /* Typography */
+    --editor-font: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    --editor-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Text */
+    --editor-text: #202124;
+    --editor-text-muted: #5f6368;
+    --editor-text-subtle: #80868b;
+    --editor-control-fg: #444746;
+
+    /* Surfaces & borders */
+    --editor-surface: #fff;
+    --editor-border: #e0e0e0;
+    --editor-border-muted: #dadce0;
+    --editor-border-table: #c7c7c7;
+    --editor-subtle-bg: #f1f3f4;
+    --editor-chrome-bg: #f8f9fa;
+
+    /* Accent (interactive blue) */
+    --editor-accent: #1a73e8;
+    --editor-accent-ink: #0b57d0;
+    --editor-accent-bg: #d3e3fd;
+    --editor-toolbar-bg: #edf2fa;
+    --editor-menu-active-bg: #edf2fa;
+    --editor-control-hover-bg: #e2e7ef;
+
+    /* Danger */
+    --editor-danger: #d93025;
+    --editor-danger-bg: #fce8e6;
+
+    /* Inverse (dark chrome: code block, bubble toolbar) */
+    --editor-inverse-bg: #1b1b1b;
+    --editor-inverse-fg: #e3e3e3;
+    --editor-inverse-accent: #8ab4f8;
+
+    /* Page (US Letter @96dpi, like Google Docs) */
+    --editor-page-width: 816px;
+    --editor-page-min-height: 1056px;
+    --editor-page-padding: 96px;
+
+    /* Shadows */
+    --editor-shadow-sm: 0 1px 3px rgba(60, 64, 67, 0.15);
+    --editor-shadow-pop: 0 6px 24px rgba(0, 0, 0, 0.2);
+
+    /* Feature accents */
+    --editor-callout-bg: #fef7e0;
+    --editor-callout-border: #feefc3;
+    --editor-callout-accent: #f9ab00;
+    --editor-mergefield-bg: #e8f0fe;
+    --editor-mergefield-border: #c6dafc;
+    --editor-mergefield-fg: #1967d2;
+    --editor-cond-bg: #ece8fd;
+    --editor-cond-fg: #5b3dd4;
+    --editor-comment-bg: #fff3bf;
+    --editor-comment-accent: #f59f00;
+  }
+
+  /* Self-contained base so the SDK doesn't rely on a global reset. Covers the
+   * in-page surface AND the popups that portal to <body> (context menu, slash /
+   * @ menus, colour picker, merge-field modal). `:where()` keeps specificity 0,
+   * so consumers override effortlessly. */
+  :where(
+    .document-editor,
+    .context-menu,
+    .slash-menu,
+    .slash-menu--empty,
+    .color-picker,
+    .mf-modal__backdrop
+  ) {
+    box-sizing: border-box;
+    font-family: var(--editor-font);
+    color: var(--editor-text);
+    line-height: 1.5;
+  }
+  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *,
+  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *::before,
+  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *::after {
+    box-sizing: border-box;
+  }
+}

@@ -1,0 +1,98 @@
+/* ConditionalBlockFeature — React node view + condition editor. */
+@layer editor {
+  .document-editor__surface .conditional-block {
+    margin: 0.6em 0;
+    border: 1px solid var(--editor-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .conditional-block__chrome {
+    background: var(--editor-chrome-bg);
+  }
+
+  .conditional-block__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #ececec;
+    user-select: none;
+  }
+
+  .conditional-block__summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    border: none;
+    background: transparent;
+    font: inherit;
+    color: var(--editor-control-fg);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .conditional-block__icon {
+    color: var(--editor-text-muted);
+  }
+
+  .conditional-block__cond {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--editor-cond-bg);
+    color: var(--editor-cond-fg);
+    font-size: 0.9em;
+  }
+
+  .conditional-block__delete {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .conditional-block__content {
+    padding: 8px 12px;
+  }
+
+  /* Condition editor card */
+  .cond-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: var(--editor-surface);
+    border-bottom: 1px solid #ececec;
+  }
+
+  .cond-editor__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--editor-text-muted);
+  }
+
+  .cond-editor__field select,
+  .cond-editor__field input {
+    font: inherit;
+    font-size: 14px;
+    color: var(--editor-text);
+    padding: 8px 10px;
+    border: 1px solid var(--editor-border-muted);
+    border-radius: 8px;
+    background: var(--editor-surface);
+  }
+
+  .cond-editor__done {
+    align-self: flex-end;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+}

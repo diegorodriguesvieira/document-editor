@@ -1,0 +1,30 @@
+/* Bubble menu — formatting on text selection (floated by TipTap). Overrides the
+   shared .editor-toolbar__btn skin for the dark floating surface. */
+@layer editor {
+  .bubble-toolbar__inner {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 4px;
+    background: var(--editor-inverse-bg);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.36);
+  }
+
+  .bubble-toolbar__inner .editor-toolbar__btn {
+    color: var(--editor-inverse-fg);
+  }
+
+  .bubble-toolbar__inner .editor-toolbar__btn:hover {
+    background: #343434;
+  }
+
+  .bubble-toolbar__inner .editor-toolbar__btn[aria-pressed='true'] {
+    background: var(--editor-inverse-accent);
+    color: var(--editor-inverse-bg);
+  }
+
+  .bubble-toolbar__inner .ai-button {
+    height: 28px;
+  }
+}

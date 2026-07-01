@@ -1,0 +1,40 @@
+/* Editor shell + the white page surface. */
+@layer editor {
+  .document-editor {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .document-editor__column {
+    width: 100%;
+    max-width: var(--editor-page-width);
+    min-width: 0;
+  }
+
+  /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
+  .document-editor__zoom {
+    overflow-x: auto;
+  }
+
+  .document-editor__scale {
+    width: var(--editor-page-width);
+    transition: zoom 0.1s ease;
+  }
+
+  /* The white page */
+  .document-editor__surface .ProseMirror {
+    min-height: var(--editor-page-min-height);
+    padding: var(--editor-page-padding);
+    background: var(--editor-surface);
+    border: 1px solid var(--editor-border);
+    border-radius: 2px;
+    box-shadow: var(--editor-shadow-sm);
+    outline: none;
+  }
+
+  .document-editor__surface .ProseMirror > * + * {
+    margin-top: 0.6em;
+  }
+}

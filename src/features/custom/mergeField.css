@@ -1,0 +1,76 @@
+/* MergeFieldFeature — pure-DOM chip + insert modal (modal portals to <body>). */
+@layer editor {
+  .document-editor__surface .merge-field {
+    display: inline-block;
+    padding: 0 6px;
+    margin: 0 1px;
+    border-radius: 4px;
+    background: var(--editor-mergefield-bg);
+    border: 1px solid var(--editor-mergefield-border);
+    color: var(--editor-mergefield-fg);
+    font-size: 0.9em;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .mf-modal__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mf-modal {
+    width: min(420px, 90vw);
+    max-height: 70vh;
+    overflow: auto;
+    background: var(--editor-surface);
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    padding: 16px;
+  }
+
+  .mf-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .mf-modal__close {
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--editor-text-muted);
+    cursor: pointer;
+  }
+
+  .mf-modal__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .mf-chip {
+    padding: 6px 12px;
+    border: 1px solid var(--editor-mergefield-border);
+    border-radius: 16px;
+    background: var(--editor-mergefield-bg);
+    color: var(--editor-mergefield-fg);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .mf-chip:hover {
+    background: #d2e3fc;
+  }
+
+  .mf-modal__empty {
+    color: var(--editor-text-subtle);
+    font-size: 13px;
+  }
+}

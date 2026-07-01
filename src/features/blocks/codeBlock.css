@@ -1,0 +1,13 @@
+/* CodeBlockFeature — <pre> inside the page. */
+@layer editor {
+  .document-editor__surface pre {
+    margin: 0.5em 0;
+    padding: 12px 16px;
+    background: var(--editor-inverse-bg);
+    color: var(--editor-inverse-fg);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: var(--editor-font-mono);
+    font-size: 13px;
+  }
+}

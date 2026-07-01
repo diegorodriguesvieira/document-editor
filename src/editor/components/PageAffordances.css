@@ -1,0 +1,33 @@
+/* Header/footer hover affordance — "Add header +". */
+@layer editor {
+  .page-affordance {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .page-affordance:hover {
+    opacity: 1;
+  }
+
+  .page-affordance__line {
+    flex: 1;
+    height: 1px;
+    background: var(--editor-border-table);
+  }
+
+  .page-affordance__label {
+    color: var(--editor-accent);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+}

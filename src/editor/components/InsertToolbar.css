@@ -1,0 +1,31 @@
+/* Insert rail — vertical toolbar to the left of the page. */
+@layer editor {
+  .insert-rail {
+    position: sticky;
+    top: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    background: var(--editor-surface);
+    border: 1px solid var(--editor-border);
+    border-radius: 12px;
+    box-shadow: var(--editor-shadow-sm);
+  }
+
+  .insert-rail__btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--editor-control-fg);
+    cursor: pointer;
+  }
+
+  .insert-rail__btn:hover {
+    background: var(--editor-subtle-bg);
+  }
+}

@@ -1,0 +1,7 @@
+/* ImageFeature — images inside the page. */
+@layer editor {
+  .document-editor__surface img {
+    max-width: 100%;
+    height: auto;
+  }
+}

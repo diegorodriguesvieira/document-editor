@@ -1,0 +1,17 @@
+/* HeadingFeature — h1–h3 inside the page. */
+@layer editor {
+  .document-editor__surface h1 {
+    font-size: 26px;
+    font-weight: 400;
+  }
+
+  .document-editor__surface h2 {
+    font-size: 22px;
+    font-weight: 400;
+  }
+
+  .document-editor__surface h3 {
+    font-size: 18px;
+    font-weight: 500;
+  }
+}

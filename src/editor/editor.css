@@ -1,0 +1,49 @@
+/**
+ * Default skin for the document editor SDK — the single optional import.
+ *
+ *   import '@your-sdk/editor/editor.css'
+ *
+ * This file only re-exports the per-component / per-feature partials that live
+ * next to their source (e.g. `custom/callout.css` beside `custom/callout.tsx`).
+ * Every partial contributes to one `@layer editor` cascade layer, so any
+ * unlayered rule you write wins with no specificity war. Override `--editor-*`
+ * tokens (defined in `base.css`) to theme — see THEMING.md.
+ *
+ * Import order = original top-to-bottom, so any same-specificity rules keep
+ * their cascade. Zero runtime: plain CSS + custom properties.
+ */
+
+/* Tokens + reset */
+@import './base.css';
+
+/* Editor shell + components */
+@import './components/DocumentEditor.css';
+@import './components/InsertToolbar.css';
+@import './components/EditorToolbar.css';
+@import './components/BubbleToolbar.css';
+
+/* Toolbar/insert feature controls + in-page block & mark styling */
+@import '../features/custom/aiAssist.css';
+@import '../features/blocks/heading.css';
+@import '../features/marks/link.css';
+@import '../features/blocks/table.css';
+@import '../features/blocks/blockquote.css';
+@import '../features/blocks/codeBlock.css';
+@import '../features/blocks/divider.css';
+@import '../features/blocks/image.css';
+
+/* Custom node views */
+@import '../features/custom/callout.css';
+@import '../features/custom/mergeField.css';
+@import '../features/custom/conditionalBlock.css';
+
+/* Floating surfaces (portal to <body>) */
+@import './components/SlashMenu.css';
+@import './components/EditorContextMenu.css';
+
+/* Page regions + remaining features */
+@import './components/PageAffordances.css';
+@import '../features/custom/headerFooter.css';
+@import '../features/custom/comments.css';
+@import '../features/custom/commentsPanel.css';
+@import '../features/custom/color.css';

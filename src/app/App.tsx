@@ -4,6 +4,7 @@ import { CommentsPanel, DocumentVariablesProvider, type DocumentVariable } from 
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
+import '../editor/editor.css' // SDK default skin (optional import)
 import './styles.css'
 
 type ToolbarStyle = 'default' | 'pill' | 'bubble'

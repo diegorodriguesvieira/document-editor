@@ -1,0 +1,43 @@
+/* Formatting toolbar. */
+@layer editor {
+  .editor-toolbar {
+    position: sticky;
+    top: 56px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px 8px;
+    margin-bottom: 16px;
+    background: var(--editor-toolbar-bg);
+    border: 1px solid var(--editor-border);
+    border-radius: 24px;
+  }
+
+  .editor-toolbar__btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--editor-control-fg);
+    cursor: pointer;
+  }
+
+  .editor-toolbar__btn:hover {
+    background: var(--editor-control-hover-bg);
+  }
+
+  .editor-toolbar__btn[aria-pressed='true'] {
+    background: var(--editor-accent-bg);
+    color: var(--editor-accent-ink);
+  }
+
+  .editor-toolbar__btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
