@@ -45,14 +45,8 @@
     font-size: 0.9em;
   }
 
+  .conditional-block__nest,
   .conditional-block__delete {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
-  .conditional-block__nest {
     border: none;
     background: transparent;
     cursor: pointer;

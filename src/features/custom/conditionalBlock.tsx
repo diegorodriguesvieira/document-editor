@@ -149,25 +149,29 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
   }
   const selectedVariable = useDocumentVariable(cond.variable)
 
-  // Nesting adds an AND. Disable it once this block is already at the depth cap.
-  const pos = typeof getPos === 'function' ? getPos() : null
-  let depthHere = MAX_CONDITIONAL_DEPTH
-  if (pos != null) {
+  // Disable "add nested" once this block is already at the depth cap. getPos can
+  // be briefly stale/undefined while the view unmounts, so guard the resolve.
+  let atDepthLimit = true
+  const selfPos = typeof getPos === 'function' ? getPos() : null
+  if (selfPos != null) {
     try {
-      depthHere = conditionalDepthAt(editor.state.doc.resolve(pos + 1))
+      atDepthLimit = conditionalDepthAt(editor.state.doc.resolve(selfPos + 1)) >= MAX_CONDITIONAL_DEPTH
     } catch {
-      depthHere = MAX_CONDITIONAL_DEPTH
+      atDepthLimit = true
     }
   }
-  const atDepthLimit = depthHere >= MAX_CONDITIONAL_DEPTH
-  const nestCondition = () => {
-    if (pos == null) return
-    // Wrap all of this block's content in a new conditionalBlock (one level deeper).
+  const addNested = () => {
+    // Read the position fresh — the render-time one can be stale if the node moved.
+    if (typeof getPos !== 'function') return
+    const at = getPos()
+    const self = at == null ? null : editor.state.doc.nodeAt(at)
+    if (at == null || !self) return
+    // Append a NEW empty nested conditional as the last child, so existing content
+    // (e.g. text above) stays put — instead of wrapping it into the nested block.
     editor
       .chain()
+      .insertContentAt(at + self.nodeSize - 1, { type: 'conditionalBlock', content: [{ type: 'paragraph' }] })
       .focus()
-      .setTextSelection({ from: pos + 1, to: pos + node.nodeSize - 1 })
-      .wrapIn('conditionalBlock')
       .run()
   }
 
@@ -194,7 +198,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
             title="Nest a condition (AND)"
             disabled={atDepthLimit}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={nestCondition}
+            onClick={addNested}
           >
             ＋
           </button>
@@ -275,7 +279,7 @@ const ConditionalBlock = Node.create({
 
 /**
  * Backstop for the nesting cap: rejects any transaction whose result would nest a
- * conditionalBlock deeper than MAX_CONDITIONAL_DEPTH. `conditional.nest` and the
+ * conditionalBlock deeper than MAX_CONDITIONAL_DEPTH. `conditional.wrap` and the
  * node-view button pre-check for interactive nesting; this also covers paste,
  * drag and setJSON/setContent. filterTransaction rejects before the change
  * applies — no undo entry, no silent rewrite (an over-deep load/paste is dropped
@@ -304,17 +308,13 @@ export const ConditionalBlockFeature = defineFeature({
   id: 'conditionalBlock',
   extensions: () => [ConditionalBlock, ConditionalDepthGuard],
   commands: {
-    'conditional.toggle': (editor) => editor.chain().focus().toggleWrap('conditionalBlock').run(),
-    // Nest a new conditional inside the current one (= AND), capped at MAX depth.
-    'conditional.nest': (editor) => {
+    // Wrap the current block in a conditional — a top-level one, or a nested one
+    // (= AND) when the caret is already inside a conditional. Capped at
+    // MAX_CONDITIONAL_DEPTH; removal is via the block's trash button.
+    'conditional.wrap': (editor) => {
       if (conditionalDepthAt(editor.state.selection.$from) >= MAX_CONDITIONAL_DEPTH) return false
       return editor.chain().focus().wrapIn('conditionalBlock').run()
     },
   },
-  insert: [
-    // Insert creates a top-level conditional, or nests one when the caret is
-    // already inside a conditional (= AND) — capped at MAX_CONDITIONAL_DEPTH.
-    // Removal is via the block's trash button, not by toggling insert off.
-    { id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.nest' },
-  ],
+  insert: [{ id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.wrap' }],
 })

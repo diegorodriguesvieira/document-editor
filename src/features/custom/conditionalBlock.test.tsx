@@ -3,7 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import { createEditor, DocumentEditor, type CreatedEditor } from '../../editor'
+import { GapCursor } from '@tiptap/pm/gapcursor'
+import { createEditor, DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
 import type { DocumentVariable } from './documentVariables'
 import {
   ConditionalBlockFeature,
@@ -67,7 +68,7 @@ describe('conditional block', () => {
       element: mountTarget(),
       content: docWith('clause'),
     })
-    expect(created.api.exec('conditional.toggle')).toBe(true)
+    expect(created.api.exec('conditional.wrap')).toBe(true)
     expect(hasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
   })
 
@@ -82,7 +83,7 @@ describe('conditional block', () => {
       element: mountTarget(),
       content: docWith('clause'),
     })
-    created.api.exec('conditional.toggle') // the block becomes the last node
+    created.api.exec('conditional.wrap') // the block becomes the last node
 
     const content = created.api.getJSON().doc.content ?? []
     expect(content[content.length - 1]?.type).toBe('paragraph')
@@ -121,19 +122,19 @@ describe('conditional block — nesting (max 5)', () => {
     expect(created.api.getHTML().match(/data-conditional-block/g)?.length).toBe(2)
   })
 
-  it('conditional.nest wraps the current block in another (= AND)', () => {
+  it('wraps into a nested block when already inside one (= AND), never unwrapping', () => {
     created = createEditor({
       features: [ConditionalBlockFeature],
       element: mountTarget(),
       content: docWith('clause'),
     })
-    created.api.exec('conditional.toggle')
+    expect(created.api.exec('conditional.wrap')).toBe(true) // top-level
     expect(maxDepthJSON(created.api.getJSON().doc)).toBe(1)
-    expect(created.api.exec('conditional.nest')).toBe(true)
+    expect(created.api.exec('conditional.wrap')).toBe(true) // nests, doesn't lift
     expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
   })
 
-  it('conditional.nest no-ops at the depth cap', () => {
+  it('wrap no-ops at the depth cap', () => {
     created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
     created.api.setJSON(docOfDepth(MAX_CONDITIONAL_DEPTH))
     // Put the cursor inside the innermost block (its text is the deepest text node).
@@ -142,7 +143,7 @@ describe('conditional block — nesting (max 5)', () => {
       if (node.isText) target = pos
     })
     created.editor.commands.setTextSelection(target + 1)
-    expect(created.api.exec('conditional.nest')).toBe(false)
+    expect(created.api.exec('conditional.wrap')).toBe(false)
     expect(maxDepthJSON(created.api.getJSON().doc)).toBe(MAX_CONDITIONAL_DEPTH)
   })
 
@@ -159,34 +160,100 @@ describe('conditional block — nesting (max 5)', () => {
   })
 })
 
-describe('conditional block — nesting via the UI', () => {
-  it('shows an enabled "nest" button that adds a level on click', async () => {
-    const user = userEvent.setup()
-    render(<DocumentEditor features={[ConditionalBlockFeature]} content={docOfDepth(1)} />)
-
-    const nestBtn = await screen.findByRole('button', { name: 'Add nested condition' })
-    expect(nestBtn).toBeEnabled()
-    expect(document.querySelectorAll('.conditional-block').length).toBe(1)
-
-    await user.click(nestBtn)
-
-    await waitFor(() => {
-      expect(document.querySelectorAll('.conditional-block').length).toBe(2)
-    })
-  })
-
-  it('inserting a conditional while inside one nests it (= AND) instead of unwrapping', () => {
+describe('conditional block — editing around the isolating boundary', () => {
+  it('splits into a second paragraph inside the same block on Enter', () => {
     created = createEditor({
       features: [ConditionalBlockFeature],
       element: mountTarget(),
-      content: docWith('clause'),
+      content: docOfDepth(1),
     })
-    // First insert wraps the paragraph (top-level conditional).
-    expect(created.api.exec('conditional.nest')).toBe(true)
-    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(1)
-    // Second insert, caret still inside, nests rather than lifting.
-    expect(created.api.exec('conditional.nest')).toBe(true)
-    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
+    let end = 0
+    created.editor.state.doc.descendants((n, pos) => {
+      if (n.isText) end = pos + n.nodeSize
+    })
+    created.editor.commands.setTextSelection(end)
+    created.editor.commands.splitBlock()
+
+    const block = created.api.getJSON().doc.content?.[0]
+    expect((block?.content ?? []).map((k) => k.type)).toEqual(['paragraph', 'paragraph'])
+  })
+
+  it('lets you type after a nested block (gap cursor), landing inside the parent', () => {
+    created = createEditor({
+      features: [ConditionalBlockFeature],
+      element: mountTarget(),
+      content: {
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'conditionalBlock',
+              attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+              content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] },
+                {
+                  type: 'conditionalBlock',
+                  attrs: { variable: 'x', condition: 'EQUALS', value: 'holanda' },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'holanda' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
+    // Right after the INNER block, still inside the outer.
+    let innerEnd = 0
+    created.editor.state.doc.descendants((n, pos) => {
+      if (n.type.name === 'conditionalBlock' && n.attrs.value === 'holanda') innerEnd = pos + n.nodeSize
+    })
+    const $pos = created.editor.state.doc.resolve(innerEnd)
+    created.editor.view.dispatch(created.editor.state.tr.setSelection(new GapCursor($pos)))
+    created.editor.commands.insertContent('after')
+
+    // The new paragraph lands inside the OUTER block, after the inner one.
+    const outer = created.api.getJSON().doc.content?.[0]
+    const kids = outer?.content ?? []
+    expect(kids.map((k) => k.type)).toEqual(['paragraph', 'conditionalBlock', 'paragraph'])
+    expect(kids[2]?.content?.[0]?.text).toBe('after')
+  })
+})
+
+describe('conditional block — the ＋ (add nested) button', () => {
+  it('appends an empty nested block on click, keeping existing text above it', async () => {
+    const user = userEvent.setup()
+    let api: EditorApi | null = null
+    render(
+      <DocumentEditor
+        features={[ConditionalBlockFeature]}
+        content={{
+          doc: {
+            type: 'doc',
+            content: [
+              {
+                type: 'conditionalBlock',
+                attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] }],
+              },
+            ],
+          },
+        }}
+        onReady={(ready) => {
+          api = ready
+        }}
+      />,
+    )
+
+    const nestBtn = await screen.findByRole('button', { name: 'Add nested condition' })
+    expect(nestBtn).toBeEnabled()
+    await user.click(nestBtn)
+
+    await waitFor(() => {
+      const kids = api?.getJSON().doc.content?.[0]?.content ?? []
+      expect(kids).toHaveLength(2)
+      expect(kids[0]?.content?.[0]?.text).toBe('brazil') // text stays on top…
+      expect(kids[1]?.type).toBe('conditionalBlock') // …nested added below
+    })
   })
 })
 
