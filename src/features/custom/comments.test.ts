@@ -41,7 +41,7 @@ describe('comments feature', () => {
     )
   })
 
-  it('stores the thread in the mark storage, keyed by id (so a click can show it)', () => {
+  it('stores the thread in the mark storage, keyed by id (so the panel can show it)', () => {
     created = createEditor({
       features: [CommentsFeature],
       element: mountTarget(),
