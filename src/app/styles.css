@@ -320,6 +320,7 @@ body {
   table-layout: fixed;
   width: 100%;
   margin: 0.5em 0;
+  overflow: hidden;
 }
 
 .document-editor__surface th,
@@ -327,6 +328,37 @@ body {
   border: 1px solid #c7c7c7;
   padding: 6px 10px;
   vertical-align: top;
+  box-sizing: border-box;
+  position: relative; /* anchor for the resize handle + selection overlay */
+}
+
+/* Column resizing + cell selection — aligned with prosemirror-tables' own
+   style/tables.css (what the TipTap example uses), scoped to our surface. */
+.document-editor__surface .tableWrapper {
+  overflow-x: auto;
+}
+.document-editor__surface .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 20;
+  background: #1a73e8;
+  pointer-events: none;
+}
+.document-editor__surface .resize-cursor {
+  cursor: ew-resize;
+  cursor: col-resize;
+}
+/* Blue overlay on cells selected via drag / column-row selection */
+.document-editor__surface .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(26, 115, 232, 0.18);
+  pointer-events: none;
 }
 
 .document-editor__surface th {
@@ -748,36 +780,11 @@ body {
   outline: none;
 }
 
-/* Commented text — the anchor (a mark) rides with the characters */
+/* Commented text — the anchor (a mark) rides with the characters; read it in
+   the side panel */
 .comment {
   background: #fff3bf;
   border-bottom: 2px solid #f59f00;
-  cursor: pointer;
-}
-
-/* The popover shown when you click a commented span */
-.comment-popover {
-  max-width: 280px;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  font-size: 13px;
-  color: #202124;
-}
-
-.comment-popover__quote {
-  margin-bottom: 4px;
-  padding-left: 6px;
-  border-left: 2px solid #f59f00;
-  color: #80868b;
-  font-style: italic;
-  font-size: 12px;
-}
-
-.comment-popover__body {
-  white-space: pre-wrap;
 }
 
 /* Right-side comments panel */

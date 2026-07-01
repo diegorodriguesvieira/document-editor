@@ -119,13 +119,19 @@ export function EditorContextMenu({
   useEffect(() => {
     if (!editor) return
     const dom = editor.view.dom
+    // A right-click natively moves the caret to the click point, which collapses
+    // a cell/text selection before the menu even opens. Suppress that when a
+    // selection exists, so the menu (e.g. Merge cells) acts on what's selected.
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button === 2 && !editor.state.selection.empty) event.preventDefault()
+    }
     const onContextMenu = (event: MouseEvent) => {
       const coords = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
       if (!coords) return
-      // Target the right-clicked spot — unless a (multi-cell) selection already
-      // covers it, which we keep so "Merge cells" still sees every cell.
-      const { from, to } = editor.state.selection
-      if (coords.pos < from || coords.pos > to) {
+      // With just a caret, target the right-clicked cell so actions apply there.
+      // Never touch an EXISTING selection (text range OR multi-cell) — otherwise
+      // right-clicking a cell selection collapses it and "Merge cells" gets nothing.
+      if (editor.state.selection.empty) {
         editor.chain().focus().setTextSelection(coords.pos).run()
       }
       const section = sections.find((candidate) => candidate.when(api))
@@ -133,8 +139,12 @@ export function EditorContextMenu({
       event.preventDefault()
       setOpen({ x: event.clientX, y: event.clientY, groups: section.groups })
     }
+    dom.addEventListener('mousedown', onMouseDown)
     dom.addEventListener('contextmenu', onContextMenu)
-    return () => dom.removeEventListener('contextmenu', onContextMenu)
+    return () => {
+      dom.removeEventListener('mousedown', onMouseDown)
+      dom.removeEventListener('contextmenu', onContextMenu)
+    }
   }, [editor, api, sections])
 
   if (!open) return null
