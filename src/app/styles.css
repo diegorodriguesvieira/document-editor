@@ -857,3 +857,82 @@ body {
   color: #202124;
   font-size: 13px;
 }
+
+/* Text color — the toolbar swatch (a "bolinha" showing the current color) and
+   its popover of presets + a "+" that opens the native color picker. */
+.color-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-swatch:hover {
+  background: #e2e7ef;
+}
+
+.color-swatch__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.color-picker {
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.color-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.color-picker__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.color-picker__swatch:hover {
+  border-color: #dadce0;
+}
+
+.color-picker__swatch[data-active='true'] {
+  border-color: #0b57d0;
+}
+
+.color-picker__default,
+.color-picker__custom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444746;
+  background: #fff;
+}
+
+/* Visually hidden but still clickable via ref (display:none would block it). */
+.color-picker__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
