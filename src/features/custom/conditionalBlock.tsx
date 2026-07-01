@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   defineFeature,
+  Extension,
   mergeAttributes,
   Node,
   NodeViewContent,
@@ -8,7 +9,31 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from '../../editor'
+import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { useDocumentVariable, useDocumentVariables, type DocumentVariable } from './documentVariables'
+
+/** Hard cap on conditional-block nesting (1 = a single, top-level block). */
+export const MAX_CONDITIONAL_DEPTH = 5
+
+/** conditionalBlock ancestors at a resolved position (incl. the block it sits in). */
+function conditionalDepthAt($pos: ResolvedPos): number {
+  let depth = 0
+  for (let d = 1; d <= $pos.depth; d++) {
+    if ($pos.node(d).type.name === 'conditionalBlock') depth++
+  }
+  return depth
+}
+
+/** Deepest conditionalBlock nesting anywhere in the tree (O(n), no per-pos resolve). */
+function maxConditionalDepth(node: PMNode, current = 0): number {
+  const here = current + (node.type.name === 'conditionalBlock' ? 1 : 0)
+  let max = here
+  node.forEach((child) => {
+    max = Math.max(max, maxConditionalDepth(child, here))
+  })
+  return max
+}
 
 interface ConditionOption {
   id: string
@@ -114,7 +139,7 @@ function conditionText(value: ConditionValue, variable: DocumentVariable | undef
   return `${label} ${conditionLabel}${valuePart}`
 }
 
-function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewProps) {
+function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
   const variables = useDocumentVariables()
   const [editing, setEditing] = useState(false)
   const cond: ConditionValue = {
@@ -123,6 +148,28 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
     value: (node.attrs.value as string | null) ?? null,
   }
   const selectedVariable = useDocumentVariable(cond.variable)
+
+  // Nesting adds an AND. Disable it once this block is already at the depth cap.
+  const pos = typeof getPos === 'function' ? getPos() : null
+  let depthHere = MAX_CONDITIONAL_DEPTH
+  if (pos != null) {
+    try {
+      depthHere = conditionalDepthAt(editor.state.doc.resolve(pos + 1))
+    } catch {
+      depthHere = MAX_CONDITIONAL_DEPTH
+    }
+  }
+  const atDepthLimit = depthHere >= MAX_CONDITIONAL_DEPTH
+  const nestCondition = () => {
+    if (pos == null) return
+    // Wrap all of this block's content in a new conditionalBlock (one level deeper).
+    editor
+      .chain()
+      .focus()
+      .setTextSelection({ from: pos + 1, to: pos + node.nodeSize - 1 })
+      .wrapIn('conditionalBlock')
+      .run()
+  }
 
   return (
     <NodeViewWrapper className="conditional-block">
@@ -139,6 +186,17 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
             </span>
             <span>Show if</span>
             <span className="conditional-block__cond">{conditionText(cond, selectedVariable)}</span>
+          </button>
+          <button
+            type="button"
+            className="conditional-block__nest"
+            aria-label="Add nested condition"
+            title="Nest a condition (AND)"
+            disabled={atDepthLimit}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={nestCondition}
+          >
+            ＋
           </button>
           <button
             type="button"
@@ -216,17 +274,47 @@ const ConditionalBlock = Node.create({
 })
 
 /**
+ * Backstop for the nesting cap: rejects any transaction whose result would nest a
+ * conditionalBlock deeper than MAX_CONDITIONAL_DEPTH. `conditional.nest` and the
+ * node-view button pre-check for interactive nesting; this also covers paste,
+ * drag and setJSON/setContent. filterTransaction rejects before the change
+ * applies — no undo entry, no silent rewrite (an over-deep load/paste is dropped
+ * whole). Note: the editor's INITIAL `content` isn't transaction-checked (same as
+ * HeaderFooterGuard) — the consumer owns validating what it seeds.
+ */
+const ConditionalDepthGuard = Extension.create({
+  name: 'conditionalDepthGuard',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('conditionalDepthGuard'),
+        filterTransaction: (tr) =>
+          !tr.docChanged || maxConditionalDepth(tr.doc) <= MAX_CONDITIONAL_DEPTH,
+      }),
+    ]
+  },
+})
+
+/**
  * "Team" feature: wrap a block in a conditional block whose condition (variable
  * + operator + optional value) the backend evaluates at render time. Variables
  * come from {@link DocumentVariablesProvider} (shared with merge fields).
  */
 export const ConditionalBlockFeature = defineFeature({
   id: 'conditionalBlock',
-  extensions: () => [ConditionalBlock],
+  extensions: () => [ConditionalBlock, ConditionalDepthGuard],
   commands: {
     'conditional.toggle': (editor) => editor.chain().focus().toggleWrap('conditionalBlock').run(),
+    // Nest a new conditional inside the current one (= AND), capped at MAX depth.
+    'conditional.nest': (editor) => {
+      if (conditionalDepthAt(editor.state.selection.$from) >= MAX_CONDITIONAL_DEPTH) return false
+      return editor.chain().focus().wrapIn('conditionalBlock').run()
+    },
   },
   insert: [
-    { id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.toggle' },
+    // Insert creates a top-level conditional, or nests one when the caret is
+    // already inside a conditional (= AND) — capped at MAX_CONDITIONAL_DEPTH.
+    // Removal is via the block's trash button, not by toggling insert off.
+    { id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.nest' },
   ],
 })

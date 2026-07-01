@@ -52,6 +52,19 @@
     font-size: 14px;
   }
 
+  .conditional-block__nest {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--editor-control-fg);
+  }
+
+  .conditional-block__nest:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .conditional-block__content {
     padding: 8px 12px;
   }

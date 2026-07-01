@@ -1,11 +1,16 @@
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import { createEditor, type CreatedEditor } from '../../editor'
+import { createEditor, DocumentEditor, type CreatedEditor } from '../../editor'
 import type { DocumentVariable } from './documentVariables'
-import { ConditionalBlockFeature, ConditionEditor, type ConditionValue } from './conditionalBlock'
+import {
+  ConditionalBlockFeature,
+  ConditionEditor,
+  MAX_CONDITIONAL_DEPTH,
+  type ConditionValue,
+} from './conditionalBlock'
 
 let created: CreatedEditor | undefined
 
@@ -28,6 +33,32 @@ function hasNode(node: JSONContent, type: string): boolean {
 const docWith = (text: string) => ({
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
+
+/** Wrap `inner` in `depth` nested conditionalBlocks. */
+function nestedConditional(depth: number, inner: JSONContent): JSONContent {
+  let node = inner
+  for (let i = 0; i < depth; i++) {
+    node = {
+      type: 'conditionalBlock',
+      attrs: { variable: `v${i}`, condition: 'EXISTS', value: null },
+      content: [node],
+    }
+  }
+  return node
+}
+
+const docOfDepth = (depth: number) => ({
+  doc: {
+    type: 'doc',
+    content: [nestedConditional(depth, { type: 'paragraph', content: [{ type: 'text', text: 'x' }] })],
+  },
+})
+
+/** Deepest conditionalBlock nesting in a JSON doc. */
+function maxDepthJSON(node: JSONContent, current = 0): number {
+  const here = current + (node.type === 'conditionalBlock' ? 1 : 0)
+  return (node.content ?? []).reduce((max, child) => Math.max(max, maxDepthJSON(child, here)), here)
+}
 
 describe('conditional block', () => {
   it('wraps the current block in a conditionalBlock', () => {
@@ -79,6 +110,83 @@ describe('conditional block', () => {
 
     const block = created.api.getJSON().doc.content?.[0]
     expect(block?.attrs).toMatchObject({ variable: 'gross.salary', condition: 'EXISTS' })
+  })
+})
+
+describe('conditional block — nesting (max 5)', () => {
+  it('round-trips a nested structure with nested data-* wrappers', () => {
+    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    created.api.setJSON(docOfDepth(2))
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
+    expect(created.api.getHTML().match(/data-conditional-block/g)?.length).toBe(2)
+  })
+
+  it('conditional.nest wraps the current block in another (= AND)', () => {
+    created = createEditor({
+      features: [ConditionalBlockFeature],
+      element: mountTarget(),
+      content: docWith('clause'),
+    })
+    created.api.exec('conditional.toggle')
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(1)
+    expect(created.api.exec('conditional.nest')).toBe(true)
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
+  })
+
+  it('conditional.nest no-ops at the depth cap', () => {
+    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    created.api.setJSON(docOfDepth(MAX_CONDITIONAL_DEPTH))
+    // Put the cursor inside the innermost block (its text is the deepest text node).
+    let target = 0
+    created.editor.state.doc.descendants((node, pos) => {
+      if (node.isText) target = pos
+    })
+    created.editor.commands.setTextSelection(target + 1)
+    expect(created.api.exec('conditional.nest')).toBe(false)
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(MAX_CONDITIONAL_DEPTH)
+  })
+
+  it('rejects a setJSON that would nest deeper than the cap', () => {
+    created = createEditor({
+      features: [ConditionalBlockFeature],
+      element: mountTarget(),
+      content: docWith('keep'),
+    })
+    created.api.setJSON(docOfDepth(MAX_CONDITIONAL_DEPTH + 1)) // 6 levels → rejected whole
+    const doc = created.api.getJSON().doc
+    expect(maxDepthJSON(doc)).toBeLessThanOrEqual(MAX_CONDITIONAL_DEPTH)
+    expect(hasNode(doc, 'conditionalBlock')).toBe(false)
+  })
+})
+
+describe('conditional block — nesting via the UI', () => {
+  it('shows an enabled "nest" button that adds a level on click', async () => {
+    const user = userEvent.setup()
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={docOfDepth(1)} />)
+
+    const nestBtn = await screen.findByRole('button', { name: 'Add nested condition' })
+    expect(nestBtn).toBeEnabled()
+    expect(document.querySelectorAll('.conditional-block').length).toBe(1)
+
+    await user.click(nestBtn)
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('.conditional-block').length).toBe(2)
+    })
+  })
+
+  it('inserting a conditional while inside one nests it (= AND) instead of unwrapping', () => {
+    created = createEditor({
+      features: [ConditionalBlockFeature],
+      element: mountTarget(),
+      content: docWith('clause'),
+    })
+    // First insert wraps the paragraph (top-level conditional).
+    expect(created.api.exec('conditional.nest')).toBe(true)
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(1)
+    // Second insert, caret still inside, nests rather than lifting.
+    expect(created.api.exec('conditional.nest')).toBe(true)
+    expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
   })
 })
 
