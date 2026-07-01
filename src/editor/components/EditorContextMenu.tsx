@@ -136,8 +136,17 @@ export function EditorContextMenu({
       }
       const section = sections.find((candidate) => candidate.when(api))
       if (!section) return
+      // Drop items that don't currently apply (e.g. "Split cell" outside a merged
+      // cell), then drop groups left empty.
+      const groups = section.groups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => item.isAvailable?.(editor) ?? true),
+        }))
+        .filter((group) => group.items.length > 0)
+      if (groups.length === 0) return
       event.preventDefault()
-      setOpen({ x: event.clientX, y: event.clientY, groups: section.groups })
+      setOpen({ x: event.clientX, y: event.clientY, groups })
     }
     dom.addEventListener('mousedown', onMouseDown)
     dom.addEventListener('contextmenu', onContextMenu)

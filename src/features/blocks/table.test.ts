@@ -85,4 +85,18 @@ describe('table feature', () => {
     expect(ids.length).toBeGreaterThan(0)
     for (const id of ids) expect(created.api.can(id)).toBe(true)
   })
+
+  it('gates menu items by current applicability (via editor.can)', () => {
+    withTable() // 3x3, caret in a plain cell
+    const items = TableFeature.contextMenu![0].groups.flatMap((group) => group.items)
+    const byId = (id: string) => items.find((item) => item.id === id)!
+    const editor = created!.editor
+
+    // A plain cell isn't merged and there's no multi-cell selection.
+    expect(byId('split').isAvailable!(editor)).toBe(false)
+    expect(byId('merge').isAvailable!(editor)).toBe(false)
+    // Structural actions apply anywhere inside the table.
+    expect(byId('row-above').isAvailable!(editor)).toBe(true)
+    expect(byId('delete-table').isAvailable!(editor)).toBe(true)
+  })
 })

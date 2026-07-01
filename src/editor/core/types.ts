@@ -43,6 +43,10 @@ export interface ContextMenuItem {
   commandId: string
   /** Render in a destructive (red) style, e.g. "Delete row". */
   danger?: boolean
+  /** Show the item only when it currently applies (e.g. "Split cell" only in a
+   *  merged cell). Gets the editor so it can use `editor.can().<command>()`.
+   *  Omit to always show. */
+  isAvailable?: (editor: Editor) => boolean
 }
 
 /** A labelled group of context-menu items, e.g. "Row" / "Column" / "Cell". */
