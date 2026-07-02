@@ -6,9 +6,10 @@ export type {
   ContextMenuItem,
   ContextMenuSection,
   FeatureDefinition,
+  FeatureRenderContext,
   PageRegion,
+  PanelContribution,
   ToolbarItem,
-  ToolbarItemContext,
 } from './core/types'
 
 // Composition
@@ -32,6 +33,7 @@ export { useToolbar, useInsertBar, useToolbarButtons } from './hooks/useToolbar'
 export type { ToolbarButton } from './hooks/useToolbar'
 export { createSuggestionPopup, useListKeyboardNav } from './hooks/createSuggestionPopup'
 export type { SuggestionPopupRef } from './hooks/createSuggestionPopup'
+export { useDismissable } from './hooks/useDismissable'
 export { EditorToolbar } from './components/EditorToolbar'
 export type { EditorToolbarProps } from './components/EditorToolbar'
 export { BubbleToolbar } from './components/BubbleToolbar'
@@ -40,6 +42,7 @@ export { InsertToolbar } from './components/InsertToolbar'
 export type { InsertToolbarProps } from './components/InsertToolbar'
 export { EditorContextMenu, ContextMenuView } from './components/EditorContextMenu'
 export { PageAffordances } from './components/PageAffordances'
+export { FeaturePanels } from './components/FeaturePanels'
 export { DocumentEditor } from './components/DocumentEditor'
 export type { DocumentEditorProps, DocumentEditorRenderContext } from './components/DocumentEditor'
 export { EditorContent } from '@tiptap/react'

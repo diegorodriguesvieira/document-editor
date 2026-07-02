@@ -1,24 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createEditor, type CreatedEditor } from '../core/createEditor'
+import { describe, expect, it, vi } from 'vitest'
 import { createMockEditor } from '../core/createMockEditor'
 import { defineFeature } from '../core/defineFeature'
 import { EditorToolbar } from './EditorToolbar'
 import { resolveFeatures } from '../core/registry'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
+import { renderEditor } from '../../test/editorHarness'
 
 const commandFeature = (run = vi.fn(() => true)) =>
   defineFeature({
@@ -31,9 +18,9 @@ const commandFeature = (run = vi.fn(() => true)) =>
 describe('<EditorToolbar />', () => {
   it('renders one button per contribution and runs its command on click', async () => {
     const run = vi.fn(() => true)
-    created = createEditor({ features: [commandFeature(run)], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([commandFeature(run)])
 
-    render(<EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved} />)
+    render(<EditorToolbar editor={editor} api={api} resolved={resolved} />)
 
     const button = screen.getByRole('button', { name: 'Demo' })
     expect(button).toHaveAttribute('aria-pressed', 'false')
@@ -43,12 +30,12 @@ describe('<EditorToolbar />', () => {
   })
 
   it('applies a custom container className (restyle without forking)', () => {
-    created = createEditor({ features: [], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([])
     render(
       <EditorToolbar
-        editor={created.editor}
-        api={created.api}
-        resolved={created.resolved}
+        editor={editor}
+        api={api}
+        resolved={resolved}
         className="custom-bar"
       />,
     )
@@ -56,12 +43,12 @@ describe('<EditorToolbar />', () => {
   })
 
   it('lets the consumer override the button markup via renderButton', () => {
-    created = createEditor({ features: [commandFeature()], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([commandFeature()])
     render(
       <EditorToolbar
-        editor={created.editor}
-        api={created.api}
-        resolved={created.resolved}
+        editor={editor}
+        api={api}
+        resolved={resolved}
         renderButton={(button) => (
           // eslint-disable-next-line jsx-a11y/anchor-is-valid
           <a role="link" onClick={button.run}>
@@ -75,9 +62,9 @@ describe('<EditorToolbar />', () => {
   })
 
   it('appends children as custom controls (slot)', () => {
-    created = createEditor({ features: [], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([])
     render(
-      <EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved}>
+      <EditorToolbar editor={editor} api={api} resolved={resolved}>
         <button type="button">Custom</button>
       </EditorToolbar>,
     )
@@ -90,9 +77,9 @@ describe('<EditorToolbar />', () => {
       extensions: () => [],
       toolbar: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">hi</span> }],
     })
-    created = createEditor({ features: [feature], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([feature])
 
-    render(<EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved} />)
+    render(<EditorToolbar editor={editor} api={api} resolved={resolved} />)
     expect(screen.getByTestId('custom')).toHaveTextContent('hi')
   })
 

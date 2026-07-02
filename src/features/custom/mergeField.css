@@ -13,7 +13,7 @@
     user-select: none;
   }
 
-  .mf-modal__backdrop {
+  .document-editor-popup.mf-modal__backdrop {
     position: fixed;
     inset: 0;
     z-index: var(--editor-z-popup);
@@ -23,7 +23,7 @@
     justify-content: center;
   }
 
-  .mf-modal {
+  .document-editor-popup .mf-modal {
     width: min(420px, 90vw);
     max-height: 70vh;
     overflow: auto;
@@ -33,14 +33,14 @@
     padding: 16px;
   }
 
-  .mf-modal__header {
+  .document-editor-popup .mf-modal__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
   }
 
-  .mf-modal__close {
+  .document-editor-popup .mf-modal__close {
     border: none;
     background: transparent;
     font-size: 20px;
@@ -49,13 +49,13 @@
     cursor: pointer;
   }
 
-  .mf-modal__chips {
+  .document-editor-popup .mf-modal__chips {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
   }
 
-  .mf-chip {
+  .document-editor-popup .mf-chip {
     padding: 6px 12px;
     border: 1px solid var(--editor-mergefield-border);
     border-radius: 16px;
@@ -65,11 +65,11 @@
     cursor: pointer;
   }
 
-  .mf-chip:hover {
+  .document-editor-popup .mf-chip:hover {
     background: var(--editor-accent-bg);
   }
 
-  .mf-modal__empty {
+  .document-editor-popup .mf-modal__empty {
     color: var(--editor-text-subtle);
     font-size: 13px;
   }

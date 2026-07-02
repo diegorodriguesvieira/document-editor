@@ -1,35 +1,35 @@
 /* HeaderFooterFeature — rendered header/footer regions. */
 @layer editor {
-  .doc-region {
+  .document-editor__surface .doc-region {
     position: relative;
     padding: 8px 12px;
     border: 1px dashed var(--editor-border-table);
     border-radius: 6px;
   }
 
-  .doc-region--header {
+  .document-editor__surface .doc-region--header {
     margin-bottom: 18px;
   }
 
-  .doc-region--footer {
+  .document-editor__surface .doc-region--footer {
     margin-top: 18px;
   }
 
-  .doc-region__bar {
+  .document-editor__surface .doc-region__bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 4px;
   }
 
-  .doc-region__label {
+  .document-editor__surface .doc-region__label {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--editor-text-subtle);
   }
 
-  .doc-region__remove {
+  .document-editor__surface .doc-region__remove {
     border: none;
     background: transparent;
     color: var(--editor-danger);
@@ -39,13 +39,13 @@
     transition: opacity 0.12s;
   }
 
-  .doc-region:hover .doc-region__remove,
-  .doc-region:focus-within .doc-region__remove,
-  .doc-region__remove:focus-visible {
+  .document-editor__surface .doc-region:hover .doc-region__remove,
+  .document-editor__surface .doc-region:focus-within .doc-region__remove,
+  .document-editor__surface .doc-region__remove:focus-visible {
     opacity: 1;
   }
 
-  .doc-region__content {
+  .document-editor__surface .doc-region__content {
     outline: none;
   }
 }

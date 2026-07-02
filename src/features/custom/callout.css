@@ -1,6 +1,6 @@
 /* CalloutFeature — pure-DOM node view. */
 @layer editor {
-  .callout {
+  .document-editor__surface .callout {
     display: flex;
     gap: 12px;
     padding: 12px 16px;
@@ -10,13 +10,13 @@
     border-radius: 8px;
   }
 
-  .callout__emoji {
+  .document-editor__surface .callout__emoji {
     font-size: 18px;
     line-height: 1.6;
     user-select: none;
   }
 
-  .callout__content {
+  .document-editor__surface .callout__content {
     flex: 1;
   }
 }

@@ -1,70 +1,54 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { createEditor, type CreatedEditor } from '../../editor'
+import { describe, expect, it } from 'vitest'
+import type { CreatedEditor } from '../../editor'
+import { renderEditor } from '../../test/editorHarness'
 import { HeaderFooterFeature } from './headerFooter'
 
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
-
-function newEditor() {
-  created = createEditor({ features: [HeaderFooterFeature], element: mountTarget() })
-  return created
-}
-
-const content = () => created!.api.getJSON().doc.content ?? []
+const newEditor = () => renderEditor([HeaderFooterFeature])
+const content = (created: CreatedEditor) => created.api.getJSON().doc.content ?? []
 
 describe('header/footer feature', () => {
   it('adds a header as the first node', () => {
-    newEditor()
-    expect(created!.api.hasNode('documentHeader')).toBe(false)
-    expect(created!.api.exec('header.add')).toBe(true)
-    expect(created!.api.hasNode('documentHeader')).toBe(true)
-    expect(content()[0]?.type).toBe('documentHeader')
+    const created = newEditor()
+    expect(created.api.hasNode('documentHeader')).toBe(false)
+    expect(created.api.exec('header.add')).toBe(true)
+    expect(created.api.hasNode('documentHeader')).toBe(true)
+    expect(content(created)[0]?.type).toBe('documentHeader')
   })
 
   it('never adds a second header', () => {
-    newEditor()
-    expect(created!.api.exec('header.add')).toBe(true)
-    expect(created!.api.exec('header.add')).toBe(false)
+    const created = newEditor()
+    expect(created.api.exec('header.add')).toBe(true)
+    expect(created.api.exec('header.add')).toBe(false)
   })
 
   it('adds a footer as the last node (no trailing paragraph after it)', () => {
-    newEditor()
-    expect(created!.api.exec('footer.add')).toBe(true)
-    const c = content()
+    const created = newEditor()
+    expect(created.api.exec('footer.add')).toBe(true)
+    const c = content(created)
     expect(c[c.length - 1]?.type).toBe('documentFooter')
   })
 
   it('removes a region', () => {
-    newEditor()
-    created!.api.exec('header.add')
-    expect(created!.api.exec('header.remove')).toBe(true)
-    expect(created!.api.hasNode('documentHeader')).toBe(false)
+    const created = newEditor()
+    created.api.exec('header.add')
+    expect(created.api.exec('header.remove')).toBe(true)
+    expect(created.api.hasNode('documentHeader')).toBe(false)
   })
 
   it('serializes regions to data-* for the backend', () => {
-    newEditor()
-    created!.api.exec('header.add')
-    created!.api.exec('footer.add')
-    const html = created!.api.getHTML()
+    const created = newEditor()
+    created.api.exec('header.add')
+    created.api.exec('footer.add')
+    const html = created.api.getHTML()
     expect(html).toContain('data-document-header')
     expect(html).toContain('data-document-footer')
   })
 
   it('normalizes a malformed load to one header (first) and one footer (last)', () => {
-    newEditor()
+    const created = newEditor()
     const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
     const region = (type: string, text: string) => ({ type, content: [para(text)] })
-    created!.api.setJSON({
+    created.api.setJSON({
       doc: {
         type: 'doc',
         content: [
@@ -76,7 +60,7 @@ describe('header/footer feature', () => {
         ],
       },
     })
-    const c = content()
+    const c = content(created)
     expect(c.filter((n) => n.type === 'documentHeader')).toHaveLength(1)
     expect(c.filter((n) => n.type === 'documentFooter')).toHaveLength(1)
     expect(c[0]?.type).toBe('documentHeader')

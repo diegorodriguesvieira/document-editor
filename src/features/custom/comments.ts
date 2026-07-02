@@ -1,4 +1,5 @@
 import { defineFeature, Mark, mergeAttributes } from '../../editor'
+import { commentsPanelContribution } from './commentsPanel'
 
 export interface CommentThread {
   id: string
@@ -91,6 +92,11 @@ export const CommentsFeature = defineFeature({
       icon: '💬',
       commandId: 'comment.add',
       isActive: (state) => state.isActive('comment'),
+      // The anchor is the selected text — nothing selected, nothing to comment.
+      isDisabled: (state) => state.isSelectionEmpty(),
     },
   ],
+  // The side panel ships WITH the feature — enabling comments shows it, no
+  // consumer wiring (the app can still take over the rail via renderRightBar).
+  panels: [commentsPanelContribution],
 })

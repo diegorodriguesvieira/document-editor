@@ -2,7 +2,8 @@ import { createRef } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { SlashMenu, type SlashMenuRef } from './SlashMenu'
+import { SlashMenu } from './SlashMenu'
+import type { SuggestionPopupRef } from '../hooks/createSuggestionPopup'
 import type { ToolbarItem } from '../core/types'
 
 const ITEMS: ToolbarItem[] = [
@@ -24,7 +25,7 @@ describe('<SlashMenu />', () => {
 
   it('navigates with the keyboard and selects with Enter (via the ref)', () => {
     const command = vi.fn()
-    const ref = createRef<SlashMenuRef>()
+    const ref = createRef<SuggestionPopupRef>()
     render(<SlashMenu ref={ref} items={ITEMS} command={command} />)
 
     const press = (key: string) =>

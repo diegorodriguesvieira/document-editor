@@ -4,11 +4,12 @@ import type {
   ContextMenuSection,
   FeatureDefinition,
   PageRegion,
+  PanelContribution,
   ToolbarItem,
 } from './types'
 
 /** Stable ascending sort by `order` (default 0), preserving input order on ties. */
-function byOrder(items: ToolbarItem[]): ToolbarItem[] {
+function byOrder<T extends { order?: number }>(items: T[]): T[] {
   return items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => (a.item.order ?? 0) - (b.item.order ?? 0) || a.index - b.index)
@@ -25,6 +26,7 @@ export interface ResolvedFeatures {
   inserts: ToolbarItem[]
   contextMenu: ContextMenuSection[]
   pageRegions: PageRegion[]
+  panels: PanelContribution[]
 }
 
 /**
@@ -93,6 +95,18 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     throw new Error(`Command id(s) referenced but never registered: ${missing.join(', ')}.`)
   }
 
+  // Panel ids double as React keys in FeaturePanels — a cross-team collision
+  // must fail at boot like duplicate commands do, not silently at render.
+  const panelIds = new Set<string>()
+  for (const feature of features) {
+    for (const panel of feature.panels ?? []) {
+      if (panelIds.has(panel.id)) {
+        throw new Error(`Panel "${panel.id}" was contributed by more than one feature.`)
+      }
+      panelIds.add(panel.id)
+    }
+  }
+
   return {
     features,
     extensions: features.flatMap((feature) => feature.extensions()),
@@ -102,5 +116,6 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     inserts: byOrder(features.flatMap((feature) => feature.insert ?? [])),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
     pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),
+    panels: byOrder(features.flatMap((feature) => feature.panels ?? [])),
   }
 }

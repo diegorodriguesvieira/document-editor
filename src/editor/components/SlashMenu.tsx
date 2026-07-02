@@ -2,9 +2,6 @@ import { forwardRef } from 'react'
 import { useListKeyboardNav, type SuggestionPopupRef } from '../hooks/createSuggestionPopup'
 import type { ToolbarItem } from '../core/types'
 
-/** @deprecated alias — use {@link SuggestionPopupRef}. */
-export type SlashMenuRef = SuggestionPopupRef
-
 interface SlashMenuProps {
   items: ToolbarItem[]
   command: (item: ToolbarItem) => void

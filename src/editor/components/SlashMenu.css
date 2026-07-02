@@ -2,11 +2,11 @@
 @layer editor {
   /* Wrapper createSuggestionPopup mounts at <body> (position/left/top are set
      inline — they're data; stacking is themeable here). */
-  .suggestion-popup {
+  .document-editor-popup.suggestion-popup {
     z-index: var(--editor-z-popup);
   }
 
-  .slash-menu {
+  .document-editor-popup .slash-menu {
     display: flex;
     flex-direction: column;
     min-width: 220px;
@@ -19,7 +19,7 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   }
 
-  .slash-menu__item {
+  .document-editor-popup .slash-menu__item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -34,11 +34,11 @@
     cursor: pointer;
   }
 
-  .slash-menu__item[data-active='true'] {
+  .document-editor-popup .slash-menu__item[data-active='true'] {
     background: var(--editor-menu-active-bg);
   }
 
-  .slash-menu__icon {
+  .document-editor-popup .slash-menu__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -51,7 +51,7 @@
     color: var(--editor-control-fg);
   }
 
-  .slash-menu--empty {
+  .document-editor-popup .slash-menu--empty {
     padding: 10px 12px;
     background: var(--editor-surface);
     border: 1px solid var(--editor-border);

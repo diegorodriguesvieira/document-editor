@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/core'
 import type { EditorApi } from '../core/EditorApi'
+import { useDismissable } from '../hooks/useDismissable'
 import type { ContextMenuGroup, ContextMenuSection } from '../core/types'
 
 /**
@@ -35,30 +36,15 @@ export function ContextMenuView({
     })
   }, [x, y])
 
-  useEffect(() => {
-    const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose()
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    // Capture so an outside click closes before ProseMirror handles it.
-    document.addEventListener('mousedown', onDown, true)
-    document.addEventListener('keydown', onKey)
-    window.addEventListener('scroll', onClose, true)
-    window.addEventListener('resize', onClose)
-    return () => {
-      document.removeEventListener('mousedown', onDown, true)
-      document.removeEventListener('keydown', onKey)
-      window.removeEventListener('scroll', onClose, true)
-      window.removeEventListener('resize', onClose)
-    }
-  }, [onClose])
+  // Anchored to fixed click coordinates → also close on scroll/resize (drift).
+  useDismissable(ref, onClose, { closeOnScroll: true })
 
   return (
     <div
       ref={ref}
-      className="context-menu"
+      // `document-editor-popup` namespaces the SDK skin on body-portaled
+      // surfaces (a page's own `.context-menu` must not collide).
+      className="document-editor-popup context-menu"
       role="menu"
       aria-label="Context menu"
       // z-index lives in the stylesheet (--editor-z-menu) so consumers can re-stack.

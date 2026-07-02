@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { defineFeature, mergeAttributes, Node, type EditorApi } from '../../editor'
+import { defineFeature, mergeAttributes, Node, useDismissable, type EditorApi } from '../../editor'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 import { createMergeFieldSuggestion } from './mergeFieldSuggestion'
 
@@ -64,14 +64,12 @@ function MergeFieldModal({
   onPick: (variable: DocumentVariable) => void
   onClose: () => void
 }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  // Backdrop click (anything outside the card) or Escape closes.
+  useDismissable(cardRef, onClose)
   return (
-    <div className="mf-modal__backdrop" onMouseDown={onClose}>
-      <div
-        className="mf-modal"
-        role="dialog"
-        aria-label="Variables"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+    <div className="document-editor-popup mf-modal__backdrop">
+      <div ref={cardRef} className="mf-modal" role="dialog" aria-label="Variables">
         <div className="mf-modal__header">
           <strong>Variables</strong>
           <button type="button" className="mf-modal__close" aria-label="Close" onClick={onClose}>

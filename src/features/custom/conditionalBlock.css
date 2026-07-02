@@ -7,11 +7,11 @@
     overflow: hidden;
   }
 
-  .conditional-block__chrome {
+  .document-editor__surface .conditional-block__chrome {
     background: var(--editor-chrome-bg);
   }
 
-  .conditional-block__bar {
+  .document-editor__surface .conditional-block__bar {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -20,7 +20,7 @@
     user-select: none;
   }
 
-  .conditional-block__summary {
+  .document-editor__surface .conditional-block__summary {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -33,11 +33,11 @@
     text-align: left;
   }
 
-  .conditional-block__icon {
+  .document-editor__surface .conditional-block__icon {
     color: var(--editor-text-muted);
   }
 
-  .conditional-block__cond {
+  .document-editor__surface .conditional-block__cond {
     padding: 2px 8px;
     border-radius: 6px;
     background: var(--editor-cond-bg);
@@ -45,8 +45,8 @@
     font-size: 0.9em;
   }
 
-  .conditional-block__nest,
-  .conditional-block__delete {
+  .document-editor__surface .conditional-block__nest,
+  .document-editor__surface .conditional-block__delete {
     border: none;
     background: transparent;
     cursor: pointer;
@@ -54,17 +54,17 @@
     color: var(--editor-control-fg);
   }
 
-  .conditional-block__nest:disabled {
+  .document-editor__surface .conditional-block__nest:disabled {
     opacity: 0.4;
     cursor: default;
   }
 
-  .conditional-block__content {
+  .document-editor__surface .conditional-block__content {
     padding: 8px 12px;
   }
 
   /* Condition editor card */
-  .cond-editor {
+  .document-editor__surface .cond-editor {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -73,7 +73,7 @@
     border-bottom: 1px solid var(--editor-border);
   }
 
-  .cond-editor__field {
+  .document-editor__surface .cond-editor__field {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -81,8 +81,8 @@
     color: var(--editor-text-muted);
   }
 
-  .cond-editor__field select,
-  .cond-editor__field input {
+  .document-editor__surface .cond-editor__field select,
+  .document-editor__surface .cond-editor__field input {
     font: inherit;
     font-size: 14px;
     color: var(--editor-text);
@@ -92,7 +92,7 @@
     background: var(--editor-surface);
   }
 
-  .cond-editor__done {
+  .document-editor__surface .cond-editor__done {
     align-self: flex-end;
     padding: 8px 16px;
     border: none;

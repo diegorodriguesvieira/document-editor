@@ -3,9 +3,6 @@ import type { Extension } from '@tiptap/core'
 import { createSuggestionPopup, useListKeyboardNav, type SuggestionPopupRef } from '../../editor'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 
-/** @deprecated alias — use {@link SuggestionPopupRef}. */
-export type MergeFieldMenuRef = SuggestionPopupRef
-
 /**
  * Floating list shown while typing `@…`. Reads the (consumer-provided)
  * variables from context and filters them by the typed query — so it stays in

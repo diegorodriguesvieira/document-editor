@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
-import { createEditor, DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
+import { DocumentEditor, type EditorApi } from '../../editor'
+import { docWith, jsonHasNode, renderEditor } from '../../test/editorHarness'
 import type { DocumentVariable } from './documentVariables'
 import {
   ConditionalBlockFeature,
@@ -12,28 +13,6 @@ import {
   MAX_CONDITIONAL_DEPTH,
   type ConditionValue,
 } from './conditionalBlock'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
-
-function hasNode(node: JSONContent, type: string): boolean {
-  if (node.type === type) return true
-  return node.content?.some((child) => hasNode(child, type)) ?? false
-}
-
-const docWith = (text: string) => ({
-  doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
-})
 
 /** Wrap `inner` in `depth` nested conditionalBlocks. */
 function nestedConditional(depth: number, inner: JSONContent): JSONContent {
@@ -63,26 +42,18 @@ function maxDepthJSON(node: JSONContent, current = 0): number {
 
 describe('conditional block', () => {
   it('wraps the current block in a conditionalBlock', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
-      content: docWith('clause'),
-    })
+    const created = renderEditor([ConditionalBlockFeature], { content: docWith('clause') })
     expect(created.api.exec('conditional.wrap')).toBe(true)
-    expect(hasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
+    expect(jsonHasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
   })
 
   it('is isolating so edits across its boundary cannot strip the wrapper', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     expect(created.editor.schema.nodes.conditionalBlock.spec.isolating).toBe(true)
   })
 
   it('keeps a trailing paragraph after the block so you can type below it', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
-      content: docWith('clause'),
-    })
+    const created = renderEditor([ConditionalBlockFeature], { content: docWith('clause') })
     created.api.exec('conditional.wrap') // the block becomes the last node
 
     const content = created.api.getJSON().doc.content ?? []
@@ -90,7 +61,7 @@ describe('conditional block', () => {
   })
 
   it('serializes the condition to data-* attrs for the backend', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON({
       doc: {
         type: 'doc',
@@ -116,18 +87,14 @@ describe('conditional block', () => {
 
 describe('conditional block — nesting (max 5)', () => {
   it('round-trips a nested structure with nested data-* wrappers', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON(docOfDepth(2))
     expect(maxDepthJSON(created.api.getJSON().doc)).toBe(2)
     expect(created.api.getHTML().match(/data-conditional-block/g)?.length).toBe(2)
   })
 
   it('wraps into a nested block when already inside one (= AND), never unwrapping', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
-      content: docWith('clause'),
-    })
+    const created = renderEditor([ConditionalBlockFeature], { content: docWith('clause') })
     expect(created.api.exec('conditional.wrap')).toBe(true) // top-level
     expect(maxDepthJSON(created.api.getJSON().doc)).toBe(1)
     expect(created.api.exec('conditional.wrap')).toBe(true) // nests, doesn't lift
@@ -135,7 +102,7 @@ describe('conditional block — nesting (max 5)', () => {
   })
 
   it('wrap no-ops at the depth cap', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON(docOfDepth(MAX_CONDITIONAL_DEPTH))
     // Put the cursor inside the innermost block (its text is the deepest text node).
     let target = 0
@@ -148,25 +115,17 @@ describe('conditional block — nesting (max 5)', () => {
   })
 
   it('rejects a setJSON that would nest deeper than the cap', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
-      content: docWith('keep'),
-    })
+    const created = renderEditor([ConditionalBlockFeature], { content: docWith('keep') })
     created.api.setJSON(docOfDepth(MAX_CONDITIONAL_DEPTH + 1)) // 6 levels → rejected whole
     const doc = created.api.getJSON().doc
     expect(maxDepthJSON(doc)).toBeLessThanOrEqual(MAX_CONDITIONAL_DEPTH)
-    expect(hasNode(doc, 'conditionalBlock')).toBe(false)
+    expect(jsonHasNode(doc, 'conditionalBlock')).toBe(false)
   })
 })
 
 describe('conditional block — editing around the isolating boundary', () => {
   it('splits into a second paragraph inside the same block on Enter', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
-      content: docOfDepth(1),
-    })
+    const created = renderEditor([ConditionalBlockFeature], { content: docOfDepth(1) })
     let end = 0
     created.editor.state.doc.descendants((n, pos) => {
       if (n.isText) end = pos + n.nodeSize
@@ -179,9 +138,7 @@ describe('conditional block — editing around the isolating boundary', () => {
   })
 
   it('lets you type after a nested block (gap cursor), landing inside the parent', () => {
-    created = createEditor({
-      features: [ConditionalBlockFeature],
-      element: mountTarget(),
+    const created = renderEditor([ConditionalBlockFeature], {
       content: {
         doc: {
           type: 'doc',
@@ -246,7 +203,7 @@ describe('conditional block — removing an empty line next to a nested block', 
     )
 
   it('Backspace removes it (isolating otherwise makes every key a no-op) and leaves the gap cursor', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON(DOC_WITH_EMPTY_LINE)
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(2) // caret in the empty first line
@@ -258,7 +215,7 @@ describe('conditional block — removing an empty line next to a nested block', 
   })
 
   it('never removes the block last line (the schema needs block+)', () => {
-    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON({
       doc: { type: 'doc', content: [{ type: 'conditionalBlock', content: [{ type: 'paragraph' }] }] },
     })

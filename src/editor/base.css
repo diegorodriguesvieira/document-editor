@@ -70,26 +70,20 @@
     --editor-comment-accent: #f59f00;
   }
 
-  /* Self-contained base so the SDK doesn't rely on a global reset. Covers the
-   * in-page surface AND the popups that portal to <body> (context menu, slash /
-   * @ menus, colour picker, merge-field modal). `:where()` keeps specificity 0,
+  /* Self-contained base so the SDK doesn't rely on a global reset. Two roots:
+   * `.document-editor` (the shell) and `.document-editor-popup` (the namespace
+   * class every body-portaled surface carries — context menu, `/` and `@`
+   * menus, colour picker, merge-field modal). `:where()` keeps specificity 0,
    * so consumers override effortlessly. */
-  :where(
-    .document-editor,
-    .context-menu,
-    .slash-menu,
-    .slash-menu--empty,
-    .color-picker,
-    .mf-modal__backdrop
-  ) {
+  :where(.document-editor, .document-editor-popup) {
     box-sizing: border-box;
     font-family: var(--editor-font);
     color: var(--editor-text);
     line-height: 1.5;
   }
-  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *,
-  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *::before,
-  :where(.document-editor, .context-menu, .slash-menu, .color-picker, .mf-modal__backdrop) *::after {
+  :where(.document-editor, .document-editor-popup) *,
+  :where(.document-editor, .document-editor-popup) *::before,
+  :where(.document-editor, .document-editor-popup) *::after {
     box-sizing: border-box;
   }
 }

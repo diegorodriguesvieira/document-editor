@@ -1,35 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
-import {
-  EditorToolbar,
-  createEditor,
-  createMockEditor,
-  resolveFeatures,
-  type CreatedEditor,
-} from '../../editor'
+import { describe, expect, it } from 'vitest'
+import { EditorToolbar, createMockEditor, resolveFeatures } from '../../editor'
+import { docWith, renderEditor } from '../../test/editorHarness'
 import { ColorFeature } from './color'
 
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
-
-const HELLO = {
-  doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hello' }] }] },
-}
+const HELLO = docWith('hello')
 
 describe('color feature', () => {
   it('applies and clears the text color on the selection (real editor)', () => {
-    created = createEditor({ features: [ColorFeature], element: mountTarget(), content: HELLO })
+    const created = renderEditor([ColorFeature], { content: HELLO })
     created.editor.commands.selectAll()
 
     expect(created.api.exec('color.set', '#188038')).toBe(true)
@@ -61,7 +41,7 @@ describe('color feature', () => {
   })
 
   it('reflects the current color in the swatch reactively (real editor)', async () => {
-    created = createEditor({ features: [ColorFeature], element: mountTarget(), content: HELLO })
+    const created = renderEditor([ColorFeature], { content: HELLO })
     render(
       <EditorToolbar editor={created.editor} api={created.api} resolved={resolveFeatures([ColorFeature])} />,
     )

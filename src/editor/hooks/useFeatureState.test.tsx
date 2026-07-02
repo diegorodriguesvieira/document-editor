@@ -1,30 +1,17 @@
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import type { Editor } from '@tiptap/core'
-import { createEditor } from '../core/createEditor'
+import { describe, expect, it } from 'vitest'
 import { useFeatureState } from './useFeatureState'
-
-let editor: Editor | undefined
-
-afterEach(() => {
-  editor?.destroy()
-  editor = undefined
-})
-
-const docWith = (text: string) => ({
-  doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
-})
+import { docWith, renderEditor } from '../../test/editorHarness'
 
 describe('useFeatureState', () => {
   it('reads a slice of editor state and reacts to transactions', () => {
-    const created = createEditor({ features: [], content: docWith('hello') })
-    editor = created.editor
+    const { editor, api } = renderEditor([], { content: docWith('hello') })
 
-    const { result } = renderHook(() => useFeatureState(editor!, (e) => e.getText()))
+    const { result } = renderHook(() => useFeatureState(editor, (e) => e.getText()))
     expect(result.current).toBe('hello')
 
     act(() => {
-      created.api.setJSON(docWith('world'))
+      api.setJSON(docWith('world'))
     })
     expect(result.current).toBe('world')
   })

@@ -1,21 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createEditor, type CreatedEditor } from '../core/createEditor'
+import { describe, expect, it, vi } from 'vitest'
 import { defineFeature } from '../core/defineFeature'
 import { useToolbar } from './useToolbar'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
+import { renderEditor } from '../../test/editorHarness'
 
 describe('useToolbar', () => {
   it('derives one button per contribution with live state and a run() action', () => {
@@ -28,9 +15,9 @@ describe('useToolbar', () => {
         { id: 'demo', label: 'Demo', commandId: 'demo.run', isActive: () => false, isDisabled: () => true },
       ],
     })
-    created = createEditor({ features: [feature], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([feature])
 
-    const { result } = renderHook(() => useToolbar(created!.editor, created!.api, created!.resolved))
+    const { result } = renderHook(() => useToolbar(editor, api, resolved))
 
     expect(result.current).toHaveLength(1)
     expect(result.current[0].item.id).toBe('demo')
@@ -50,12 +37,10 @@ describe('useToolbar', () => {
       commands: { a: () => true },
       toolbar: [{ id: 'a', label: 'A', commandId: 'a' }],
     })
-    created = createEditor({ features: [feature], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([feature])
 
     const extra = [{ id: 'x', label: 'X', commandId: 'x' }]
-    const { result } = renderHook(() =>
-      useToolbar(created!.editor, created!.api, created!.resolved, extra),
-    )
+    const { result } = renderHook(() => useToolbar(editor, api, resolved, extra))
 
     expect(result.current.map((button) => button.item.id)).toEqual(['a', 'x'])
   })

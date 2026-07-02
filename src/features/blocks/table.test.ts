@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import type { JSONContent } from '@tiptap/core'
-import { createEditor, type CreatedEditor, type EditorStateView } from '../../editor'
+import { describe, expect, it } from 'vitest'
+import type { EditorApi, EditorStateView } from '../../editor'
+import { jsonFindNode, renderEditor } from '../../test/editorHarness'
 import { TableFeature } from './table'
 
 /** Minimal EditorStateView for testing a context-menu `when` predicate. */
@@ -9,67 +9,46 @@ const stateView = (isActive: (name: string) => boolean): EditorStateView => ({
   canUndo: () => false,
   canRedo: () => false,
   isEmpty: () => false,
+  isSelectionEmpty: () => true,
 })
 
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
-
-function findNode(node: JSONContent, type: string): JSONContent | null {
-  if (node.type === type) return node
-  for (const child of node.content ?? []) {
-    const found = findNode(child, type)
-    if (found) return found
-  }
-  return null
-}
-
-const rows = () => findNode(created!.api.getJSON().doc, 'table')?.content?.length ?? 0
-const cols = () => findNode(created!.api.getJSON().doc, 'tableRow')?.content?.length ?? 0
+const rows = (api: EditorApi) => jsonFindNode(api.getJSON().doc, 'table')?.content?.length ?? 0
+const cols = (api: EditorApi) => jsonFindNode(api.getJSON().doc, 'tableRow')?.content?.length ?? 0
 
 function withTable() {
-  created = createEditor({ features: [TableFeature], element: mountTarget() })
+  const created = renderEditor([TableFeature])
   created.api.exec('table.insert') // 3x3 with a header row; caret lands inside
   return created
 }
 
 describe('table feature', () => {
   it('inserts a 3x3 table', () => {
-    withTable()
-    expect(rows()).toBe(3)
-    expect(cols()).toBe(3)
+    const { api } = withTable()
+    expect(rows(api)).toBe(3)
+    expect(cols(api)).toBe(3)
   })
 
   it('adds and removes rows', () => {
-    withTable()
-    expect(created!.api.exec('table.addRowAfter')).toBe(true)
-    expect(rows()).toBe(4)
-    expect(created!.api.exec('table.deleteRow')).toBe(true)
-    expect(rows()).toBe(3)
+    const { api } = withTable()
+    expect(api.exec('table.addRowAfter')).toBe(true)
+    expect(rows(api)).toBe(4)
+    expect(api.exec('table.deleteRow')).toBe(true)
+    expect(rows(api)).toBe(3)
   })
 
   it('adds and removes columns', () => {
-    withTable()
-    expect(created!.api.exec('table.addColumnAfter')).toBe(true)
-    expect(cols()).toBe(4)
-    expect(created!.api.exec('table.deleteColumn')).toBe(true)
-    expect(cols()).toBe(3)
+    const { api } = withTable()
+    expect(api.exec('table.addColumnAfter')).toBe(true)
+    expect(cols(api)).toBe(4)
+    expect(api.exec('table.deleteColumn')).toBe(true)
+    expect(cols(api)).toBe(3)
   })
 
   it('deletes the whole table', () => {
-    withTable()
-    expect(findNode(created!.api.getJSON().doc, 'table')).not.toBeNull()
-    expect(created!.api.exec('table.delete')).toBe(true)
-    expect(findNode(created!.api.getJSON().doc, 'table')).toBeNull()
+    const { api } = withTable()
+    expect(jsonFindNode(api.getJSON().doc, 'table')).toBeDefined()
+    expect(api.exec('table.delete')).toBe(true)
+    expect(jsonFindNode(api.getJSON().doc, 'table')).toBeUndefined()
   })
 
   it('contributes a context menu scoped to tables, backed by real commands', () => {
@@ -80,17 +59,16 @@ describe('table feature', () => {
     expect(section!.when(stateView(() => false))).toBe(false)
 
     // Every menu item points at a command the feature actually registers.
-    created = createEditor({ features: [TableFeature], element: mountTarget() })
+    const { api } = renderEditor([TableFeature])
     const ids = section!.groups.flatMap((group) => group.items.map((item) => item.commandId))
     expect(ids.length).toBeGreaterThan(0)
-    for (const id of ids) expect(created.api.has(id)).toBe(true)
+    for (const id of ids) expect(api.has(id)).toBe(true)
   })
 
   it('gates menu items by current applicability (via editor.can)', () => {
-    withTable() // 3x3, caret in a plain cell
+    const { editor } = withTable() // 3x3, caret in a plain cell
     const items = TableFeature.contextMenu![0].groups.flatMap((group) => group.items)
     const byId = (id: string) => items.find((item) => item.id === id)!
-    const editor = created!.editor
 
     // A plain cell isn't merged and there's no multi-cell selection.
     expect(byId('split').isAvailable!(editor)).toBe(false)

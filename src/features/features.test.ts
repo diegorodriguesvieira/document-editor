@@ -1,33 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { createEditor, type CreatedEditor } from '../editor'
+import { describe, expect, it } from 'vitest'
+import { docWith, renderEditor } from '../test/editorHarness'
 import { BoldFeature, HeadingFeature, ListsFeature } from './index'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-const docWith = (text: string) => ({
-  doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
-})
-
-// Commands chain `.focus()`, which only applies on a mounted editor view.
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
 
 describe('platform features', () => {
   it('compose into the editor and their commands actually apply', () => {
-    created = createEditor({
-      features: [BoldFeature, HeadingFeature],
-      element: mountTarget(),
+    const { editor, api } = renderEditor([BoldFeature, HeadingFeature], {
       content: docWith('hi'),
     })
-    const { editor, api } = created
 
     editor.commands.selectAll()
     expect(editor.isActive('bold')).toBe(false)
@@ -37,19 +16,17 @@ describe('platform features', () => {
   })
 
   it('only contributes toolbar items for the features that were opted in', () => {
-    const withLists = createEditor({ features: [BoldFeature, ListsFeature] })
+    const withLists = renderEditor([BoldFeature, ListsFeature])
     expect(withLists.resolved.toolbar.map((t) => t.id)).toEqual(
       expect.arrayContaining(['bold', 'bulletList', 'orderedList']),
     )
-    withLists.editor.destroy()
 
-    const boldOnly = createEditor({ features: [BoldFeature] })
+    const boldOnly = renderEditor([BoldFeature])
     expect(boldOnly.resolved.toolbar.map((t) => t.id)).not.toContain('bulletList')
-    boldOnly.editor.destroy()
   })
 
   it('exec returns false for a command no enabled feature provides', () => {
-    created = createEditor({ features: [BoldFeature] })
-    expect(created.api.exec('lists.bullet')).toBe(false)
+    const { api } = renderEditor([BoldFeature])
+    expect(api.exec('lists.bullet')).toBe(false)
   })
 })

@@ -1,34 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { JSONContent } from '@tiptap/core'
-import {
-  InsertToolbar,
-  createEditor,
-  createMockEditor,
-  resolveFeatures,
-  type CreatedEditor,
-} from '../../editor'
+import { describe, expect, it, vi } from 'vitest'
+import { InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
+import { jsonHasNode, renderEditor } from '../../test/editorHarness'
 import { MergeFieldFeature } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
-
-function hasNode(node: JSONContent, type: string): boolean {
-  if (node.type === type) return true
-  return node.content?.some((child) => hasNode(child, type)) ?? false
-}
 
 const SAMPLE: DocumentVariable[] = [
   { id: 'client.name', label: 'Client name' },
@@ -62,16 +38,14 @@ describe('mergeField', () => {
   })
 
   it('inserts a mergeField node (+ trailing space) into the document (real editor)', () => {
-    created = createEditor({
-      features: [MergeFieldFeature],
-      element: mountTarget(),
+    const created = renderEditor([MergeFieldFeature], {
       content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
 
     expect(
       created.api.exec('mergeField.insert', { id: 'client.name', label: 'Client name' }),
     ).toBe(true)
-    expect(hasNode(created.api.getJSON().doc, 'mergeField')).toBe(true)
+    expect(jsonHasNode(created.api.getJSON().doc, 'mergeField')).toBe(true)
     expect(created.api.getHTML()).toContain('data-merge-field="client.name"')
 
     const paragraph = created.api.getJSON().doc.content?.[0]

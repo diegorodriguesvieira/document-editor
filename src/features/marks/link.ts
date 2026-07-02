@@ -18,7 +18,9 @@ export const LinkFeature = defineFeature({
       if (!href) {
         return editor.chain().focus().unsetLink().run()
       }
-      return editor.chain().focus().setLink({ href }).run()
+      // extendMarkRange: a CARET inside an existing link retargets the whole
+      // mark range (that's the "edit link" flow the toolbar enables at a caret).
+      return editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
     },
     'link.unset': (editor) => editor.chain().focus().unsetLink().run(),
     // Insert flow: ask for the visible text AND the URL, then insert a new
@@ -54,6 +56,8 @@ export const LinkFeature = defineFeature({
       icon: '🔗',
       commandId: 'link.set',
       isActive: (state) => state.isActive('link'),
+      // Linking needs a selection to apply to (unless editing an existing link).
+      isDisabled: (state) => state.isSelectionEmpty() && !state.isActive('link'),
     },
   ],
   insert: [

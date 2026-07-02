@@ -1,6 +1,6 @@
 /* Header/footer hover affordance — "Add header +". */
 @layer editor {
-  .page-affordance {
+  .document-editor .page-affordance {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -14,18 +14,18 @@
     transition: opacity 0.12s;
   }
 
-  .page-affordance:hover,
-  .page-affordance:focus-visible {
+  .document-editor .page-affordance:hover,
+  .document-editor .page-affordance:focus-visible {
     opacity: 1;
   }
 
-  .page-affordance__line {
+  .document-editor .page-affordance__line {
     flex: 1;
     height: 1px;
     background: var(--editor-border-table);
   }
 
-  .page-affordance__label {
+  .document-editor .page-affordance__label {
     color: var(--editor-accent);
     font-size: 14px;
     font-weight: 500;

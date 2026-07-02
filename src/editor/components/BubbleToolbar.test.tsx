@@ -1,21 +1,8 @@
 import { render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { BubbleToolbar } from './BubbleToolbar'
-import { createEditor, type CreatedEditor } from '../core/createEditor'
 import { defineFeature } from '../core/defineFeature'
-
-let created: CreatedEditor | undefined
-
-afterEach(() => {
-  created?.editor.destroy()
-  created = undefined
-})
-
-function mountTarget() {
-  const el = document.createElement('div')
-  document.body.appendChild(el)
-  return el
-}
+import { renderEditor } from '../../test/editorHarness'
 
 const bold = defineFeature({
   id: 'bold',
@@ -26,17 +13,15 @@ const bold = defineFeature({
 
 describe('<BubbleToolbar />', () => {
   it('renders nothing when there is no editor', () => {
-    created = createEditor({ features: [bold], element: mountTarget() })
-    const { container } = render(
-      <BubbleToolbar editor={null} api={created.api} resolved={created.resolved} />,
-    )
+    const { api, resolved } = renderEditor([bold])
+    const { container } = render(<BubbleToolbar editor={null} api={api} resolved={resolved} />)
     expect(container).toBeEmptyDOMElement()
   })
 
   it('mounts against a real editor without throwing', () => {
-    created = createEditor({ features: [bold], element: mountTarget() })
+    const { editor, api, resolved } = renderEditor([bold])
     expect(() =>
-      render(<BubbleToolbar editor={created!.editor} api={created!.api} resolved={created!.resolved} />),
+      render(<BubbleToolbar editor={editor} api={api} resolved={resolved} />),
     ).not.toThrow()
   })
 })

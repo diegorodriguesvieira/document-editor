@@ -72,7 +72,7 @@ export function createSuggestionPopup<I = unknown, S = I>(
                   editor: props.editor,
                 })
                 popup = document.createElement('div')
-                popup.className = 'suggestion-popup'
+                popup.className = 'document-editor-popup suggestion-popup'
                 popup.appendChild(component.element)
                 document.body.appendChild(popup)
                 place(props.clientRect)

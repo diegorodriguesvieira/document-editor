@@ -73,6 +73,16 @@ describe('resolveFeatures', () => {
     expect(resolved.toolbar.map((t) => t.id)).toEqual(['a', 'b'])
   })
 
+  it('rejects duplicate panel ids across features (they double as React keys)', () => {
+    const panel = { id: 'side', render: () => null }
+    expect(() =>
+      resolveFeatures([
+        feature({ id: 'a', panels: [panel] }),
+        feature({ id: 'b', panels: [{ ...panel }] }),
+      ]),
+    ).toThrow(/Panel "side"/)
+  })
+
   it('orders toolbar items by their optional `order` (stable for ties)', () => {
     const resolved = resolveFeatures([
       feature({

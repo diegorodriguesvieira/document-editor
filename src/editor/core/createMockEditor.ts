@@ -9,6 +9,8 @@ export interface MockEditorInit {
   canUndo?: boolean
   canRedo?: boolean
   isEmpty?: boolean
+  /** Whether the selection is a caret (default true — a fresh editor's state). */
+  isSelectionEmpty?: boolean
   /** Per-command implementations; default records the call and returns true. */
   commands?: Record<string, (payload?: unknown) => boolean>
 }
@@ -49,6 +51,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
     canUndo: () => init.canUndo ?? false,
     canRedo: () => init.canRedo ?? false,
     isEmpty: () => init.isEmpty ?? false,
+    isSelectionEmpty: () => init.isSelectionEmpty ?? true,
     hasNode: (name) => (doc.doc.content ?? []).some((node) => node.type === name),
     getJSON: () => doc,
     setJSON: (next) => {

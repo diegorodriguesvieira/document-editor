@@ -14,6 +14,10 @@ export interface EditorStateView {
   canRedo(): boolean
   /** Whether the document is effectively empty. */
   isEmpty(): boolean
+  /** Whether the selection is a caret (nothing selected) — lets a toolbar item
+   *  declare `isDisabled: (s) => s.isSelectionEmpty()` for selection-dependent
+   *  actions (link, comment…) without reaching for the raw editor. */
+  isSelectionEmpty(): boolean
 }
 
 /**
@@ -46,6 +50,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     canUndo: () => editor.can().undo?.() ?? false,
     canRedo: () => editor.can().redo?.() ?? false,
     isEmpty: () => editor.isEmpty,
+    isSelectionEmpty: () => editor.state.selection.empty,
     hasNode: (name) => {
       const { doc } = editor.state
       for (let i = 0; i < doc.childCount; i++) {

@@ -2,7 +2,8 @@ import { createRef, type Ref } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { MergeFieldMenu, type MergeFieldMenuRef } from './mergeFieldSuggestion'
+import { MergeFieldMenu } from './mergeFieldSuggestion'
+import type { SuggestionPopupRef } from '../../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const VARS: DocumentVariable[] = [
@@ -14,7 +15,7 @@ const VARS: DocumentVariable[] = [
 function renderMenu(
   query: string,
   onPick: (variable: DocumentVariable) => void = vi.fn(),
-  ref?: Ref<MergeFieldMenuRef>,
+  ref?: Ref<SuggestionPopupRef>,
 ) {
   return render(
     <DocumentVariablesProvider variables={VARS}>
@@ -51,7 +52,7 @@ describe('<MergeFieldMenu />', () => {
 
   it('navigates with the keyboard and selects with Enter (via the ref)', () => {
     const onPick = vi.fn()
-    const ref = createRef<MergeFieldMenuRef>()
+    const ref = createRef<SuggestionPopupRef>()
     renderMenu('', onPick, ref)
     const press = (key: string) =>
       act(() => {

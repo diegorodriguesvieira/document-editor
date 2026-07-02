@@ -1,6 +1,6 @@
 /* Right-click context menu (e.g. table actions). Portals to <body>. */
 @layer editor {
-  .context-menu {
+  .document-editor-popup.context-menu {
     z-index: var(--editor-z-menu);
     display: flex;
     flex-direction: column;
@@ -14,25 +14,25 @@
     box-shadow: var(--editor-shadow-pop);
   }
 
-  .context-menu__group {
+  .document-editor-popup .context-menu__group {
     display: flex;
     flex-direction: column;
   }
 
-  .context-menu__heading {
+  .document-editor-popup .context-menu__heading {
     padding: 8px 10px 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--editor-text-subtle);
   }
 
-  .context-menu__sep {
+  .document-editor-popup .context-menu__sep {
     height: 1px;
     margin: 6px 8px;
     background: var(--editor-border);
   }
 
-  .context-menu__item {
+  .document-editor-popup .context-menu__item {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -47,19 +47,19 @@
     cursor: pointer;
   }
 
-  .context-menu__item:hover {
+  .document-editor-popup .context-menu__item:hover {
     background: var(--editor-menu-active-bg);
   }
 
-  .context-menu__item--danger {
+  .document-editor-popup .context-menu__item--danger {
     color: var(--editor-danger);
   }
 
-  .context-menu__item--danger:hover {
+  .document-editor-popup .context-menu__item--danger:hover {
     background: var(--editor-danger-bg);
   }
 
-  .context-menu__icon {
+  .document-editor-popup .context-menu__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;

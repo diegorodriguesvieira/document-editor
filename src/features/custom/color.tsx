@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
-import { defineFeature, useFeatureState, type ToolbarItemContext } from '../../editor'
+import { defineFeature, useDismissable, useFeatureState, type FeatureRenderContext } from '../../editor'
 
 /** Preset palette (Google-Docs-ish). Just data — swap freely. */
 const PRESETS = [
@@ -24,7 +24,7 @@ const PRESETS = [
  * `onMouseDown` preventDefault so the editor keeps focus/selection (critical in
  * the bubble menu, so the selection the color applies to survives the click).
  */
-function ColorControl({ editor, api }: ToolbarItemContext) {
+function ColorControl({ editor, api }: FeatureRenderContext) {
   const current = useFeatureState(
     editor,
     (ed) => (ed.getAttributes('textStyle').color as string | undefined) ?? null,
@@ -35,24 +35,12 @@ function ColorControl({ editor, api }: ToolbarItemContext) {
   const popoverRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (!popoverRef.current?.contains(target) && !swatchRef.current?.contains(target)) {
-        setOpen(false)
-      }
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown, true)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown, true)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  // The swatch counts as "inside" so toggling it doesn't insta-reopen. Fixed
+  // coordinates → close on scroll/resize too (the anchor drifts away).
+  useDismissable([popoverRef, swatchRef], () => setOpen(false), {
+    enabled: open,
+    closeOnScroll: true,
+  })
 
   const toggle = () => {
     const rect = swatchRef.current?.getBoundingClientRect()
@@ -83,7 +71,7 @@ function ColorControl({ editor, api }: ToolbarItemContext) {
         ? createPortal(
             <div
               ref={popoverRef}
-              className="color-picker"
+              className="document-editor-popup color-picker"
               role="menu"
               aria-label="Text color"
               // z-index lives in the stylesheet (--editor-z-popup) so consumers can re-stack.

@@ -85,7 +85,21 @@ literal by design. Ask if you want any of them promoted to a token.
 
 For anything tokens can't express, target the classes directly (your rule wins
 over the layer automatically). These class names are a **stable public contract**
-— they're emitted by the components and node views:
+— they're emitted by the components and node views.
+
+**Scoping convention (collision safety):** the skin never styles a bare generic
+class. Everything rendered **inside the page** is styled under
+`.document-editor__surface` (so a page's own `.comment` or `.callout` never
+picks up SDK styles); every **body-portaled surface** (context menu, `/` and
+`@` menus, colour picker, merge-field modal) carries the namespace class
+`.document-editor-popup` and is styled under it. Editor chrome keeps its
+distinctive prefixed names unscoped so exported components keep their skin in
+custom layouts too — that exemption covers `.editor-toolbar`, `.insert-rail`,
+`.bubble-toolbar`, `.comments-panel`, `.color-swatch` and `.ai-button`. One
+exception to the exception: `.page-affordance` (a generic name worth
+protecting) is styled under `.document-editor` — custom shells that skip
+`DocumentEditor` should keep that class on their wrapper to retain
+shell-scoped chrome. Feature CSS should follow the same convention.
 
 - **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom`, `.document-editor__scale`, `.document-editor__surface`
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`

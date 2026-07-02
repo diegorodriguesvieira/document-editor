@@ -5,8 +5,8 @@ import type { EditorApi, EditorStateView } from './EditorApi'
 /** Runs a feature command against the editor. Returns whether it applied. */
 export type CommandFn = (editor: Editor, payload?: unknown) => boolean
 
-/** What a custom toolbar control receives when it renders itself. */
-export interface ToolbarItemContext {
+/** What a feature-rendered piece of UI (toolbar control, side panel) receives. */
+export interface FeatureRenderContext {
   editor: Editor | null
   api: EditorApi
 }
@@ -30,7 +30,7 @@ export interface ToolbarItem {
   isDisabled?: (state: EditorStateView) => boolean
   /** Escape hatch: render a fully custom control (dropdown, picker, etc.)
    *  instead of the default button. Lets a feature ship its own toolbar UI. */
-  render?: (ctx: ToolbarItemContext) => ReactNode
+  render?: (ctx: FeatureRenderContext) => ReactNode
 }
 
 /** A single right-click (context menu) action. */
@@ -44,8 +44,13 @@ export interface ContextMenuItem {
   /** Render in a destructive (red) style, e.g. "Delete row". */
   danger?: boolean
   /** Show the item only when it currently applies (e.g. "Split cell" only in a
-   *  merged cell). Gets the editor so it can use `editor.can().<command>()`.
-   *  Omit to always show. */
+   *  merged cell). Omit to always show.
+   *
+   *  DELIBERATELY receives the raw `Editor` (not {@link EditorStateView} like
+   *  `ToolbarItem.isDisabled`): availability checks are TipTap-native
+   *  `editor.can().<command>()` probes the thin state view can't express, and
+   *  features are TipTap-native by design. The trade-off: `when` and toolbar
+   *  predicates stay mock-testable; `isAvailable` needs a real editor. */
   isAvailable?: (editor: Editor) => boolean
 }
 
@@ -64,6 +69,18 @@ export interface ContextMenuSection {
   id: string
   when: (state: EditorStateView) => boolean
   groups: ContextMenuGroup[]
+}
+
+/**
+ * A side-panel contribution: UI that lives NEXT to the page (comments list,
+ * word count…), auto-mounted in the right rail by {@link DocumentEditor} —
+ * or wherever the consumer places {@link FeaturePanels} in a custom rail.
+ */
+export interface PanelContribution {
+  id: string
+  /** Sort hint within the rail (ascending; default 0, stable for ties). */
+  order?: number
+  render: (ctx: FeatureRenderContext) => ReactNode
 }
 
 /**
@@ -108,4 +125,6 @@ export interface FeatureDefinition {
   contextMenu?: ContextMenuSection[]
   /** Page-edge regions (header/footer) with a hover "add" affordance. */
   pageRegions?: PageRegion[]
+  /** Side panels next to the page (comments list, word count…). */
+  panels?: PanelContribution[]
 }
