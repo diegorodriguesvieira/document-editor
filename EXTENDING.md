@@ -138,7 +138,7 @@ wherever they fit.
 
 The persisted shape is `{ doc }` (ProseMirror JSON — portable). The `api`
 surface: `getJSON / setJSON / getHTML / hasNode / focus / exec(commandId, payload?)
-/ has(commandId) / isActive / canUndo / canRedo / isEmpty / isSelectionEmpty
+/ isActive / canUndo / canRedo / isEmpty / isSelectionEmpty
 / on('update' | 'selection')`.
 Loading content whose feature is disabled **throws** (it won't silently wipe
 the document).

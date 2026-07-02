@@ -1,40 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { docWith, renderEditor } from '../../test/editorHarness'
 import { CommentsFeature } from './comments'
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
+import { getCommentThreads } from './commentsPanel'
 
 describe('comments feature', () => {
-  it('anchors a comment mark to the selected text and logs the thread', () => {
+  it('anchors a comment mark to the selected text and stores the thread by id', () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     created.editor.commands.setTextSelection({ from: 1, to: 6 }) // "hello"
     expect(created.api.exec('comment.add', { text: 'fix this' })).toBe(true)
 
-    // The anchor lives in the doc (rides with the text, serializes with it).
+    // The anchor lives in the doc (rides with the text, serializes with it)…
     expect(created.api.getHTML()).toContain('data-comment-id')
-    // The thread (the "what") is logged, keyed to the same selection.
-    expect(log).toHaveBeenCalledWith(
-      '[comment]',
-      expect.objectContaining({ text: 'fix this', quote: 'hello' }),
-    )
-  })
-
-  it('stores the thread in the mark storage, keyed by id (so the panel can show it)', () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    created.editor.commands.setTextSelection({ from: 1, to: 6 })
-    created.api.exec('comment.add', { text: 'fix this' })
-
-    const store = created.editor.storage as unknown as Record<
-      string,
-      { threads: Map<string, { text: string; quote: string }> }
-    >
-    const threads = store.comment.threads
-    expect(threads.size).toBe(1)
-    expect([...threads.values()][0]).toMatchObject({ text: 'fix this', quote: 'hello' })
+    // …and the thread (the "what") lands in the mark storage for the panel.
+    const threads = getCommentThreads(created.editor)
+    expect(threads?.size).toBe(1)
+    expect([...threads!.values()][0]).toMatchObject({ text: 'fix this', quote: 'hello' })
   })
 
   it('does nothing without a selection', () => {

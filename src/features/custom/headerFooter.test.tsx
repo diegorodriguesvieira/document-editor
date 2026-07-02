@@ -28,13 +28,6 @@ describe('header/footer feature', () => {
     expect(c[c.length - 1]?.type).toBe('documentFooter')
   })
 
-  it('removes a region', () => {
-    const created = newEditor()
-    created.api.exec('header.add')
-    expect(created.api.exec('header.remove')).toBe(true)
-    expect(created.api.hasNode('documentHeader')).toBe(false)
-  })
-
   it('serializes regions to data-* for the backend', () => {
     const created = newEditor()
     created.api.exec('header.add')

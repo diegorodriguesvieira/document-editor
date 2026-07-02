@@ -17,8 +17,3 @@ export function createEmptyDocument(): DocumentJSON {
 export function toDocumentJSON(editor: Editor): DocumentJSON {
   return { doc: editor.getJSON() }
 }
-
-/** Rendered HTML, suitable to cache for read-only display. */
-export function exportHTML(editor: Editor): string {
-  return editor.getHTML()
-}

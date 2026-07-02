@@ -18,6 +18,8 @@ const CalloutNode = Node.create({
 
   addAttributes() {
     return {
+      // Intentionally writer-less (no picker UI): set via API/paste. It exists
+      // as the template for "node attribute + pure-DOM node-view update".
       emoji: {
         default: DEFAULT_EMOJI,
         parseHTML: (element) => element.getAttribute('data-emoji') ?? DEFAULT_EMOJI,

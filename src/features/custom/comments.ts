@@ -1,5 +1,6 @@
 import { defineFeature, Mark, mergeAttributes } from '../../editor'
-import { commentsPanelContribution } from './commentsPanel'
+import { commentsPanelContribution, getCommentThreads } from './commentsPanel'
+import { promptOr } from '../promptFallback'
 
 export interface CommentThread {
   id: string
@@ -59,27 +60,19 @@ export const CommentsFeature = defineFeature({
   extensions: () => [Comment],
   commands: {
     // Anchor a comment to the current selection. Payload `{ text }` skips the
-    // prompt (used in tests). The thread is stored (keyed by id) + logged; it
-    // then shows up in the comments panel.
+    // prompt (used in tests). The thread is stored (keyed by id) and shows up
+    // in the comments panel.
     'comment.add': (editor, payload) => {
       const { from, to, empty } = editor.state.selection
       if (empty) return false
       const fields = (payload ?? {}) as { text?: string }
-      const text =
-        typeof fields.text === 'string'
-          ? fields.text
-          : typeof window !== 'undefined'
-            ? (window.prompt('Comment:') ?? '')
-            : ''
+      const text = promptOr(fields.text, 'Comment:')
       if (!text) return false
       const id = newCommentId()
       const quote = editor.state.doc.textBetween(from, to, ' ')
       const applied = editor.chain().focus().setMark('comment', { commentId: id }).run()
       if (applied) {
-        const thread: CommentThread = { id, text, quote }
-        const store = editor.storage as unknown as Record<string, { threads: Map<string, CommentThread> }>
-        store.comment.threads.set(id, thread)
-        console.log('[comment]', { ...thread, range: { from, to } })
+        getCommentThreads(editor)?.set(id, { id, text, quote })
       }
       return applied
     },

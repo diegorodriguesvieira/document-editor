@@ -1,5 +1,6 @@
 import { Link } from '@tiptap/extension-link'
 import { defineFeature } from '../../editor'
+import { promptOr } from '../promptFallback'
 
 /** Link mark. The command accepts an href payload, or prompts as a fallback. */
 export const LinkFeature = defineFeature({
@@ -9,12 +10,7 @@ export const LinkFeature = defineFeature({
   extensions: () => [Link.extend({ inclusive: () => false }).configure({ openOnClick: false })],
   commands: {
     'link.set': (editor, payload) => {
-      const href =
-        typeof payload === 'string'
-          ? payload
-          : typeof window !== 'undefined'
-            ? (window.prompt('Link URL:') ?? '')
-            : ''
+      const href = promptOr(payload, 'Link URL:')
       if (!href) {
         return editor.chain().focus().unsetLink().run()
       }
@@ -27,19 +23,9 @@ export const LinkFeature = defineFeature({
     // linked run at the cursor. Payload `{ text, href }` skips the prompts.
     'link.insert': (editor, payload) => {
       const fields = (payload ?? {}) as { text?: string; href?: string }
-      const text =
-        typeof fields.text === 'string'
-          ? fields.text
-          : typeof window !== 'undefined'
-            ? (window.prompt('Link text:') ?? '')
-            : ''
+      const text = promptOr(fields.text, 'Link text:')
       if (!text) return false
-      const href =
-        typeof fields.href === 'string'
-          ? fields.href
-          : typeof window !== 'undefined'
-            ? (window.prompt('Link URL:') ?? '')
-            : ''
+      const href = promptOr(fields.href, 'Link URL:')
       if (!href) return false
       return editor
         .chain()

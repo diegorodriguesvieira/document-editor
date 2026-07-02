@@ -20,7 +20,7 @@ const PRESETS = [
 /**
  * A color swatch that shows the current text color and opens a little popover of
  * preset colors + a "+" that fires the native color picker for a custom one.
- * A `render` toolbar control (like AiAssist) — every interactive element does
+ * A `render` toolbar control — every interactive element does
  * `onMouseDown` preventDefault so the editor keeps focus/selection (critical in
  * the bubble menu, so the selection the color applies to survives the click).
  */

@@ -1,5 +1,6 @@
 import { Image } from '@tiptap/extension-image'
 import { defineFeature } from '../../editor'
+import { promptOr } from '../promptFallback'
 
 /**
  * Allow http(s)/data and relative URLs; reject `javascript:` and other script
@@ -22,12 +23,7 @@ export const ImageFeature = defineFeature({
   extensions: () => [Image],
   commands: {
     'image.insert': (editor, payload) => {
-      const src =
-        typeof payload === 'string'
-          ? payload
-          : typeof window !== 'undefined'
-            ? (window.prompt('Image URL:') ?? '')
-            : ''
+      const src = promptOr(payload, 'Image URL:')
       if (!src || !isSafeImageSrc(src)) return false
       return editor.chain().focus().setImage({ src }).run()
     },

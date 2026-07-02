@@ -12,6 +12,17 @@ export interface AnchoredComment {
 }
 
 /**
+ * The one typed accessor for the comment mark's storage — the single place the
+ * `editor.storage` cast lives. (Declared here rather than in comments.ts: the
+ * feature file already runtime-imports this module for the panel contribution,
+ * so the reverse runtime import would create an eval-order-sensitive cycle.)
+ */
+export function getCommentThreads(editor: Editor): Map<string, CommentThread> | undefined {
+  const storage = editor.storage as unknown as { comment?: { threads: Map<string, CommentThread> } }
+  return storage.comment?.threads
+}
+
+/**
  * Walk the doc for `comment` marks, merging contiguous runs of the same id into
  * one range, and join with the stored thread text. This is the source of truth
  * for "what is commented" — derived from the document, so it stays correct as
@@ -33,9 +44,7 @@ function buildComments(editor: Editor): AnchoredComment[] {
     }
   })
 
-  const threads = (
-    editor.storage as unknown as Record<string, { threads?: Map<string, CommentThread> }>
-  ).comment?.threads
+  const threads = getCommentThreads(editor)
   return [...ranges.entries()].map(([id, range]) => ({
     id,
     from: range.from,

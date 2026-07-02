@@ -86,4 +86,10 @@
   :where(.document-editor, .document-editor-popup) *::after {
     box-sizing: border-box;
   }
+
+  /* Every body-portaled surface stacks at the popup level by default; the
+     context menu overrides with --editor-z-menu. */
+  .document-editor-popup {
+    z-index: var(--editor-z-popup);
+  }
 }

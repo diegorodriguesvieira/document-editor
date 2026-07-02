@@ -15,13 +15,11 @@ export { ImageFeature } from './blocks/image'
 
 // Example "team" features
 export { CalloutFeature } from './custom/callout'
-export { AiAssistFeature } from './custom/aiAssist'
 export { MergeFieldFeature } from './custom/mergeField'
 export { ConditionalBlockFeature, MAX_CONDITIONAL_DEPTH } from './custom/conditionalBlock'
 export type { ConditionId, ConditionValue } from './custom/conditionalBlock'
 export { CommentsFeature } from './custom/comments'
 export type { CommentThread } from './custom/comments'
-export { CommentsPanel, useDocumentComments } from './custom/commentsPanel'
 export type { AnchoredComment } from './custom/commentsPanel'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'

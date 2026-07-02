@@ -1,6 +1,5 @@
 import type { FeatureDefinition } from '../editor'
 import {
-  AiAssistFeature,
   BoldFeature,
   CalloutFeature,
   ColorFeature,
@@ -40,7 +39,7 @@ export const presets: Preset[] = [
   },
   {
     id: 'full',
-    label: 'Full — + lists, inserts (table/quote/code/divider/image), link, callout and AI',
+    label: 'Full — + lists, inserts (table/quote/code/divider/image), link and callout',
     features: [
       HistoryFeature,
       BoldFeature,
@@ -50,8 +49,7 @@ export const presets: Preset[] = [
       LinkFeature,
       ColorFeature,
       CalloutFeature,
-      AiAssistFeature,
-      TableFeature,
+          TableFeature,
       QuoteFeature,
       CodeBlockFeature,
       DividerFeature,

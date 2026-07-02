@@ -23,8 +23,4 @@
     background: var(--editor-inverse-accent);
     color: var(--editor-inverse-bg);
   }
-
-  .bubble-toolbar__inner .ai-button {
-    height: 28px;
-  }
 }

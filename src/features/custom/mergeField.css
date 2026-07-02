@@ -16,7 +16,6 @@
   .document-editor-popup.mf-modal__backdrop {
     position: fixed;
     inset: 0;
-    z-index: var(--editor-z-popup);
     background: rgba(0, 0, 0, 0.35);
     display: flex;
     align-items: center;

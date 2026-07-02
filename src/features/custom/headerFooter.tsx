@@ -7,7 +7,7 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from '../../editor'
-import { Extension, type Editor } from '@tiptap/core'
+import { Extension } from '@tiptap/core'
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 
@@ -18,16 +18,6 @@ function docHasNode(doc: PMNode, name: string): boolean {
     if (node.type.name === name) found = true
   })
   return found
-}
-
-/** Delete the (single) top-level node of `name`, if present. */
-function removeRegion(editor: Editor, name: string): boolean {
-  let range: { from: number; to: number } | null = null
-  editor.state.doc.forEach((node, offset) => {
-    if (node.type.name === name) range = { from: offset, to: offset + node.nodeSize }
-  })
-  if (!range) return false
-  return editor.chain().focus().deleteRange(range).run()
 }
 
 /** Editable header/footer region: a faint label + a hover "Remover" + content. */
@@ -168,8 +158,6 @@ export const HeaderFooterFeature = defineFeature({
         .focus('end')
         .run()
     },
-    'header.remove': (editor) => removeRegion(editor, 'documentHeader'),
-    'footer.remove': (editor) => removeRegion(editor, 'documentFooter'),
   },
   pageRegions: [
     {

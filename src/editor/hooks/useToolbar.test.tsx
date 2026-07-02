@@ -30,18 +30,4 @@ describe('useToolbar', () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 
-  it('appends extra items after the feature contributions', () => {
-    const feature = defineFeature({
-      id: 'a',
-      extensions: () => [],
-      commands: { a: () => true },
-      toolbar: [{ id: 'a', label: 'A', commandId: 'a' }],
-    })
-    const { editor, api, resolved } = renderEditor([feature])
-
-    const extra = [{ id: 'x', label: 'X', commandId: 'x' }]
-    const { result } = renderHook(() => useToolbar(editor, api, resolved, extra))
-
-    expect(result.current.map((button) => button.item.id)).toEqual(['a', 'x'])
-  })
 })

@@ -25,7 +25,6 @@
   }
 
   .document-editor-popup.color-picker {
-    z-index: var(--editor-z-popup);
     padding: 8px;
     background: var(--editor-surface);
     border: 1px solid var(--editor-border);

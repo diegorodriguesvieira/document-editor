@@ -5,14 +5,11 @@ export interface MockEditorInit {
   /** Mark/node names that should report active (matched by name; attrs ignored). */
   active?: string[]
   doc?: DocumentJSON
-  html?: string
   canUndo?: boolean
   canRedo?: boolean
   isEmpty?: boolean
   /** Whether the selection is a caret (default true — a fresh editor's state). */
   isSelectionEmpty?: boolean
-  /** Per-command implementations; default records the call and returns true. */
-  commands?: Record<string, (payload?: unknown) => boolean>
 }
 
 export interface MockEditor {
@@ -36,7 +33,6 @@ export interface MockEditor {
 export function createMockEditor(init: MockEditorInit = {}): MockEditor {
   let active = new Set(init.active ?? [])
   let doc = init.doc ?? createEmptyDocument()
-  const html = init.html ?? ''
   const execCalls: Array<{ commandId: string; payload?: unknown }> = []
   const listeners: Record<'update' | 'selection', Set<() => void>> = {
     update: new Set(),
@@ -58,17 +54,13 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
       doc = next
       emit('update')
     },
-    getHTML: () => html,
+    getHTML: () => '',
     focus: () => {},
     exec: (commandId, payload) => {
       execCalls.push({ commandId, payload })
-      const result = init.commands?.[commandId]?.(payload) ?? true
       emit('update')
-      return result
+      return true
     },
-    // Mirror the real semantics (registration check): with per-command stubs the
-    // mock knows its registry; without any, every id counts as registered.
-    has: (commandId) => (init.commands ? commandId in init.commands : true),
     on: (event, callback) => {
       listeners[event].add(callback)
       return () => listeners[event].delete(callback)

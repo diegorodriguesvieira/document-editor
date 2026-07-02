@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EditorApi, EditorStateView } from '../../editor'
+import { resolveFeatures, type EditorApi, type EditorStateView } from '../../editor'
 import { jsonFindNode, renderEditor } from '../../test/editorHarness'
 import { TableFeature } from './table'
 
@@ -59,10 +59,10 @@ describe('table feature', () => {
     expect(section!.when(stateView(() => false))).toBe(false)
 
     // Every menu item points at a command the feature actually registers.
-    const { api } = renderEditor([TableFeature])
+    const { commands } = resolveFeatures([TableFeature])
     const ids = section!.groups.flatMap((group) => group.items.map((item) => item.commandId))
     expect(ids.length).toBeGreaterThan(0)
-    for (const id of ids) expect(api.has(id)).toBe(true)
+    for (const id of ids) expect(commands[id]).toBeDefined()
   })
 
   it('gates menu items by current applicability (via editor.can)', () => {

@@ -22,8 +22,7 @@
 @import './components/EditorToolbar.css';
 @import './components/BubbleToolbar.css';
 
-/* Toolbar/insert feature controls + in-page block & mark styling */
-@import '../features/custom/aiAssist.css';
+/* In-page block & mark styling */
 @import '../features/blocks/heading.css';
 @import '../features/marks/link.css';
 @import '../features/blocks/table.css';

@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { exportHTML, toDocumentJSON, type DocumentJSON } from './document'
+import { toDocumentJSON, type DocumentJSON } from './document'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -37,10 +37,6 @@ export interface EditorApi extends EditorStateView {
   /** Return focus to the editor (e.g. after a modal/popover closes). */
   focus(): void
   exec(commandId: string, payload?: unknown): boolean
-  /** Whether a command id is registered by an enabled feature. Useful to probe
-   *  for optional features — NOT an applicability check (it doesn't ask the
-   *  selection whether the command could run right now). */
-  has(commandId: string): boolean
   on(event: 'update' | 'selection', callback: () => void): () => void
 }
 
@@ -62,7 +58,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     setJSON: (doc) => {
       editor.commands.setContent(doc.doc)
     },
-    getHTML: () => exportHTML(editor),
+    getHTML: () => editor.getHTML(),
     focus: () => {
       editor.commands.focus()
     },
@@ -70,7 +66,6 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
       const command = resolved.commands[commandId]
       return command ? command(editor, payload) : false
     },
-    has: (commandId) => commandId in resolved.commands,
     on: (event, callback) => {
       const name = event === 'selection' ? 'selectionUpdate' : 'update'
       editor.on(name, callback)

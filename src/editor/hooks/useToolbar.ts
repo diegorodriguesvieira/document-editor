@@ -18,8 +18,6 @@ interface Flag {
   disabled: boolean
 }
 
-const NO_EXTRA: ToolbarItem[] = []
-
 function computeFlags(items: ToolbarItem[], api: EditorApi): Flag[] {
   return items.map((item) => ({
     active: item.isActive ? item.isActive(api) : false,
@@ -51,7 +49,7 @@ function useApiRevision(api: EditorApi, enabled: boolean): number {
  * (skips re-renders when flags don't change); without one it re-renders on the
  * api's update/selection events.
  */
-export function useToolbarButtons(
+function useToolbarButtons(
   editor: Editor | null,
   api: EditorApi,
   items: ToolbarItem[],
@@ -81,13 +79,8 @@ export function useToolbar(
   editor: Editor | null,
   api: EditorApi,
   resolved: ResolvedFeatures,
-  extraItems: ToolbarItem[] = NO_EXTRA,
 ): ToolbarButton[] {
-  const items = useMemo(
-    () => [...resolved.toolbar, ...extraItems],
-    [resolved.toolbar, extraItems],
-  )
-  return useToolbarButtons(editor, api, items)
+  return useToolbarButtons(editor, api, resolved.toolbar)
 }
 
 /** Headless state for the left insert rail (the `resolved.inserts` channel). */
@@ -95,11 +88,6 @@ export function useInsertBar(
   editor: Editor | null,
   api: EditorApi,
   resolved: ResolvedFeatures,
-  extraItems: ToolbarItem[] = NO_EXTRA,
 ): ToolbarButton[] {
-  const items = useMemo(
-    () => [...resolved.inserts, ...extraItems],
-    [resolved.inserts, extraItems],
-  )
-  return useToolbarButtons(editor, api, items)
+  return useToolbarButtons(editor, api, resolved.inserts)
 }

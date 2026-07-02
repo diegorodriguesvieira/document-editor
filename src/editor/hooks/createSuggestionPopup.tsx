@@ -17,13 +17,10 @@ export interface SuggestionPopupRef {
 }
 
 interface SuggestionPopupConfig<I, S> {
-  /** Extension name (also the default plugin key). */
+  /** Extension name (also the plugin key, so multiple suggestions coexist). */
   name: string
   /** Trigger character, e.g. '/' or '@'. */
   char: string
-  /** Distinct plugin key so multiple suggestions coexist. Defaults to `name`. */
-  pluginKey?: string
-  startOfLine?: boolean
   /** A `forwardRef<SuggestionPopupRef, …>` floating list. It receives the raw
    *  suggestion props (query, items, command, …) and forwards the ref. */
   component: ComponentType<any>
@@ -48,8 +45,7 @@ export function createSuggestionPopup<I = unknown, S = I>(
         Suggestion<I, S>({
           editor: this.editor,
           char: config.char,
-          startOfLine: config.startOfLine ?? false,
-          pluginKey: new PluginKey(config.pluginKey ?? config.name),
+          pluginKey: new PluginKey(config.name),
           items: config.items,
           command: config.command,
           render: () => {

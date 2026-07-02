@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  AiAssistFeature,
   BoldFeature,
   CalloutFeature,
   CodeBlockFeature,
@@ -35,7 +34,6 @@ const ALL_FEATURES = [
   TableFeature,
   ImageFeature,
   CalloutFeature,
-  AiAssistFeature,
   MergeFieldFeature,
   ConditionalBlockFeature,
   HeaderFooterFeature,

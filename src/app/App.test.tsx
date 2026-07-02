@@ -16,14 +16,14 @@ describe('<App /> toolbar', () => {
     expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     expect(within(toolbar).getByRole('button', { name: /HTML/ })).toBeInTheDocument()
     expect(within(toolbar).getByRole('button', { name: 'Callout' })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: /AI/ })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Comment' })).toBeInTheDocument()
 
     // Switch to the basic preset → the full-only features disappear.
     await user.selectOptions(screen.getByLabelText(/Features/), 'basic')
     await waitFor(() => {
       const tb = screen.getByRole('toolbar', { name: 'Formatting' })
       expect(within(tb).queryByRole('button', { name: 'Callout' })).toBeNull()
-      expect(within(tb).queryByRole('button', { name: /AI/ })).toBeNull()
+      expect(within(tb).queryByRole('button', { name: 'Comment' })).toBeNull()
       expect(within(tb).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     })
   })

@@ -95,7 +95,7 @@ picks up SDK styles); every **body-portaled surface** (context menu, `/` and
 `.document-editor-popup` and is styled under it. Editor chrome keeps its
 distinctive prefixed names unscoped so exported components keep their skin in
 custom layouts too — that exemption covers `.editor-toolbar`, `.insert-rail`,
-`.bubble-toolbar`, `.comments-panel`, `.color-swatch` and `.ai-button`. One
+`.bubble-toolbar`, `.comments-panel` and `.color-swatch`. One
 exception to the exception: `.page-affordance` (a generic name worth
 protecting) is styled under `.document-editor` — custom shells that skip
 `DocumentEditor` should keep that class on their wrapper to retain
@@ -106,7 +106,7 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`)
-- **Features:** `.callout`, `.merge-field`, `.mf-modal`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.ai-button`
+- **Features:** `.callout`, `.merge-field`, `.mf-modal`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`
 
 ## 4. Skipping the default entirely
 
