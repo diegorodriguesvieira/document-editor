@@ -11,18 +11,23 @@ import type { ResolvedFeatures } from './registry'
  * paragraphs and text, so these are never opt-in — features build on top.
  * TrailingNode keeps an empty paragraph after the last block (table, code,
  * conditional block…) so you can always click below it and keep typing —
- * except after a document footer, which is meant to stay last.
+ * except after a bottom-pinned page region (e.g. a document footer), which is
+ * meant to stay last. Those region node names come from the enabled features'
+ * `pageRegions` metadata, so the kernel never hardcodes a feature's node name.
  * Gapcursor lets you place a caret in the gaps around isolating/atom blocks
  * (a conditional block, a table…) — e.g. to type *after* a nested conditional
  * but still inside its parent, which `isolating` otherwise traps you out of.
  */
-export function kernelExtensions(): AnyExtension[] {
+export function kernelExtensions(resolved?: ResolvedFeatures): AnyExtension[] {
+  const bottomRegions = (resolved?.pageRegions ?? [])
+    .filter((region) => region.position === 'bottom')
+    .map((region) => region.nodeName)
   return [
     DocumentNode,
     Paragraph,
     TextNode,
     Gapcursor,
-    TrailingNode.configure({ notAfter: ['documentFooter'] }),
+    TrailingNode.configure({ notAfter: bottomRegions }),
   ]
 }
 
@@ -49,5 +54,5 @@ function registryKeymap(resolved: ResolvedFeatures): Extension {
 
 /** Kernel + feature extensions + the synthetic keymap extension. */
 export function buildExtensions(resolved: ResolvedFeatures): AnyExtension[] {
-  return [...kernelExtensions(), ...resolved.extensions, registryKeymap(resolved)]
+  return [...kernelExtensions(resolved), ...resolved.extensions, registryKeymap(resolved)]
 }

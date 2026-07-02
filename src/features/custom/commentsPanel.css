@@ -39,16 +39,16 @@
     gap: 2px;
     width: 100%;
     padding: 8px;
-    border: 1px solid #eee;
+    border: 1px solid var(--editor-border);
     border-radius: 8px;
-    background: #fafafa;
+    background: var(--editor-chrome-bg);
     font: inherit;
     text-align: left;
     cursor: pointer;
   }
 
   .comments-panel__item:hover {
-    background: #fff8e1;
+    background: color-mix(in srgb, var(--editor-comment-bg) 55%, var(--editor-surface));
     border-color: var(--editor-comment-accent);
   }
 

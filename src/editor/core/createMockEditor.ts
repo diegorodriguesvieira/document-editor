@@ -63,7 +63,9 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
       emit('update')
       return result
     },
-    can: () => true,
+    // Mirror the real semantics (registration check): with per-command stubs the
+    // mock knows its registry; without any, every id counts as registered.
+    has: (commandId) => (init.commands ? commandId in init.commands : true),
     on: (event, callback) => {
       listeners[event].add(callback)
       return () => listeners[event].delete(callback)

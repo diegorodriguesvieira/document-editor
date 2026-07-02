@@ -14,7 +14,8 @@
     transition: opacity 0.12s;
   }
 
-  .page-affordance:hover {
+  .page-affordance:hover,
+  .page-affordance:focus-visible {
     opacity: 1;
   }
 

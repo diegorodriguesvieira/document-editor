@@ -61,7 +61,8 @@ export function ContextMenuView({
       className="context-menu"
       role="menu"
       aria-label="Context menu"
-      style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 1100 }}
+      // z-index lives in the stylesheet (--editor-z-menu) so consumers can re-stack.
+      style={{ position: 'fixed', left: pos.left, top: pos.top }}
     >
       {groups.map((group, gi) => (
         <div key={group.id} className="context-menu__group">
@@ -100,6 +101,30 @@ interface OpenState {
 }
 
 /**
+ * Groups shown for a right-click: EVERY section whose `when` matches contributes
+ * (two features can both own the clicked spot — e.g. a table inside a
+ * conditional block), in registration order, with items the click doesn't
+ * support filtered out. Group ids are namespaced by section so features can't
+ * collide. Pure — exported for tests.
+ */
+export function collectContextMenuGroups(
+  sections: ContextMenuSection[],
+  api: EditorApi,
+  editor: Editor,
+): ContextMenuGroup[] {
+  return sections
+    .filter((section) => section.when(api))
+    .flatMap((section) =>
+      section.groups.map((group) => ({
+        ...group,
+        id: `${section.id}:${group.id}`,
+        items: group.items.filter((item) => item.isAvailable?.(editor) ?? true),
+      })),
+    )
+    .filter((group) => group.items.length > 0)
+}
+
+/**
  * Listens for right-clicks on the editor DOM and, when the clicked spot matches
  * a feature's context-menu section (e.g. inside a table), shows {@link
  * ContextMenuView}. Auto-mounted by {@link DocumentEditor} when any feature
@@ -134,16 +159,7 @@ export function EditorContextMenu({
       if (editor.state.selection.empty) {
         editor.chain().focus().setTextSelection(coords.pos).run()
       }
-      const section = sections.find((candidate) => candidate.when(api))
-      if (!section) return
-      // Drop items that don't currently apply (e.g. "Split cell" outside a merged
-      // cell), then drop groups left empty.
-      const groups = section.groups
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) => item.isAvailable?.(editor) ?? true),
-        }))
-        .filter((group) => group.items.length > 0)
+      const groups = collectContextMenuGroups(sections, api, editor)
       if (groups.length === 0) return
       event.preventDefault()
       setOpen({ x: event.clientX, y: event.clientY, groups })

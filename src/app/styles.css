@@ -7,6 +7,8 @@
   font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   color: #202124;
   line-height: 1.5;
+  /* Our sticky app header is 56px tall — the editor's sticky toolbar/rail sit below it. */
+  --editor-sticky-offset: 56px;
 }
 
 * {

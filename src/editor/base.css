@@ -45,6 +45,14 @@
     --editor-page-min-height: 1056px;
     --editor-page-padding: 96px;
 
+    /* Layout: how far from the viewport top the sticky toolbar/rail sit —
+       set this to your app header's height (the SDK assumes none). */
+    --editor-sticky-offset: 0px;
+
+    /* Stacking of floating surfaces (caret popups / colour picker vs menus). */
+    --editor-z-popup: 1000;
+    --editor-z-menu: 1100;
+
     /* Shadows */
     --editor-shadow-sm: 0 1px 3px rgba(60, 64, 67, 0.15);
     --editor-shadow-pop: 0 6px 24px rgba(0, 0, 0, 0.2);

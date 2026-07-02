@@ -16,7 +16,7 @@
   }
 
   .bubble-toolbar__inner .editor-toolbar__btn:hover {
-    background: #343434;
+    background: color-mix(in srgb, var(--editor-inverse-fg) 12%, var(--editor-inverse-bg));
   }
 
   .bubble-toolbar__inner .editor-toolbar__btn[aria-pressed='true'] {

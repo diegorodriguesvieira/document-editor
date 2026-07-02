@@ -2,7 +2,7 @@
 @layer editor {
   .editor-toolbar {
     position: sticky;
-    top: 56px;
+    top: var(--editor-sticky-offset);
     z-index: 10;
     display: flex;
     flex-wrap: wrap;
@@ -29,6 +29,11 @@
 
   .editor-toolbar__btn:hover {
     background: var(--editor-control-hover-bg);
+  }
+
+  .editor-toolbar__btn:focus-visible {
+    outline: 2px solid var(--editor-accent);
+    outline-offset: 1px;
   }
 
   .editor-toolbar__btn[aria-pressed='true'] {

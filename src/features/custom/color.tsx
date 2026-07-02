@@ -86,7 +86,8 @@ function ColorControl({ editor, api }: ToolbarItemContext) {
               className="color-picker"
               role="menu"
               aria-label="Text color"
-              style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 1000 }}
+              // z-index lives in the stylesheet (--editor-z-popup) so consumers can re-stack.
+              style={{ position: 'fixed', left: pos.left, top: pos.top }}
               onMouseDown={(event) => event.preventDefault()}
             >
               <div className="color-picker__grid">

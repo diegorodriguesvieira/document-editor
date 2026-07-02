@@ -16,7 +16,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid #ececec;
+    border-bottom: 1px solid var(--editor-border);
     user-select: none;
   }
 
@@ -70,7 +70,7 @@
     gap: 10px;
     padding: 12px;
     background: var(--editor-surface);
-    border-bottom: 1px solid #ececec;
+    border-bottom: 1px solid var(--editor-border);
   }
 
   .cond-editor__field {
@@ -97,8 +97,8 @@
     padding: 8px 16px;
     border: none;
     border-radius: 8px;
-    background: #1a1a1a;
-    color: #fff;
+    background: var(--editor-inverse-bg);
+    color: var(--editor-inverse-fg);
     font-size: 13px;
     cursor: pointer;
   }

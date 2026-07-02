@@ -33,7 +33,10 @@ export interface EditorApi extends EditorStateView {
   /** Return focus to the editor (e.g. after a modal/popover closes). */
   focus(): void
   exec(commandId: string, payload?: unknown): boolean
-  can(commandId: string): boolean
+  /** Whether a command id is registered by an enabled feature. Useful to probe
+   *  for optional features — NOT an applicability check (it doesn't ask the
+   *  selection whether the command could run right now). */
+  has(commandId: string): boolean
   on(event: 'update' | 'selection', callback: () => void): () => void
 }
 
@@ -62,7 +65,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
       const command = resolved.commands[commandId]
       return command ? command(editor, payload) : false
     },
-    can: (commandId) => commandId in resolved.commands,
+    has: (commandId) => commandId in resolved.commands,
     on: (event, callback) => {
       const name = event === 'selection' ? 'selectionUpdate' : 'update'
       editor.on(name, callback)

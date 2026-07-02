@@ -10,5 +10,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './vitest.setup.ts',
     css: true,
+    // Only our sources — never stray copies (e.g. a leftover git worktree).
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 })

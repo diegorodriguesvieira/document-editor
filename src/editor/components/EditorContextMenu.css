@@ -1,6 +1,7 @@
 /* Right-click context menu (e.g. table actions). Portals to <body>. */
 @layer editor {
   .context-menu {
+    z-index: var(--editor-z-menu);
     display: flex;
     flex-direction: column;
     min-width: 240px;
@@ -28,7 +29,7 @@
   .context-menu__sep {
     height: 1px;
     margin: 6px 8px;
-    background: #e8eaed;
+    background: var(--editor-border);
   }
 
   .context-menu__item {

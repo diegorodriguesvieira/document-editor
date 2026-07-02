@@ -83,7 +83,7 @@ describe('table feature', () => {
     created = createEditor({ features: [TableFeature], element: mountTarget() })
     const ids = section!.groups.flatMap((group) => group.items.map((item) => item.commandId))
     expect(ids.length).toBeGreaterThan(0)
-    for (const id of ids) expect(created.api.can(id)).toBe(true)
+    for (const id of ids) expect(created.api.has(id)).toBe(true)
   })
 
   it('gates menu items by current applicability (via editor.can)', () => {

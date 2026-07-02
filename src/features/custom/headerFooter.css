@@ -3,7 +3,7 @@
   .doc-region {
     position: relative;
     padding: 8px 12px;
-    border: 1px dashed #d0d0d0;
+    border: 1px dashed var(--editor-border-table);
     border-radius: 6px;
   }
 
@@ -39,7 +39,9 @@
     transition: opacity 0.12s;
   }
 
-  .doc-region:hover .doc-region__remove {
+  .doc-region:hover .doc-region__remove,
+  .doc-region:focus-within .doc-region__remove,
+  .doc-region__remove:focus-visible {
     opacity: 1;
   }
 

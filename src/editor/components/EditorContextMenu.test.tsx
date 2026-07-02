@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ContextMenuView } from './EditorContextMenu'
-import type { ContextMenuGroup } from '../core/types'
+import type { Editor } from '@tiptap/core'
+import { collectContextMenuGroups, ContextMenuView } from './EditorContextMenu'
+import { createMockEditor } from '../core/createMockEditor'
+import type { ContextMenuGroup, ContextMenuSection } from '../core/types'
 
 const GROUPS: ContextMenuGroup[] = [
   {
@@ -49,5 +51,49 @@ describe('<ContextMenuView />', () => {
 
     await user.click(document.body)
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('collectContextMenuGroups', () => {
+  const section = (id: string, when: boolean, items: ContextMenuGroup['items']): ContextMenuSection => ({
+    id,
+    when: () => when,
+    groups: [{ id: 'g', items }],
+  })
+  const fakeEditor = null as unknown as Editor
+
+  it('shows EVERY matching section, in registration order, with namespaced group ids', () => {
+    const mock = createMockEditor()
+    const groups = collectContextMenuGroups(
+      [
+        section('table', true, [{ id: 'a', label: 'Table action', commandId: 'x' }]),
+        section('skipped', false, [{ id: 'b', label: 'Hidden', commandId: 'y' }]),
+        section('conditional', true, [{ id: 'c', label: 'Conditional action', commandId: 'z' }]),
+      ],
+      mock.api,
+      fakeEditor,
+    )
+    expect(groups.map((g) => g.id)).toEqual(['table:g', 'conditional:g'])
+    expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual([
+      'Table action',
+      'Conditional action',
+    ])
+  })
+
+  it('drops items whose isAvailable says no, then drops groups left empty', () => {
+    const mock = createMockEditor()
+    const groups = collectContextMenuGroups(
+      [
+        section('s', true, [
+          { id: 'in', label: 'Applies', commandId: 'x', isAvailable: () => true },
+          { id: 'out', label: 'Does not', commandId: 'y', isAvailable: () => false },
+        ]),
+        section('empty', true, [{ id: 'gone', label: 'Gone', commandId: 'z', isAvailable: () => false }]),
+      ],
+      mock.api,
+      fakeEditor,
+    )
+    expect(groups).toHaveLength(1)
+    expect(groups[0].items.map((i) => i.label)).toEqual(['Applies'])
   })
 })

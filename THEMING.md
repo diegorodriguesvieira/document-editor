@@ -68,6 +68,9 @@ so importing the file changes nothing until you override.
 | `--editor-page-width` | `816px` | Page width (US Letter @96dpi) |
 | `--editor-page-min-height` | `1056px` | Page height (US Letter) |
 | `--editor-page-padding` | `96px` | Page margins (1in) |
+| `--editor-sticky-offset` | `0px` | Top offset of the sticky toolbar/insert rail — set it to your app header's height |
+| `--editor-z-popup` | `1000` | Caret popups (`/`, `@`), colour picker, merge-field modal |
+| `--editor-z-menu` | `1100` | Right-click context menu |
 | `--editor-shadow-sm` | `0 1px 3px …` | Page + insert-rail shadow |
 | `--editor-shadow-pop` | `0 6px 24px …` | Context menu + colour picker shadow |
 | `--editor-callout-*` | amber set | Callout block |
@@ -87,7 +90,7 @@ over the layer automatically). These class names are a **stable public contract*
 - **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom`, `.document-editor__scale`, `.document-editor__surface`
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
-- **Menus (portaled to `<body>`):** `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
+- **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`)
 - **Features:** `.callout`, `.merge-field`, `.mf-modal`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.ai-button`
 

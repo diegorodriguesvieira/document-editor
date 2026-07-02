@@ -1,5 +1,11 @@
 /* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>. */
 @layer editor {
+  /* Wrapper createSuggestionPopup mounts at <body> (position/left/top are set
+     inline — they're data; stacking is themeable here). */
+  .suggestion-popup {
+    z-index: var(--editor-z-popup);
+  }
+
   .slash-menu {
     display: flex;
     flex-direction: column;

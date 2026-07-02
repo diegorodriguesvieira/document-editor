@@ -1,10 +1,12 @@
 /**
- * Curated authoring surface for feature packages. Custom features import their
- * building blocks from here (the SDK) rather than reaching into `@tiptap/*`
- * directly — so the engine stays an implementation detail of the SDK.
+ * Convenience authoring surface for feature packages: re-exports of the TipTap
+ * building blocks most features need, so simple features get by with a single
+ * import. Features are TipTap-native BY DESIGN (the two-level boundary insulates
+ * `src/app`, not features) — importing `@tiptap/*` directly for anything not
+ * re-exported here (ProseMirror plugins, model types, …) is normal and fine.
  */
 export { Extension, Mark, Node, mergeAttributes } from '@tiptap/core'
-export type { AnyExtension, ChainedCommands, CommandProps } from '@tiptap/core'
+export type { AnyExtension, ChainedCommands, CommandProps, Editor } from '@tiptap/core'
 export {
   NodeViewContent,
   NodeViewWrapper,

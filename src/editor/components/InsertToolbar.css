@@ -2,7 +2,7 @@
 @layer editor {
   .insert-rail {
     position: sticky;
-    top: 72px;
+    top: calc(var(--editor-sticky-offset) + 16px);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -27,5 +27,10 @@
 
   .insert-rail__btn:hover {
     background: var(--editor-subtle-bg);
+  }
+
+  .insert-rail__btn:focus-visible {
+    outline: 2px solid var(--editor-accent);
+    outline-offset: 1px;
   }
 }

@@ -62,7 +62,7 @@ export function createSuggestionPopup<I = unknown, S = I>(
               popup.style.position = 'fixed'
               popup.style.left = `${rect.left}px`
               popup.style.top = `${rect.bottom + 6}px`
-              popup.style.zIndex = '1000'
+              // z-index comes from the .suggestion-popup class (--editor-z-popup).
             }
 
             return {
@@ -72,6 +72,7 @@ export function createSuggestionPopup<I = unknown, S = I>(
                   editor: props.editor,
                 })
                 popup = document.createElement('div')
+                popup.className = 'suggestion-popup'
                 popup.appendChild(component.element)
                 document.body.appendChild(popup)
                 place(props.clientRect)
