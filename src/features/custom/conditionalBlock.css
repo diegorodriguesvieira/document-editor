@@ -81,6 +81,13 @@
     color: var(--editor-text-muted);
   }
 
+  /* Non-editable notice for multi-condition trees authored outside the UI. */
+  .document-editor__surface .cond-editor__complex {
+    margin: 0;
+    font-size: 13px;
+    color: var(--editor-text-muted);
+  }
+
   .document-editor__surface .cond-editor__field select,
   .document-editor__surface .cond-editor__field input {
     font: inherit;

@@ -16,8 +16,13 @@ export { ImageFeature } from './blocks/image'
 // Example "team" features
 export { CalloutFeature } from './custom/callout'
 export { MergeFieldFeature } from './custom/mergeField'
-export { ConditionalBlockFeature, MAX_CONDITIONAL_DEPTH } from './custom/conditionalBlock'
-export type { ConditionId, ConditionValue } from './custom/conditionalBlock'
+export {
+  CONDITION_SIGNATURES,
+  ConditionalBlockFeature,
+  isCompleteCondition,
+  MAX_CONDITIONAL_DEPTH,
+} from './custom/conditionalBlock'
+export type { Condition, ConditionId, ConditionLeaf, ConditionOperand } from './custom/conditionalBlock'
 export { CommentsFeature } from './custom/comments'
 export type { CommentThread } from './custom/comments'
 // The comments SURFACE for the consumer-owned right rail: the default panel,

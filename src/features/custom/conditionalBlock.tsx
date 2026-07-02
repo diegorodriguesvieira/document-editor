@@ -12,7 +12,7 @@ import {
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state'
-import { useDocumentVariable, useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 
 /** Hard cap on conditional-block nesting (1 = a single, top-level block). */
 export const MAX_CONDITIONAL_DEPTH = 5
@@ -39,33 +39,181 @@ function maxConditionalDepth(node: PMNode, current = 0): number {
 interface ConditionOption {
   id: string
   label: string
-  needsValue: boolean
+  /** How many entries `params` takes for this operator (CONDITION-FORMAT.md §2.2). */
+  arity: 1 | 2
 }
 
 /**
- * Operators the backend evaluates. The `id`s are the `data-condition` contract
- * the backend reads — stable, declarative protocol constants. `needsValue`
- * toggles the value input.
+ * Operators the backend evaluates. The `id`s are protocol constants of the
+ * `data-condition` contract (CONDITION-FORMAT.md) — stable, do not rename.
  */
 const CONDITIONS = [
-  { id: 'EXISTS', label: 'is in the document', needsValue: false },
-  { id: 'NOT_EXISTS', label: 'is not in the document', needsValue: false },
-  { id: 'EQUALS', label: 'is equal to', needsValue: true },
-  { id: 'NOT_EQUALS', label: 'is not equal to', needsValue: true },
-  { id: 'GREATER_THAN', label: 'is greater than', needsValue: true },
-  { id: 'LESS_THAN', label: 'is less than', needsValue: true },
+  { id: 'EXISTS', label: 'is in the document', arity: 1 },
+  { id: 'NOT_EXISTS', label: 'is not in the document', arity: 1 },
+  { id: 'EQUALS', label: 'is equal to', arity: 2 },
+  { id: 'NOT_EQUALS', label: 'is not equal to', arity: 2 },
+  { id: 'GREATER_THAN', label: 'is greater than', arity: 2 },
+  { id: 'LESS_THAN', label: 'is less than', arity: 2 },
 ] as const satisfies readonly ConditionOption[]
 
 /** The condition operators as a typed set — shareable as the backend contract. */
 export type ConditionId = (typeof CONDITIONS)[number]['id']
 
-export interface ConditionValue {
-  variable: string | null
-  condition: string | null
-  value: string | null
+/** Operator → arity. A leaf is well-formed when `params.length` matches. */
+export const CONDITION_SIGNATURES = Object.fromEntries(
+  CONDITIONS.map((option) => [option.id, option.arity]),
+) as Record<ConditionId, number>
+
+/** A comparison operand: a document-variable reference, or a raw typed value. */
+export type ConditionOperand =
+  | { kind: 'variable'; ref: string }
+  | { kind: 'literal'; value: string | number | boolean }
+
+/** One comparison. `null` holes are draft state (author mid-edit). */
+export interface ConditionLeaf {
+  op: ConditionId | null
+  params: (ConditionOperand | null)[]
 }
 
-/** Pure, testable condition editor (no editor dependency). */
+/** The `condition` attr: an all/any tree of comparisons (CONDITION-FORMAT.md). */
+export type Condition = { all: Condition[] } | { any: Condition[] } | ConditionLeaf
+
+/** What a freshly inserted block carries: one empty comparison (a draft). */
+const DRAFT_CONDITION: Condition = { all: [{ op: null, params: [null, null] }] }
+
+// Paste/setJSON can carry arbitrary attr JSON — cap what the shape guard
+// accepts (mirrors the backend validator caps, CONDITION-FORMAT.md §4).
+const MAX_CONDITION_DEPTH = 10
+const MAX_CONDITION_LEAVES = 50
+
+function isOperandShape(value: unknown): value is ConditionOperand | null {
+  if (value === null) return true
+  if (typeof value !== 'object') return false
+  const operand = value as Record<string, unknown>
+  if (operand.kind === 'variable') return typeof operand.ref === 'string'
+  if (operand.kind === 'literal') {
+    const type = typeof operand.value
+    // Finite only: Infinity/NaN aren't JSON — they'd stringify to null in
+    // data-condition and fail the backend validator after the publish gate.
+    return type === 'string' || type === 'boolean' || (type === 'number' && Number.isFinite(operand.value))
+  }
+  return false
+}
+
+/** Structural check — drafts pass. Completeness is isCompleteCondition's job. */
+function isConditionShape(value: unknown, depth = 0, state = { leaves: 0 }): value is Condition {
+  if (depth > MAX_CONDITION_DEPTH) return false
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const node = value as Record<string, unknown>
+  // Exactly one of the three forms — never all+any, never combinator+op (§2.1).
+  const forms =
+    ('all' in node ? 1 : 0) + ('any' in node ? 1 : 0) + ('op' in node || 'params' in node ? 1 : 0)
+  if (forms !== 1) return false
+  if ('all' in node || 'any' in node) {
+    const children = 'all' in node ? node.all : node.any
+    return (
+      Array.isArray(children) &&
+      children.length > 0 &&
+      children.every((child) => isConditionShape(child, depth + 1, state))
+    )
+  }
+  if (++state.leaves > MAX_CONDITION_LEAVES) return false
+  // Object.hasOwn, not `in`: document-derived ops must not reach the prototype
+  // chain ("toString" is not an operator).
+  if (
+    node.op != null &&
+    !(typeof node.op === 'string' && Object.hasOwn(CONDITION_SIGNATURES, node.op))
+  )
+    return false
+  return (
+    Array.isArray(node.params) &&
+    node.params.every(isOperandShape) &&
+    // With an operator set, params must match its arity — a wrong-arity leaf
+    // is uneditable by the form (writes past params.length are dropped).
+    (node.op == null || node.params.length === CONDITION_SIGNATURES[node.op as ConditionId])
+  )
+}
+
+/**
+ * True when the author finished the condition (valid shape, no draft holes,
+ * arity respected). The publish gate consumers call before sending a document
+ * to the backend — see CONDITION-FORMAT.md §5.
+ */
+export function isCompleteCondition(value: unknown): boolean {
+  if (!isConditionShape(value)) return false
+  const complete = (cond: Condition): boolean => {
+    if ('all' in cond) return cond.all.every(complete)
+    if ('any' in cond) return cond.any.every(complete)
+    return (
+      cond.op != null &&
+      cond.params.length === CONDITION_SIGNATURES[cond.op] &&
+      cond.params.every((p) => p != null && (p.kind !== 'variable' || p.ref !== ''))
+    )
+  }
+  return complete(value)
+}
+
+/** data-condition="<JSON>" → Condition; anything malformed degrades to a draft. */
+function parseConditionAttr(raw: string | null): Condition {
+  if (!raw) return DRAFT_CONDITION
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return isConditionShape(parsed) ? parsed : DRAFT_CONDITION
+  } catch {
+    return DRAFT_CONDITION
+  }
+}
+
+/** The single comparison the flat form can edit: `{all: [leaf]}` or a bare
+ * leaf. Multi-condition/any trees (authored outside the UI) return null — the
+ * form must not render fields that would destroy them on the next change. */
+function editableLeaf(cond: Condition): ConditionLeaf | null {
+  if ('all' in cond) return cond.all.length === 1 ? editableLeaf(cond.all[0]) : null
+  if ('any' in cond) return null
+  return cond
+}
+
+const withParam = (
+  params: (ConditionOperand | null)[],
+  index: number,
+  operand: ConditionOperand | null,
+) => params.map((p, i) => (i === index ? operand : p))
+
+// CONDITION-FORMAT.md §2.4: a valid JSON number after trim. Anything else
+// stays a string literal (leading zeros, "1.2.3", free text…).
+const NUMBER_LIKE = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/
+
+/** Text input → literal operand. Numeric-looking input becomes a JSON number
+ * so GREATER_THAN/LESS_THAN compare numerically on the backend. Overflow to
+ * Infinity (e.g. "1e999") isn't JSON — those stay strings. */
+function literalFromInput(text: string): ConditionOperand | null {
+  if (text === '') return null
+  const trimmed = text.trim()
+  const num = NUMBER_LIKE.test(trimmed) ? Number(trimmed) : NaN
+  return { kind: 'literal', value: Number.isFinite(num) ? num : text }
+}
+
+/** The literal face of the right-hand operand. Holds the RAW text locally —
+ * controlling the input from the re-parsed literal would canonicalize while
+ * typing ("1.50" → "1.5", eating keystrokes). Remounts (op/face switch,
+ * panel reopen) re-seed it from the stored literal. */
+function LiteralValueInput({ initial, onCommit }: { initial: string; onCommit: (text: string) => void }) {
+  const [text, setText] = useState(initial)
+  return (
+    <input
+      aria-label="Value"
+      type="text"
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value)
+        onCommit(event.target.value)
+      }}
+    />
+  )
+}
+
+/** Pure, testable condition editor (no editor dependency). Edits the single
+ * comparison of the canonical `{all: [leaf]}` shape the UI produces today. */
 export function ConditionEditor({
   variables,
   value,
@@ -73,19 +221,62 @@ export function ConditionEditor({
   onDone,
 }: {
   variables: DocumentVariable[]
-  value: ConditionValue
-  onChange: (next: ConditionValue) => void
+  value: Condition
+  onChange: (next: Condition) => void
   onDone: () => void
 }) {
-  const condition = CONDITIONS.find((c) => c.id === value.condition)
+  const leaf = editableLeaf(value)
+  const right = leaf?.params[1] ?? null
+  // Which face the right-hand operand shows while it's still null (draft).
+  // With an operand present, the face is DERIVED from the data — local state
+  // would go stale under undo/external changes while the panel is open.
+  const [draftRightKind, setDraftRightKind] = useState<'literal' | 'variable'>(
+    right?.kind === 'variable' ? 'variable' : 'literal',
+  )
+  const rightKind = right?.kind ?? draftRightKind
+  if (!leaf) {
+    return (
+      <div className="cond-editor">
+        <p className="cond-editor__complex">
+          This block carries a multi-condition rule authored outside this editor — it can’t be
+          edited here without losing structure.
+        </p>
+        <button type="button" className="cond-editor__done" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    )
+  }
+
+  const option = CONDITIONS.find((c) => c.id === leaf.op)
+  const left = leaf.params[0] ?? null
+  // Always emit the canonical shape; never mutate — PM history shares attr refs.
+  const commit = (next: ConditionLeaf) => onChange({ all: [next] })
+
+  const setOp = (id: string) => {
+    const op = (id || null) as ConditionId | null
+    // Resize params to the operator's arity, keeping what's already filled.
+    const arity = op ? CONDITION_SIGNATURES[op] : 2
+    commit({ op, params: Array.from({ length: arity }, (_, i) => leaf.params[i] ?? null) })
+  }
+
   return (
     <div className="cond-editor">
       <label className="cond-editor__field">
         <span>Variable</span>
         <select
           aria-label="Variable"
-          value={value.variable ?? ''}
-          onChange={(event) => onChange({ ...value, variable: event.target.value || null })}
+          value={left?.kind === 'variable' ? left.ref : ''}
+          onChange={(event) =>
+            commit({
+              ...leaf,
+              params: withParam(
+                leaf.params,
+                0,
+                event.target.value ? { kind: 'variable', ref: event.target.value } : null,
+              ),
+            })
+          }
         >
           <option value="">Select a variable *</option>
           {variables.map((variable) => (
@@ -100,28 +291,72 @@ export function ConditionEditor({
         <span>Condition</span>
         <select
           aria-label="Condition"
-          value={value.condition ?? ''}
-          onChange={(event) => onChange({ ...value, condition: event.target.value || null })}
+          value={leaf.op ?? ''}
+          onChange={(event) => setOp(event.target.value)}
         >
           <option value="">Select a condition *</option>
-          {CONDITIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
+          {CONDITIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
             </option>
           ))}
         </select>
       </label>
 
-      {condition?.needsValue ? (
-        <label className="cond-editor__field">
-          <span>Value</span>
-          <input
-            aria-label="Value"
-            type="text"
-            value={value.value ?? ''}
-            onChange={(event) => onChange({ ...value, value: event.target.value || null })}
-          />
-        </label>
+      {option?.arity === 2 ? (
+        <>
+          <label className="cond-editor__field">
+            <span>Compare with</span>
+            <select
+              aria-label="Compare with"
+              value={rightKind}
+              onChange={(event) => {
+                setDraftRightKind(event.target.value as 'literal' | 'variable')
+                // The old operand belongs to the other face — clear it.
+                commit({ ...leaf, params: withParam(leaf.params, 1, null) })
+              }}
+            >
+              <option value="literal">a value</option>
+              <option value="variable">a variable</option>
+            </select>
+          </label>
+          {rightKind === 'variable' ? (
+            <label className="cond-editor__field">
+              <span>Variable</span>
+              <select
+                aria-label="Comparison variable"
+                value={right?.kind === 'variable' ? right.ref : ''}
+                onChange={(event) =>
+                  commit({
+                    ...leaf,
+                    params: withParam(
+                      leaf.params,
+                      1,
+                      event.target.value ? { kind: 'variable', ref: event.target.value } : null,
+                    ),
+                  })
+                }
+              >
+                <option value="">Select a variable *</option>
+                {variables.map((variable) => (
+                  <option key={variable.id} value={variable.id}>
+                    {variable.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label className="cond-editor__field">
+              <span>Value</span>
+              <LiteralValueInput
+                initial={right?.kind === 'literal' ? String(right.value) : ''}
+                onCommit={(text) =>
+                  commit({ ...leaf, params: withParam(leaf.params, 1, literalFromInput(text)) })
+                }
+              />
+            </label>
+          )}
+        </>
       ) : null}
 
       <button type="button" className="cond-editor__done" onClick={onDone}>
@@ -131,24 +366,39 @@ export function ConditionEditor({
   )
 }
 
-function conditionText(value: ConditionValue, variable: DocumentVariable | undefined): string {
-  if (!value.variable || !value.condition) return 'no condition'
-  const condition = CONDITIONS.find((c) => c.id === value.condition)
-  const label = variable?.label ?? value.variable
-  const conditionLabel = condition?.label ?? value.condition
-  const valuePart = condition?.needsValue && value.value ? ` ${value.value}` : ''
-  return `${label} ${conditionLabel}${valuePart}`
+function operandText(operand: ConditionOperand | null, variables: DocumentVariable[]): string {
+  if (!operand) return '…'
+  if (operand.kind === 'variable')
+    return variables.find((v) => v.id === operand.ref)?.label ?? operand.ref
+  return String(operand.value)
+}
+
+function conditionText(cond: Condition, variables: DocumentVariable[]): string {
+  if ('all' in cond || 'any' in cond) {
+    const children = 'all' in cond ? cond.all : cond.any
+    const joiner = 'all' in cond ? ' and ' : ' or '
+    return (
+      children
+        .map((child) => {
+          const text = conditionText(child, variables)
+          return 'all' in child || 'any' in child ? `(${text})` : text
+        })
+        .join(joiner) || 'no condition'
+    )
+  }
+  const option = CONDITIONS.find((c) => c.id === cond.op)
+  if (!option || !cond.params[0]) return 'no condition'
+  const left = operandText(cond.params[0], variables)
+  const rest = option.arity === 2 ? ` ${operandText(cond.params[1] ?? null, variables)}` : ''
+  return `${left} ${option.label}${rest}`
 }
 
 function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
   const variables = useDocumentVariables()
   const [editing, setEditing] = useState(false)
-  const cond: ConditionValue = {
-    variable: (node.attrs.variable as string | null) ?? null,
-    condition: (node.attrs.condition as string | null) ?? null,
-    value: (node.attrs.value as string | null) ?? null,
-  }
-  const selectedVariable = useDocumentVariable(cond.variable)
+  // setJSON doesn't go through parseHTML — guard the attr shape here too.
+  const raw: unknown = node.attrs.condition
+  const cond: Condition = isConditionShape(raw) ? raw : DRAFT_CONDITION
 
   // Disable "add nested" once this block is already at the depth cap. getPos can
   // be briefly stale/undefined while the view unmounts, so guard the resolve.
@@ -202,7 +452,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
               ⑂
             </span>
             <span>Show if</span>
-            <span className="conditional-block__cond">{conditionText(cond, selectedVariable)}</span>
+            <span className="conditional-block__cond">{conditionText(cond, variables)}</span>
           </button>
           <button
             type="button"
@@ -228,7 +478,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
           <ConditionEditor
             variables={variables}
             value={cond}
-            onChange={(next) => updateAttributes(next)}
+            onChange={(next) => updateAttributes({ condition: next })}
             onDone={() => setEditing(false)}
           />
         ) : null}
@@ -245,28 +495,19 @@ const ConditionalBlock = Node.create({
   defining: true,
   // Isolating so a join/lift across the boundary (e.g. Backspace at the start of
   // the first inner block) can't silently strip the wrapper — and with it the
-  // {variable,condition,value} the backend evaluates to gate the content.
+  // condition the backend evaluates to gate the content.
   isolating: true,
 
   addAttributes() {
     return {
-      variable: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-variable'),
-        renderHTML: (attributes) =>
-          attributes.variable ? { 'data-variable': attributes.variable as string } : {},
-      },
       condition: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-condition'),
-        renderHTML: (attributes) =>
-          attributes.condition ? { 'data-condition': attributes.condition as string } : {},
-      },
-      value: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-value'),
-        renderHTML: (attributes) =>
-          attributes.value ? { 'data-value': attributes.value as string } : {},
+        default: DRAFT_CONDITION,
+        parseHTML: (element) => parseConditionAttr(element.getAttribute('data-condition')),
+        renderHTML: (attributes) => ({
+          // JSON.stringify is mandatory: PM's DOMSerializer does a raw
+          // setAttribute — an object would render as "[object Object]".
+          'data-condition': JSON.stringify(attributes.condition ?? DRAFT_CONDITION),
+        }),
       },
     }
   },
@@ -276,8 +517,9 @@ const ConditionalBlock = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    // The backend reads data-variable/condition/value + content, evaluates the
-    // condition, and includes/excludes the block when rendering the PDF.
+    // The backend reads data-condition (the condition JSON — grammar, coercion
+    // and error policy in CONDITION-FORMAT.md) + content, evaluates it, and
+    // includes/excludes the block when rendering the PDF.
     return [
       'div',
       mergeAttributes(HTMLAttributes, { 'data-conditional-block': '', class: 'conditional-block' }),
@@ -341,9 +583,10 @@ const ConditionalDepthGuard = Extension.create({
 })
 
 /**
- * "Team" feature: wrap a block in a conditional block whose condition (variable
- * + operator + optional value) the backend evaluates at render time. Variables
- * come from {@link DocumentVariablesProvider} (shared with merge fields).
+ * "Team" feature: wrap a block in a conditional block whose condition (an
+ * all/any tree of typed comparisons — CONDITION-FORMAT.md) the backend
+ * evaluates at render time. Variables come from
+ * {@link DocumentVariablesProvider} (shared with merge fields).
  */
 export const ConditionalBlockFeature = defineFeature({
   id: 'conditionalBlock',

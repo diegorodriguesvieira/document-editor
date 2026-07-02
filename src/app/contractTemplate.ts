@@ -112,13 +112,37 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
       heading(2, 'Conditional clauses'),
       {
         type: 'conditionalBlock',
-        attrs: { variable: 'valor.mensal', condition: 'GREATER_THAN', value: '10000' },
+        attrs: {
+          condition: {
+            all: [
+              {
+                op: 'GREATER_THAN',
+                params: [
+                  { kind: 'variable', ref: 'valor.mensal' },
+                  { kind: 'literal', value: 10000 },
+                ],
+              },
+            ],
+          },
+        },
         content: [
           paragraph(text('A dedicated account manager is assigned to this contract.')),
           {
-            // Nested block = AND: monthly > 10k AND term = 12.
+            // Nested block = AND by containment: monthly > 10k AND term = 12.
             type: 'conditionalBlock',
-            attrs: { variable: 'contrato.vigencia', condition: 'EQUALS', value: '12' },
+            attrs: {
+              condition: {
+                all: [
+                  {
+                    op: 'EQUALS',
+                    params: [
+                      { kind: 'variable', ref: 'contrato.vigencia' },
+                      { kind: 'literal', value: 12 },
+                    ],
+                  },
+                ],
+              },
+            },
             content: [paragraph(text('Annual pricing lock applies for the full term.'))],
           },
         ],

@@ -272,8 +272,10 @@ This is the pattern that replaced the deleted "panels channel".
   (`core/document.ts`). Commit to data portability, not engine portability.
 - `getHTML()` output carries the backend contract in `data-*` attributes:
   regions (`data-document-header/footer`), conditional blocks
-  (`data-conditional-block`, `data-variable`, `data-condition` — operator ids
-  like `EQUALS`/`GREATER_THAN` are protocol constants — and `data-value`).
+  (`data-conditional-block` + `data-condition` carrying the condition JSON —
+  an all/any tree of `{op, params}` comparisons with typed operands; operator
+  ids like `EQUALS`/`GREATER_THAN` are protocol constants. Full grammar,
+  coercion and error policy: `CONDITION-FORMAT.md`).
 - `setJSON` **throws** on content invalid for the active schema. Templates
   must therefore be built against `editor.schema.nodes` (which features are
   enabled), not `api.hasNode` (which asks the current *document*) — reference:

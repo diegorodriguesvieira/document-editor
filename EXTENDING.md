@@ -233,8 +233,11 @@ import { DocumentVariablesProvider } from '../features'
 ```
 
 Backend-contract values are exported for whoever renders the document:
-`MAX_CONDITIONAL_DEPTH`, `ConditionId`, `ConditionValue`, `CommentThread`,
-`AnchoredComment`.
+`MAX_CONDITIONAL_DEPTH`, `ConditionId`, `Condition`/`ConditionLeaf`/
+`ConditionOperand`, `CONDITION_SIGNATURES` (operator arity table),
+`isCompleteCondition` (the publish gate), `CommentThread`, `AnchoredComment`.
+The condition grammar, coercion rules and error policy live in
+`CONDITION-FORMAT.md`.
 
 ## 9. Styling your feature
 

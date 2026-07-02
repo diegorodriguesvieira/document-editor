@@ -78,7 +78,19 @@ const KITCHEN_SINK = {
       { type: 'callout', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'note' }] }] },
       {
         type: 'conditionalBlock',
-        attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+        attrs: {
+          condition: {
+            all: [
+              {
+                op: 'EQUALS',
+                params: [
+                  { kind: 'variable', ref: 'pais' },
+                  { kind: 'literal', value: 'brazil' },
+                ],
+              },
+            ],
+          },
+        },
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'gated' }] }],
       },
       { type: 'paragraph' },
@@ -134,7 +146,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-document-header',
       'data-document-footer',
       'data-conditional-block',
-      'data-variable="pais"',
+      '&quot;ref&quot;:&quot;pais&quot;', // condition JSON inside data-condition, entity-escaped
       'data-merge-field="client.name"',
       'data-comment-id="c-1"',
       'data-type="callout"',

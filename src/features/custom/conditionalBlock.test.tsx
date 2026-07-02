@@ -6,13 +6,35 @@ import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { DocumentEditor, type EditorApi } from '../../editor'
 import { docWith, jsonHasNode, renderEditor } from '../../test/editorHarness'
-import type { DocumentVariable } from './documentVariables'
+import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 import {
   ConditionalBlockFeature,
   ConditionEditor,
+  isCompleteCondition,
   MAX_CONDITIONAL_DEPTH,
-  type ConditionValue,
+  type Condition,
 } from './conditionalBlock'
+
+/** Canonical single-comparison condition: `ref` EXISTS. */
+const existsCondition = (ref: string): Condition => ({
+  all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref }] }],
+})
+
+/** Canonical `ref` EQUALS `value` condition (typed literal). */
+const equalsCondition = (ref: string, value: string | number): Condition => ({
+  all: [
+    {
+      op: 'EQUALS',
+      params: [
+        { kind: 'variable', ref },
+        { kind: 'literal', value },
+      ],
+    },
+  ],
+})
+
+/** What a freshly inserted block carries (the documented contract default). */
+const DRAFT = { all: [{ op: null, params: [null, null] }] }
 
 /** Wrap `inner` in `depth` nested conditionalBlocks. */
 function nestedConditional(depth: number, inner: JSONContent): JSONContent {
@@ -20,7 +42,7 @@ function nestedConditional(depth: number, inner: JSONContent): JSONContent {
   for (let i = 0; i < depth; i++) {
     node = {
       type: 'conditionalBlock',
-      attrs: { variable: `v${i}`, condition: 'EXISTS', value: null },
+      attrs: { condition: existsCondition(`v${i}`) },
       content: [node],
     }
   }
@@ -47,6 +69,13 @@ describe('conditional block', () => {
     expect(jsonHasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
   })
 
+  it('a freshly wrapped block carries the draft condition (the contract default)', () => {
+    const created = renderEditor([ConditionalBlockFeature], { content: docWith('clause') })
+    created.api.exec('conditional.wrap')
+    const block = created.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
+    expect(block?.attrs?.condition).toEqual(DRAFT)
+  })
+
   it('is isolating so edits across its boundary cannot strip the wrapper', () => {
     const created = renderEditor([ConditionalBlockFeature])
     expect(created.editor.schema.nodes.conditionalBlock.spec.isolating).toBe(true)
@@ -60,7 +89,7 @@ describe('conditional block', () => {
     expect(content[content.length - 1]?.type).toBe('paragraph')
   })
 
-  it('serializes the condition to data-* attrs for the backend', () => {
+  it('serializes the condition as data-condition JSON for the backend', () => {
     const created = renderEditor([ConditionalBlockFeature])
     created.api.setJSON({
       doc: {
@@ -68,7 +97,7 @@ describe('conditional block', () => {
         content: [
           {
             type: 'conditionalBlock',
-            attrs: { variable: 'gross.salary', condition: 'EXISTS', value: null },
+            attrs: { condition: existsCondition('gross.salary') },
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
           },
         ],
@@ -77,11 +106,189 @@ describe('conditional block', () => {
 
     const html = created.api.getHTML()
     expect(html).toContain('data-conditional-block')
-    expect(html).toContain('data-variable="gross.salary"')
-    expect(html).toContain('data-condition="EXISTS"')
+    // JSON inside an HTML attribute — quotes come out entity-escaped.
+    expect(html).toContain('data-condition="{&quot;all&quot;')
+    expect(html).toContain('&quot;op&quot;:&quot;EXISTS&quot;')
+    expect(html).toContain('&quot;ref&quot;:&quot;gross.salary&quot;')
+    // The old three-attribute contract is gone.
+    expect(html).not.toContain('data-variable=')
+    expect(html).not.toContain('data-value=')
 
     const block = created.api.getJSON().doc.content?.[0]
-    expect(block?.attrs).toMatchObject({ variable: 'gross.salary', condition: 'EXISTS' })
+    expect(block?.attrs?.condition).toEqual(existsCondition('gross.salary'))
+  })
+
+  it('parses its own HTML back to the same condition (paste round-trip)', () => {
+    const condition = equalsCondition('valor.mensal', 10000)
+    const source = renderEditor([ConditionalBlockFeature])
+    source.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'conditionalBlock',
+            attrs: { condition },
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'gated' }] }],
+          },
+        ],
+      },
+    })
+
+    const target = renderEditor([ConditionalBlockFeature])
+    target.editor.commands.insertContent(source.api.getHTML())
+    const block = target.api
+      .getJSON()
+      .doc.content?.find((n) => n.type === 'conditionalBlock')
+    expect(block?.attrs?.condition).toEqual(condition)
+  })
+
+  it('degrades a malformed/legacy data-condition to a draft instead of breaking the paste', () => {
+    const created = renderEditor([ConditionalBlockFeature])
+    // Legacy HTML: data-condition used to carry the bare operator id — not JSON.
+    created.editor.commands.insertContent(
+      '<div data-conditional-block data-variable="pais" data-condition="EQUALS" data-value="brazil"><p>x</p></div>',
+    )
+    const block = created.api
+      .getJSON()
+      .doc.content?.find((n) => n.type === 'conditionalBlock')
+    expect(block).toBeDefined()
+    expect(block?.attrs?.condition).toEqual(DRAFT)
+  })
+
+  it('degrades prototype-chain and wrong-arity ops to a draft (never a fake operator)', () => {
+    for (const condition of [
+      { op: 'toString', params: [] }, // Object.prototype key ≠ operator
+      { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }, null] }, // unary with 2 params
+    ]) {
+      const created = renderEditor([ConditionalBlockFeature])
+      created.editor.commands.insertContent(
+        `<div data-conditional-block data-condition='${JSON.stringify(condition)}'><p>x</p></div>`,
+      )
+      const block = created.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
+      expect(block?.attrs?.condition).toEqual(DRAFT)
+    }
+  })
+
+  it('caps the pasted condition tree: over-deep and over-wide payloads degrade to a draft', () => {
+    const LEAF = { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }] }
+    const deep = (levels: number) => {
+      let c: unknown = LEAF
+      for (let i = 0; i < levels; i++) c = { all: [c] }
+      return c
+    }
+    const wide = (leaves: number) => ({ all: Array.from({ length: leaves }, () => LEAF) })
+    const pasteCondition = (cond: unknown) => {
+      const ed = renderEditor([ConditionalBlockFeature])
+      ed.editor.commands.insertContent(
+        `<div data-conditional-block data-condition='${JSON.stringify(cond)}'><p>x</p></div>`,
+      )
+      return ed.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')?.attrs
+        ?.condition
+    }
+
+    expect(pasteCondition(deep(2))).toEqual(deep(2)) // control: sane nesting survives
+    expect(pasteCondition(deep(12))).toEqual(DRAFT) // depth cap
+    expect(pasteCondition(wide(51))).toEqual(DRAFT) // leaf cap
+  })
+
+  it('round-trips a draft condition (null holes) through HTML unchanged', () => {
+    const partialDraft: Condition = {
+      all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'gross.salary' }, null] }],
+    }
+    const source = renderEditor([ConditionalBlockFeature])
+    source.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'conditionalBlock',
+            attrs: { condition: partialDraft },
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'gated' }] }],
+          },
+        ],
+      },
+    })
+
+    const target = renderEditor([ConditionalBlockFeature])
+    target.editor.commands.insertContent(source.api.getHTML())
+    const block = target.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
+    expect(block?.attrs?.condition).toEqual(partialDraft)
+  })
+
+  it('degrades an old-format condition attr arriving via doc JSON to a draft in the node view', async () => {
+    // setJSON/content bypass parseHTML — the node-view shape guard is the only defense.
+    render(
+      <DocumentEditor
+        features={[ConditionalBlockFeature]}
+        content={{
+          doc: {
+            type: 'doc',
+            content: [
+              {
+                type: 'conditionalBlock',
+                // Legacy doc JSON: condition carried the bare operator string.
+                attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+              },
+            ],
+          },
+        }}
+      />,
+    )
+    expect(await screen.findByText('no condition')).toBeInTheDocument()
+  })
+})
+
+describe('isCompleteCondition', () => {
+  it('accepts a finished comparison and full trees', () => {
+    expect(isCompleteCondition(equalsCondition('pais', 'brazil'))).toBe(true)
+    expect(isCompleteCondition(existsCondition('pais'))).toBe(true)
+    expect(
+      isCompleteCondition({
+        any: [
+          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }] },
+          {
+            all: [
+              { op: 'EQUALS', params: [{ kind: 'variable', ref: 'b' }, { kind: 'literal', value: 1 }] },
+              { op: 'EXISTS', params: [{ kind: 'variable', ref: 'c' }] },
+            ],
+          },
+        ],
+      }),
+    ).toBe(true)
+  })
+
+  it('rejects drafts, wrong arity, unknown ops and malformed shapes', () => {
+    expect(isCompleteCondition(DRAFT)).toBe(false)
+    expect(isCompleteCondition(null)).toBe(false)
+    expect(isCompleteCondition('EQUALS')).toBe(false)
+    expect(isCompleteCondition({ all: [] })).toBe(false)
+    // Missing second param for a binary operator.
+    expect(
+      isCompleteCondition({ all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'a' }] }] }),
+    ).toBe(false)
+    // Unary operator carrying a stray second param.
+    expect(
+      isCompleteCondition({
+        all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }, { kind: 'literal', value: 1 }] }],
+      }),
+    ).toBe(false)
+    expect(
+      isCompleteCondition({ all: [{ op: 'BETWEEN', params: [{ kind: 'variable', ref: 'a' }] }] }),
+    ).toBe(false)
+    // A node can't be two forms at once.
+    expect(isCompleteCondition({ all: [existsCondition('a')], any: [] })).toBe(false)
+    // Empty variable ref: shape-valid (paste can carry it) but not publishable —
+    // the backend rejects it (spec §4 "invalid variable ref").
+    expect(
+      isCompleteCondition({ all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: '' }] }] }),
+    ).toBe(false)
+    // Infinity isn't JSON — it would stringify to null in data-condition.
+    expect(
+      isCompleteCondition({
+        all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'a' }, { kind: 'literal', value: Infinity }] }],
+      }),
+    ).toBe(false)
   })
 })
 
@@ -145,12 +352,12 @@ describe('conditional block — editing around the isolating boundary', () => {
           content: [
             {
               type: 'conditionalBlock',
-              attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+              attrs: { condition: equalsCondition('pais', 'brazil') },
               content: [
                 { type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] },
                 {
                   type: 'conditionalBlock',
-                  attrs: { variable: 'x', condition: 'EQUALS', value: 'holanda' },
+                  attrs: { condition: equalsCondition('x', 'holanda') },
                   content: [{ type: 'paragraph', content: [{ type: 'text', text: 'holanda' }] }],
                 },
               ],
@@ -162,7 +369,8 @@ describe('conditional block — editing around the isolating boundary', () => {
     // Right after the INNER block, still inside the outer.
     let innerEnd = 0
     created.editor.state.doc.descendants((n, pos) => {
-      if (n.type.name === 'conditionalBlock' && n.attrs.value === 'holanda') innerEnd = pos + n.nodeSize
+      if (n.type.name === 'conditionalBlock' && JSON.stringify(n.attrs.condition).includes('holanda'))
+        innerEnd = pos + n.nodeSize
     })
     const $pos = created.editor.state.doc.resolve(innerEnd)
     created.editor.view.dispatch(created.editor.state.tr.setSelection(new GapCursor($pos)))
@@ -241,7 +449,7 @@ describe('conditional block — the ＋ (add nested) button', () => {
             content: [
               {
                 type: 'conditionalBlock',
-                attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+                attrs: { condition: equalsCondition('pais', 'brazil') },
                 content: [{ type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] }],
               },
             ],
@@ -305,28 +513,244 @@ const VARS: DocumentVariable[] = [
   { id: 'company.name', label: 'Company' },
 ]
 
-function ControlledEditor({ variables }: { variables: DocumentVariable[] }) {
-  const [value, setValue] = useState<ConditionValue>({ variable: null, condition: null, value: null })
-  return <ConditionEditor variables={variables} value={value} onChange={setValue} onDone={() => {}} />
+function ControlledEditor({
+  variables,
+  onState,
+}: {
+  variables: DocumentVariable[]
+  onState?: (next: Condition) => void
+}) {
+  const [value, setValue] = useState<Condition>({ all: [{ op: null, params: [null, null] }] })
+  return (
+    <ConditionEditor
+      variables={variables}
+      value={value}
+      onChange={(next) => {
+        setValue(next)
+        onState?.(next)
+      }}
+      onDone={() => {}}
+    />
+  )
 }
 
 describe('<ConditionEditor />', () => {
-  it('selects variable/condition and reveals the value input only when needed', async () => {
+  it('selects variable/condition and reveals the comparison operand only when binary', async () => {
     const user = userEvent.setup()
     render(<ControlledEditor variables={VARS} />)
 
-    // No value input for a value-less condition.
+    // No right-hand operand UI for a unary-or-unset condition.
     expect(screen.queryByLabelText('Value')).toBeNull()
+    expect(screen.queryByLabelText('Compare with')).toBeNull()
 
     await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
     await user.selectOptions(screen.getByLabelText('Condition'), 'GREATER_THAN')
 
-    // greaterThan needs a value → input appears.
+    // A binary operator needs a right-hand side → value input appears.
     expect(screen.getByLabelText('Value')).toBeInTheDocument()
     expect((screen.getByLabelText('Variable') as HTMLSelectElement).value).toBe('gross.salary')
 
-    // A value-less condition hides it again.
+    // A unary condition hides it again.
     await user.selectOptions(screen.getByLabelText('Condition'), 'EXISTS')
     expect(screen.queryByLabelText('Value')).toBeNull()
+  })
+
+  it('emits the canonical {all:[leaf]} with typed operands — numeric input becomes a number', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'GREATER_THAN')
+    await user.type(screen.getByLabelText('Value'), '10000')
+
+    expect(last).toEqual({
+      all: [
+        {
+          op: 'GREATER_THAN',
+          params: [
+            { kind: 'variable', ref: 'gross.salary' },
+            { kind: 'literal', value: 10000 },
+          ],
+        },
+      ],
+    })
+    expect(isCompleteCondition(last)).toBe(true)
+  })
+
+  it('compares against another variable via the "Compare with" toggle', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+    await user.selectOptions(screen.getByLabelText('Compare with'), 'variable')
+    await user.selectOptions(screen.getByLabelText('Comparison variable'), 'company.name')
+
+    expect(last).toEqual({
+      all: [
+        {
+          op: 'EQUALS',
+          params: [
+            { kind: 'variable', ref: 'gross.salary' },
+            { kind: 'variable', ref: 'company.name' },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('resizes params to the operator arity (unary truncates the right operand)', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+    await user.type(screen.getByLabelText('Value'), '1')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EXISTS')
+
+    expect(last).toEqual({
+      all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: 'gross.salary' }] }],
+    })
+    expect(isCompleteCondition(last)).toBe(true)
+  })
+
+  it('clears a stale literal when "Compare with" is toggled to a variable', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+    await user.type(screen.getByLabelText('Value'), 'hello')
+    await user.selectOptions(screen.getByLabelText('Compare with'), 'variable')
+
+    // The literal belongs to the other face — it must not linger in params[1].
+    expect(last).toEqual({
+      all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'gross.salary' }, null] }],
+    })
+    expect(isCompleteCondition(last)).toBe(false)
+  })
+
+  it('pins the string-vs-number literal boundary (spec §2.4 JSON-number grammar)', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+    const value = screen.getByLabelText('Value')
+    const lastLiteral = () => {
+      const leaf = (last as unknown as { all: [{ params: unknown[] }] }).all[0]
+      return leaf.params[1]
+    }
+
+    await user.type(value, '0001') // leading zeros: not a JSON number → stays a string
+    expect(lastLiteral()).toEqual({ kind: 'literal', value: '0001' })
+
+    await user.clear(value)
+    await user.type(value, '1e3') // JSON exponent form → number
+    expect(lastLiteral()).toEqual({ kind: 'literal', value: 1000 })
+
+    await user.clear(value)
+    await user.type(value, '-3.5')
+    expect(lastLiteral()).toEqual({ kind: 'literal', value: -3.5 })
+
+    await user.clear(value)
+    await user.type(value, '1e999') // overflows to Infinity → must stay a string (JSON-safe)
+    expect(lastLiteral()).toEqual({ kind: 'literal', value: '1e999' })
+
+    await user.clear(value)
+    await user.type(value, '1.2.3') // not a number → free text
+    expect(lastLiteral()).toEqual({ kind: 'literal', value: '1.2.3' })
+  })
+
+  it('does not canonicalize the value input while typing ("1.50" keeps its trailing zero)', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={VARS} onState={(next) => (last = next)} />)
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+
+    const value = screen.getByLabelText('Value') as HTMLInputElement
+    await user.type(value, '1.50')
+    expect(value.value).toBe('1.50') // the box shows what was typed…
+    expect((last as unknown as { all: [{ params: unknown[] }] }).all[0].params[1]).toEqual({
+      kind: 'literal',
+      value: 1.5, // …while the stored literal is the parsed number
+    })
+  })
+
+  it('refuses to flatten a multi-condition tree it cannot represent', () => {
+    const leaves = [
+      { op: 'EXISTS' as const, params: [{ kind: 'variable' as const, ref: 'a' }] },
+      { op: 'EXISTS' as const, params: [{ kind: 'variable' as const, ref: 'b' }] },
+    ]
+    for (const tree of [{ any: leaves }, { all: leaves }] as Condition[]) {
+      const { unmount } = render(
+        <ConditionEditor variables={VARS} value={tree} onChange={() => {}} onDone={() => {}} />,
+      )
+      expect(screen.queryByLabelText('Variable')).toBeNull()
+      expect(screen.getByText(/multi-condition rule/)).toBeInTheDocument()
+      unmount()
+    }
+  })
+})
+
+describe('conditional block — summary bar text', () => {
+  const blockDoc = (condition: unknown) => ({
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'conditionalBlock',
+          attrs: { condition },
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+        },
+      ],
+    },
+  })
+  const renderSummary = async (condition: unknown) => {
+    const { container } = render(
+      <DocumentVariablesProvider variables={VARS}>
+        <DocumentEditor features={[ConditionalBlockFeature]} content={blockDoc(condition)} />
+      </DocumentVariablesProvider>,
+    )
+    await waitFor(() =>
+      expect(container.querySelector('.conditional-block__cond')).not.toBeNull(),
+    )
+    return container.querySelector('.conditional-block__cond')?.textContent
+  }
+
+  it('resolves variable labels and renders typed literals', async () => {
+    expect(
+      await renderSummary({
+        all: [
+          {
+            op: 'GREATER_THAN',
+            params: [
+              { kind: 'variable', ref: 'gross.salary' },
+              { kind: 'literal', value: 10000 },
+            ],
+          },
+        ],
+      }),
+    ).toBe('Gross salary is greater than 10000')
+  })
+
+  it('renders a draft as "no condition"', async () => {
+    expect(await renderSummary({ all: [{ op: null, params: [null, null] }] })).toBe('no condition')
+  })
+
+  it('joins an any-tree with "or" (format ahead of the single-row UI)', async () => {
+    expect(
+      await renderSummary({
+        any: [
+          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'gross.salary' }] },
+          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'company.name' }] },
+        ],
+      }),
+    ).toBe('Gross salary is in the document or Company is in the document')
   })
 })
