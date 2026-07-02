@@ -55,6 +55,21 @@ const MergeField = Node.create({
   },
 })
 
+/**
+ * The drag payload IS the chip's HTML serialization: ProseMirror handles
+ * `text/html` drops natively (position mapping + schema parse — the same
+ * pipeline as paste), and `span[data-merge-field]` already has a parse rule.
+ * So dragging a variable from the panel onto the page needs NO drop handler
+ * anywhere. Built via DOM so ids/labels are attribute-escaped correctly.
+ */
+export function mergeFieldDragHTML(variable: DocumentVariable): string {
+  const span = document.createElement('span')
+  span.setAttribute('data-merge-field', variable.id)
+  span.setAttribute('data-label', variable.label)
+  span.textContent = `{{${variable.label}}}`
+  return span.outerHTML
+}
+
 function groupVariables(variables: DocumentVariable[]): Array<[string, DocumentVariable[]]> {
   const groups = new Map<string, DocumentVariable[]>()
   for (const variable of variables) {
@@ -177,7 +192,17 @@ function MergeFieldPanel({
                     key={variable.id}
                     type="button"
                     className="mf-chip"
+                    // Drag onto the page: PM parses the text/html payload
+                    // natively, so this is the whole drag side of the story.
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('text/html', mergeFieldDragHTML(variable))
+                      event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
+                      event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
+                    }}
                     // Don't steal the editor's focus/caret — the insert needs it.
+                    // (Native drag of a draggable element still starts fine with
+                    // mousedown's default prevented — it only kills selection.)
                     onMouseDown={(event) => event.preventDefault()}
                     // Menu semantics: picking inserts AND closes — unless
                     // pinned, which keeps it open for several inserts.

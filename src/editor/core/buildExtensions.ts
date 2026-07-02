@@ -3,7 +3,7 @@ import type { AnyExtension } from '@tiptap/core'
 import { Document as DocumentNode } from '@tiptap/extension-document'
 import { Paragraph } from '@tiptap/extension-paragraph'
 import { Text as TextNode } from '@tiptap/extension-text'
-import { Gapcursor, TrailingNode } from '@tiptap/extensions'
+import { Dropcursor, Gapcursor, TrailingNode } from '@tiptap/extensions'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -17,6 +17,9 @@ import type { ResolvedFeatures } from './registry'
  * Gapcursor lets you place a caret in the gaps around isolating/atom blocks
  * (a conditional block, a table…) — e.g. to type *after* a nested conditional
  * but still inside its parent, which `isolating` otherwise traps you out of.
+ * Dropcursor draws the insertion indicator for ProseMirror's NATIVE drop
+ * handling (dragged text, images, variable chips from the panel) — drops work
+ * without it, but land "blind".
  */
 export function kernelExtensions(resolved?: ResolvedFeatures): AnyExtension[] {
   const bottomRegions = (resolved?.pageRegions ?? [])
@@ -27,6 +30,7 @@ export function kernelExtensions(resolved?: ResolvedFeatures): AnyExtension[] {
     Paragraph,
     TextNode,
     Gapcursor,
+    Dropcursor,
     TrailingNode.configure({ notAfter: bottomRegions }),
   ]
 }

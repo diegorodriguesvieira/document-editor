@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
 import { jsonHasNode, renderEditor } from '../../test/editorHarness'
-import { MergeFieldFeature } from './mergeField'
+import { MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const SAMPLE: DocumentVariable[] = [
@@ -142,6 +142,65 @@ describe('mergeField', () => {
     // …but Escape is an explicit close and always works.
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('chips are draggable and stage the chip HTML as the drag payload', async () => {
+    const user = userEvent.setup()
+    renderRail(SAMPLE)
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+
+    const chip = screen.getByRole('button', { name: 'Client name' })
+    expect(chip).toHaveAttribute('draggable', 'true')
+
+    const staged: Record<string, string> = {}
+    const dataTransfer = {
+      setData: (type: string, value: string) => {
+        staged[type] = value
+      },
+      effectAllowed: 'none',
+    }
+    fireEvent.dragStart(chip, { dataTransfer })
+
+    expect(staged['text/html']).toBe(mergeFieldDragHTML(SAMPLE[0]))
+    expect(staged['text/html']).toContain('data-merge-field="client.name"')
+    expect(staged['text/plain']).toBe('{{Client name}}')
+    expect(dataTransfer.effectAllowed).toBe('copy')
+  })
+
+  it('the drag payload parses back into a mergeField chip (what PM does on drop)', () => {
+    const created = renderEditor([MergeFieldFeature], {
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+    })
+    // PM's native drop = parse text/html through the schema; insertContent
+    // exercises that same parse pipeline.
+    created.editor.commands.insertContent(
+      mergeFieldDragHTML({ id: 'client.name', label: 'Client name' }),
+    )
+    const paragraph = created.api.getJSON().doc.content?.[0]
+    expect(paragraph?.content?.[0]).toMatchObject({
+      type: 'mergeField',
+      attrs: { id: 'client.name', label: 'Client name' },
+    })
+  })
+
+  it('attribute-escapes hostile ids/labels in the drag payload and round-trips them', () => {
+    const hostile = { id: 'a"b', label: 'x" onmouseover="alert(1)' }
+    const html = mergeFieldDragHTML(hostile)
+    expect(html).toContain('data-merge-field="a&quot;b"')
+    // The quotes must not break out of attribute position: re-parsing the
+    // payload yields ONLY the two data-* attributes, values intact.
+    const host = document.createElement('div')
+    host.innerHTML = html
+    const span = host.firstElementChild!
+    expect(span.getAttributeNames().sort()).toEqual(['data-label', 'data-merge-field'])
+    expect(span.getAttribute('data-label')).toBe(hostile.label)
+
+    const created = renderEditor([MergeFieldFeature], {
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+    })
+    created.editor.commands.insertContent(html)
+    const paragraph = created.api.getJSON().doc.content?.[0]
+    expect(paragraph?.content?.[0]).toMatchObject({ type: 'mergeField', attrs: hostile })
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {

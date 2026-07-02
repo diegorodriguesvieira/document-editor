@@ -81,7 +81,7 @@ it should never reach users half-working.
 
 `kernel + resolved.extensions + registryKeymap(resolved)`.
 
-The kernel: `Document`, `Paragraph`, `Text`, `Gapcursor`,
+The kernel: `Document`, `Paragraph`, `Text`, `Gapcursor`, `Dropcursor`,
 `TrailingNode.configure({ notAfter: bottomRegions })`. Note the inversion: the
 kernel never hardcodes a feature's node name — bottom-pinned regions are read
 from `pageRegions` metadata.
