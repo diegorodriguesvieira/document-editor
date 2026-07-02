@@ -28,11 +28,11 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMergeVariables([
-        { id: 'cliente.nome', label: 'Client name' },
-        { id: 'cliente.cnpj', label: 'Tax ID' },
-        { id: 'contrato.numero', label: 'Contract number' },
-        { id: 'contrato.vigencia', label: 'Term' },
-        { id: 'valor.mensal', label: 'Monthly amount' },
+        { id: 'cliente.nome', label: 'Client name', group: 'Client details' },
+        { id: 'cliente.cnpj', label: 'Tax ID', group: 'Client details' },
+        { id: 'contrato.numero', label: 'Contract number', group: 'Contract details' },
+        { id: 'contrato.vigencia', label: 'Term', group: 'Contract details' },
+        { id: 'valor.mensal', label: 'Monthly amount', group: 'Contract details' },
       ])
     }, 1500)
     return () => clearTimeout(timer)

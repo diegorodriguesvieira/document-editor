@@ -357,6 +357,7 @@ export const ConditionalBlockFeature = defineFeature({
       return editor.chain().focus().wrapIn('conditionalBlock').run()
     },
   },
-  keymap: { 'Mod-Shift-k': 'conditional.wrap' },
+  // Mod-Alt-b ("block"): Mod-Shift-k is Firefox's Web Console.
+  keymap: { 'Mod-Alt-b': 'conditional.wrap' },
   insert: [{ id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.wrap' }],
 })

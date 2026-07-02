@@ -3,6 +3,8 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 export interface DocumentVariable {
   id: string
   label: string
+  /** Optional section for pickers (e.g. the variables panel groups by it). */
+  group?: string
 }
 
 interface DocumentVariablesValue {

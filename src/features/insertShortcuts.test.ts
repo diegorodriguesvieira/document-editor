@@ -32,27 +32,31 @@ describe('insert shortcuts (the left-rail features)', () => {
       ImageFeature,
       ConditionalBlockFeature,
     ])
-    expect(resolved.keymap['Mod-Shift-t']).toBe('table.insert')
+    expect(resolved.keymap['Mod-Alt-t']).toBe('table.insert') // Mod-Shift-t = browser's reopen-tab
     expect(resolved.keymap["Mod-Shift-'"]).toBe('quote.toggle')
     expect(resolved.keymap['Mod-"']).toBe('quote.toggle') // layout alias
     expect(resolved.keymap['Mod-Shift-c']).toBe('codeBlock.toggle')
     expect(resolved.keymap['Mod-k']).toBe('link.set')
-    expect(resolved.keymap['Mod-Shift-i']).toBe('image.insert')
-    expect(resolved.keymap['Mod-Shift-k']).toBe('conditional.wrap')
+    expect(resolved.keymap['Mod-Alt-p']).toBe('image.insert') // Mod-Shift-i = Safari Mail Contents
+    expect(resolved.keymap['Mod-Alt-b']).toBe('conditional.wrap') // Mod-Shift-k = Firefox Web Console
   })
 
-  it('Mod-Shift-t inserts a table', () => {
+  it('Mod-Alt-t inserts a table', () => {
     const created = renderEditor([TableFeature])
     created.editor.commands.focus()
-    press(created.editor.view, 't')
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 't', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }),
+    )
     expect(jsonHasNode(created.api.getJSON().doc, 'table')).toBe(true)
   })
 
-  it('Mod-Shift-k wraps in a conditional block', () => {
+  it('Mod-Alt-b wraps in a conditional block', () => {
     const created = renderEditor([ConditionalBlockFeature])
     created.editor.commands.focus()
     created.editor.commands.insertContent('cláusula')
-    press(created.editor.view, 'k')
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }),
+    )
     expect(jsonHasNode(created.api.getJSON().doc, 'conditionalBlock')).toBe(true)
   })
 

@@ -1,4 +1,5 @@
-/* MergeFieldFeature — pure-DOM chip + insert modal (modal portals to <body>). */
+/* MergeFieldFeature — pure-DOM chip + the variables side panel (portals to
+   <body>, anchored to the right of the insert rail, top-aligned with it). */
 @layer editor {
   .document-editor__surface .merge-field {
     display: inline-block;
@@ -13,33 +14,80 @@
     user-select: none;
   }
 
-  .document-editor-popup.mf-modal__backdrop {
+  .document-editor-popup.mf-panel {
     position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.35);
+    width: min(340px, 80vw);
+    max-height: calc(100vh - 120px);
     display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .document-editor-popup .mf-modal {
-    width: min(420px, 90vw);
-    max-height: 70vh;
-    overflow: auto;
+    flex-direction: column;
     background: var(--editor-surface);
-    border-radius: 10px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    padding: 16px;
+    border: 1px solid var(--editor-border);
+    border-radius: 12px;
+    box-shadow: var(--editor-shadow-pop);
+    padding: 14px;
+    z-index: var(--editor-z-popup);
   }
 
-  .document-editor-popup .mf-modal__header {
+  .document-editor-popup .mf-panel__search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px;
+    border: 1px solid var(--editor-border-muted);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  .document-editor-popup .mf-panel__body {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .document-editor-popup .mf-panel__group-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--editor-text-subtle);
+    margin-bottom: 6px;
+  }
+
+  .document-editor-popup .mf-panel__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
   }
 
-  .document-editor-popup .mf-modal__close {
+  .document-editor-popup .mf-panel__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .document-editor-popup .mf-panel__pin {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--editor-border-muted);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--editor-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .document-editor-popup .mf-panel__pin[aria-pressed='true'] {
+    background: var(--editor-accent-bg);
+    border-color: var(--editor-accent);
+    color: var(--editor-accent-ink);
+  }
+
+  .document-editor-popup .mf-panel__close {
     border: none;
     background: transparent;
     font-size: 20px;
@@ -48,7 +96,7 @@
     cursor: pointer;
   }
 
-  .document-editor-popup .mf-modal__chips {
+  .document-editor-popup .mf-panel__chips {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -68,7 +116,7 @@
     background: var(--editor-accent-bg);
   }
 
-  .document-editor-popup .mf-modal__empty {
+  .document-editor-popup .mf-panel__empty {
     color: var(--editor-text-subtle);
     font-size: 13px;
   }

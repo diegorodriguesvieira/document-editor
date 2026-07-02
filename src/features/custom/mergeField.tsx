@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { defineFeature, mergeAttributes, Node, useDismissable, type EditorApi } from '../../editor'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
@@ -6,7 +6,7 @@ import { createMergeFieldSuggestion } from './mergeFieldSuggestion'
 
 /**
  * Inline atomic node — the "chip". Pure-DOM node view (lighter than React for
- * many chips). Doesn't depend on the variable list — only the modal does.
+ * many chips). Doesn't depend on the variable list — only the panel does.
  */
 const MergeField = Node.create({
   name: 'mergeField',
@@ -55,43 +55,144 @@ const MergeField = Node.create({
   },
 })
 
-function MergeFieldModal({
+function groupVariables(variables: DocumentVariable[]): Array<[string, DocumentVariable[]]> {
+  const groups = new Map<string, DocumentVariable[]>()
+  for (const variable of variables) {
+    const key = variable.group ?? ''
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(variable)
+  }
+  return [...groups.entries()]
+}
+
+/**
+ * Side panel anchored to the RIGHT of the insert rail (top-aligned with it).
+ * Clicking outside closes it — unless PINNED (the P button), which turns it
+ * into a persistent surface: move the caret around and keep inserting.
+ * Escape and the x always close.
+ */
+function MergeFieldPanel({
+  anchor,
   variables,
   onPick,
   onClose,
 }: {
+  anchor: HTMLElement | null
   variables: DocumentVariable[]
   onPick: (variable: DocumentVariable) => void
   onClose: () => void
 }) {
   const cardRef = useRef<HTMLDivElement>(null)
-  // Backdrop click (anything outside the card) or Escape closes.
-  useDismissable(cardRef, onClose)
+  const [query, setQuery] = useState('')
+  const [pinned, setPinned] = useState(false)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  // The anchor (@ button) counts as "inside" so toggling it doesn't
+  // close-then-instantly-reopen. Pinned: outside clicks stop closing
+  // (Escape and the x still do).
+  const anchorRef = useRef<HTMLElement | null>(anchor)
+  anchorRef.current = anchor
+  useDismissable([cardRef, anchorRef], onClose, {
+    isOutsideClick: pinned ? () => false : undefined,
+  })
+
+  // Align with the rail: top = rail top, left = just past the rail. The rail
+  // is sticky, but its rect still moves before the sticky engages — track it.
+  useLayoutEffect(() => {
+    // Preferred anchor: the rail (top-aligned). Fallback: the button itself
+    // (e.g. the item rendered outside a rail, or in tests).
+    const target = anchor?.closest('.document-editor__rail') ?? anchor
+    const place = () => {
+      if (!target) {
+        setPosition({ top: 16, left: 16 })
+        return
+      }
+      const rect = target.getBoundingClientRect()
+      setPosition({ top: rect.top, left: rect.right + 12 })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [anchor])
+
+  const needle = query.trim().toLowerCase()
+  const filtered = needle
+    ? variables.filter(
+        (variable) =>
+          variable.label.toLowerCase().includes(needle) || variable.id.toLowerCase().includes(needle),
+      )
+    : variables
+
+  if (!position) return null
   return (
-    <div className="document-editor-popup mf-modal__backdrop">
-      <div ref={cardRef} className="mf-modal" role="dialog" aria-label="Variables">
-        <div className="mf-modal__header">
-          <strong>Variables</strong>
-          <button type="button" className="mf-modal__close" aria-label="Close" onClick={onClose}>
-            ×
+    <div
+      ref={cardRef}
+      className="document-editor-popup mf-panel"
+      role="dialog"
+      aria-label="Variables"
+      style={{ top: position.top, left: position.left }}
+    >
+      <div className="mf-panel__header">
+        <strong>Variables</strong>
+        <div className="mf-panel__header-actions">
+          <button
+            type="button"
+            className="mf-panel__pin"
+            aria-label="Pin panel"
+            aria-pressed={pinned}
+            title={pinned ? 'Unpin (outside clicks close again)' : 'Pin (keep open while editing)'}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setPinned((value) => !value)}
+          >
+            P
+          </button>
+          <button type="button" className="mf-panel__close" aria-label="Close" onClick={onClose}>
+            x
           </button>
         </div>
-        <div className="mf-modal__chips">
-          {variables.length === 0 ? (
-            <span className="mf-modal__empty">Loading variables…</span>
-          ) : (
-            variables.map((variable) => (
-              <button
-                key={variable.id}
-                type="button"
-                className="mf-chip"
-                onClick={() => onPick(variable)}
-              >
-                {variable.label}
-              </button>
-            ))
-          )}
-        </div>
+      </div>
+      <input
+        type="search"
+        className="mf-panel__search"
+        placeholder="Search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      <div className="mf-panel__body">
+        {variables.length === 0 ? (
+          <span className="mf-panel__empty">Loading variables…</span>
+        ) : filtered.length === 0 ? (
+          <span className="mf-panel__empty">No variable matches “{query}”</span>
+        ) : (
+          groupVariables(filtered).map(([group, items]) => (
+            <div key={group || 'ungrouped'} className="mf-panel__group">
+              {group ? <div className="mf-panel__group-label">{group}</div> : null}
+              <div className="mf-panel__chips">
+                {items.map((variable) => (
+                  <button
+                    key={variable.id}
+                    type="button"
+                    className="mf-chip"
+                    // Don't steal the editor's focus/caret — the insert needs it.
+                    onMouseDown={(event) => event.preventDefault()}
+                    // Menu semantics: picking inserts AND closes — unless
+                    // pinned, which keeps it open for several inserts.
+                    onClick={() => {
+                      onPick(variable)
+                      if (!pinned) onClose()
+                    }}
+                  >
+                    {variable.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
@@ -99,31 +200,35 @@ function MergeFieldModal({
 
 function MergeFieldInsert({ api }: { api: EditorApi }) {
   const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const variables = useDocumentVariables()
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         className="insert-rail__btn"
-        title="Insert variable"
-        aria-label="Insert variable"
+        title="Variables"
+        aria-label="Variables"
         aria-haspopup="dialog"
+        aria-expanded={open}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen((value) => !value)}
       >
         @
       </button>
       {open
-        ? // Portal to <body> so the fixed overlay escapes the sticky insert-rail's
+        ? // Portal to <body> so the fixed panel escapes the sticky insert-rail's
           // stacking context (otherwise it paints behind the page).
           createPortal(
-            <MergeFieldModal
+            <MergeFieldPanel
+              anchor={buttonRef.current}
               variables={variables}
               onClose={() => {
                 setOpen(false)
-                api.focus() // keep the editor focused after the modal closes
+                api.focus() // keep the editor focused after the panel closes
               }}
-              // Keep the modal open so several variables can be added in a row.
+              // Picking closes unless the panel is pinned (handled inside).
               onPick={(variable) => api.exec('mergeField.insert', variable)}
             />,
             document.body,

@@ -27,7 +27,7 @@ describe('mergeField', () => {
     renderRail(SAMPLE, mock.api)
 
     expect(screen.queryByRole('dialog')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
     expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Client name' }))
@@ -58,7 +58,7 @@ describe('mergeField', () => {
     const focusSpy = vi.spyOn(mock.api, 'focus')
     renderRail(SAMPLE, mock.api)
 
-    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
     await user.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -69,9 +69,79 @@ describe('mergeField', () => {
     const user = userEvent.setup()
     renderRail([{ id: 'custom.var', label: 'Custom Variable' }])
 
-    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
     expect(screen.getByRole('button', { name: 'Custom Variable' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Client name' })).toBeNull()
+  })
+
+  it('groups variables by their optional `group` (ungrouped = flat, no header)', async () => {
+    const user = userEvent.setup()
+    renderRail([
+      { id: 'c.nome', label: 'Client name', group: 'Client details' },
+      { id: 'k.numero', label: 'Contract number', group: 'Contract details' },
+      { id: 'solto', label: 'Ungrouped var' },
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    expect(screen.getByText('Client details')).toBeInTheDocument()
+    expect(screen.getByText('Contract details')).toBeInTheDocument()
+    // The ungrouped variable renders without inventing a header for it.
+    expect(screen.getByRole('button', { name: 'Ungrouped var' })).toBeInTheDocument()
+  })
+
+  it('search filters by label and id', async () => {
+    const user = userEvent.setup()
+    renderRail(SAMPLE)
+
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.type(screen.getByRole('searchbox'), 'client')
+
+    // Matches label ("Client name") and id ("client.name") — Company is out.
+    expect(screen.getByRole('button', { name: 'Client name' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Company' })).toBeNull()
+
+    await user.clear(screen.getByRole('searchbox'))
+    await user.type(screen.getByRole('searchbox'), 'zzz')
+    expect(screen.getByText(/No variable matches/)).toBeInTheDocument()
+  })
+
+  it('picking inserts AND closes — unless pinned, which keeps it open', async () => {
+    const user = userEvent.setup()
+    const mock = createMockEditor()
+    renderRail(SAMPLE, mock.api)
+
+    // Unpinned: menu semantics — pick closes.
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.click(screen.getByRole('button', { name: 'Client name' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // Pinned: pick twice, panel stays.
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.click(screen.getByRole('button', { name: 'Pin panel' }))
+    await user.click(screen.getByRole('button', { name: 'Client name' }))
+    await user.click(screen.getByRole('button', { name: 'Company' }))
+    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
+    expect(mock.execCalls.filter((call) => call.commandId === 'mergeField.insert')).toHaveLength(3)
+  })
+
+  it('outside click closes — unless pinned; Escape closes even pinned', async () => {
+    const user = userEvent.setup()
+    renderRail(SAMPLE)
+
+    // Unpinned: clicking outside (the document body) closes.
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.click(document.body)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // Pinned: outside clicks keep it open…
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.click(screen.getByRole('button', { name: 'Pin panel' }))
+    await user.click(document.body)
+    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
+
+    // …but Escape is an explicit close and always works.
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
@@ -85,7 +155,7 @@ describe('mergeField', () => {
 
     // Starts empty (still "loading").
     const { rerender } = render(ui([]))
-    await user.click(screen.getByRole('button', { name: 'Insert variable' }))
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
     expect(screen.getByText('Loading variables…')).toBeInTheDocument()
 
     // Variables arrive from the "API": only the context value changes.

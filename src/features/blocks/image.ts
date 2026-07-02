@@ -28,6 +28,8 @@ export const ImageFeature = defineFeature({
       return editor.chain().focus().setImage({ src }).run()
     },
   },
-  keymap: { 'Mod-Shift-i': 'image.insert' },
+  // Mod-Alt-p ("picture"): Mod-Shift-i collides with Safari's Mail Contents
+  // of Page; the Alt+I/J/C/K/U row is devtools territory across browsers.
+  keymap: { 'Mod-Alt-p': 'image.insert' },
   insert: [{ id: 'image', label: 'Image', icon: 'I', commandId: 'image.insert' }],
 })
