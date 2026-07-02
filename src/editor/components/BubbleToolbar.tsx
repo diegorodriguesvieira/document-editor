@@ -1,5 +1,6 @@
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/core'
+import { NodeSelection } from '@tiptap/pm/state'
 import type { EditorApi } from '../core/EditorApi'
 import { EditorToolbar } from './EditorToolbar'
 import type { ResolvedFeatures } from '../core/registry'
@@ -29,11 +30,16 @@ export function BubbleToolbar({ editor, api, resolved, filter, className }: Bubb
     <BubbleMenu
       editor={editor}
       className={className ?? 'bubble-toolbar'}
-      // Presentation rule: no bubble over "nothing" — a select-all on an EMPTY
-      // document produces a technically-non-empty selection (the empty
-      // paragraph) that would summon the bubble for no reason.
+      // Presentation rules: no bubble over "nothing" (a select-all on an EMPTY
+      // document produces a technically-non-empty selection of the empty
+      // paragraph), and no bubble over NODE selections — a selected image or
+      // divider gets its own chrome (resize handles); the TEXT formatting
+      // bubble would be noise on top of it.
       shouldShow={({ editor: current }) =>
-        current.isEditable && !current.state.selection.empty && !current.isEmpty
+        current.isEditable &&
+        !current.state.selection.empty &&
+        !current.isEmpty &&
+        !(current.state.selection instanceof NodeSelection)
       }
     >
       <EditorToolbar

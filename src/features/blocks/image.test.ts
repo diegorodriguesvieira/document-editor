@@ -21,3 +21,36 @@ describe('image src safety', () => {
     expect(jsonHasNode(api.getJSON().doc, 'image')).toBe(false)
   })
 })
+
+describe('image resize (width attribute)', () => {
+  it('round-trips width: attr → HTML `width` → parsed back', () => {
+    const created = renderEditor([ImageFeature])
+    created.api.exec('image.insert', 'https://example.com/a.png')
+    created.editor.commands.updateAttributes('image', { width: 400 })
+
+    expect(created.api.getHTML()).toContain('width="400"')
+
+    const reloaded = renderEditor([ImageFeature])
+    reloaded.api.setJSON(created.api.getJSON())
+    const image = reloaded.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    expect(image?.attrs?.width).toBe(400)
+  })
+
+  it('parses width from pasted HTML (attribute or inline style)', () => {
+    const created = renderEditor([ImageFeature])
+    created.editor.commands.insertContent('<img src="https://example.com/a.png" width="300">')
+    let image = created.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    expect(image?.attrs?.width).toBe(300)
+
+    const other = renderEditor([ImageFeature])
+    other.editor.commands.insertContent('<img src="https://example.com/b.png" style="width: 250px">')
+    image = other.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    expect(image?.attrs?.width).toBe(250)
+  })
+
+  it('images without width stay width-less (no serialized attr)', () => {
+    const created = renderEditor([ImageFeature])
+    created.api.exec('image.insert', 'https://example.com/a.png')
+    expect(created.api.getHTML()).not.toContain('width=')
+  })
+})
