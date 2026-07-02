@@ -18,6 +18,7 @@ import {
   QuoteFeature,
   TableFeature,
 } from '../features'
+import { AppExtrasFeature } from './appExtras'
 
 export interface Preset {
   id: string
@@ -49,7 +50,7 @@ export const presets: Preset[] = [
       LinkFeature,
       ColorFeature,
       CalloutFeature,
-          TableFeature,
+      TableFeature,
       QuoteFeature,
       CodeBlockFeature,
       DividerFeature,
@@ -59,6 +60,9 @@ export const presets: Preset[] = [
       ConditionalBlockFeature,
       HeaderFooterFeature,
       CommentsFeature,
+      // APP-level feature (defined in ./appExtras, not in the SDK): new items
+      // on the left rail, the toolbar and the bubble — zero SDK edits.
+      AppExtrasFeature,
     ],
   },
 ]

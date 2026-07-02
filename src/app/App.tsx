@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
-import { CommentsPanel, DocumentVariablesProvider, type DocumentVariable } from '../features'
+import { DocumentVariablesProvider, type DocumentVariable } from '../features'
+import { CommentCards } from './CommentCards'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
@@ -89,8 +90,10 @@ export default function App() {
               console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
               console.log('document JSON:', doc)
             }}
-            // The right rail is consumer-owned: render anything here. Swap
-            // CommentsPanel for your own UI built on useDocumentComments.
+            // The right rail is consumer-owned: render anything here. This app
+            // ships its OWN comments UI (CommentCards, built on the SDK's
+            // useDocumentComments hook) — swap back to the SDK's CommentsPanel
+            // any time, same data, same click-to-scroll.
             renderRightBar={(ctx) => (
               <div className="right-rail">
                 <ZoomRail
@@ -98,10 +101,12 @@ export default function App() {
                   onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
                   onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
                 />
-                <CommentsPanel editor={ctx.editor} />
+                <CommentCards editor={ctx.editor} />
               </div>
             )}
             renderToolbar={(ctx) => {
+              // Placement by `group`: 'selection' items (e.g. Copy selection)
+              // live ONLY in the bubble; the top bars filter them out.
               if (toolbarStyle === 'bubble') {
                 // Formatting on selection; skip undo/redo (not selection-scoped).
                 return <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
@@ -110,7 +115,7 @@ export default function App() {
                 return <PillToolbar {...ctx} />
               }
               return (
-                <EditorToolbar {...ctx}>
+                <EditorToolbar {...ctx} filter={(item) => item.group !== 'selection'}>
                   {/* Level 2: an app-level custom button dropped into the default toolbar */}
                   <button
                     type="button"

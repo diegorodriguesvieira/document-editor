@@ -6,7 +6,10 @@ import { useToolbar, type DocumentEditorRenderContext } from '../editor'
  * imports `@tiptap/*`, and still honors features' custom `render` controls.
  */
 export function PillToolbar({ editor, api, resolved }: DocumentEditorRenderContext) {
-  const buttons = useToolbar(editor, api, resolved)
+  // Same placement rule as the default toolbar: 'selection' items are bubble-only.
+  const buttons = useToolbar(editor, api, resolved).filter(
+    (button) => button.item.group !== 'selection',
+  )
 
   return (
     <div className="pill-toolbar" role="toolbar" aria-label="Formatting">
