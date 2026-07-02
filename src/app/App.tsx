@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { CommentCards } from './CommentCards'
+import { contractTemplate } from './contractTemplate'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
@@ -104,24 +105,7 @@ export default function App() {
                 <button
                   type="button"
                   className="empty-state__cta"
-                  onClick={() =>
-                    ctx.api.setJSON({
-                      doc: {
-                        type: 'doc',
-                        content: [
-                          {
-                            type: 'heading',
-                            attrs: { level: 1 },
-                            content: [{ type: 'text', text: 'Service agreement' }],
-                          },
-                          {
-                            type: 'paragraph',
-                            content: [{ type: 'text', text: 'This agreement is made between…' }],
-                          },
-                        ],
-                      },
-                    })
-                  }
+                  onClick={() => ctx.editor && ctx.api.setJSON(contractTemplate(ctx.editor))}
                 >
                   Start from a template
                 </button>
