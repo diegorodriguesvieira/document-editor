@@ -157,6 +157,46 @@ surface: `getJSON / setJSON / getHTML / hasNode / focus / exec(commandId, payloa
 Loading content whose feature is disabled **throws** (it won't silently wipe
 the document).
 
+### Autosave and race conditions — who does what
+
+**The SDK guarantees:** `onChange` fires with a consistent snapshot of the
+latest state (serialized at fire time, never a torn intermediate), debounced
+250ms, and a pending debounce is **flushed on unmount** so the user's last
+edits are never silently dropped. Two things it deliberately does NOT do:
+
+- **Loads echo.** `api.setJSON(...)` in `onReady` triggers `onChange` with the
+  document you just loaded. Guard it (skip the first change, or a `loading`
+  flag) if re-saving a fresh load bothers your backend.
+- **The network is yours.** Debounce limits *frequency*, not *ordering* — on a
+  slow connection an older save can resolve after a newer one. The minimal
+  safe pattern is chain-and-coalesce (never two saves in flight, always end on
+  the newest):
+
+```ts
+let inFlight = false
+let dirty: DocumentJSON | null = null
+
+async function pump() {
+  if (inFlight || !dirty) return
+  inFlight = true
+  const doc = dirty
+  dirty = null
+  try {
+    await save(doc)
+  } finally {
+    inFlight = false
+    pump() // anything that arrived meanwhile goes out now
+  }
+}
+
+<DocumentEditor onChange={(doc) => { dirty = doc; pump() }} … />
+```
+
+With more than one writer (two tabs, two users), add server-side optimistic
+concurrency (a `rev`/ETag with `If-Match` → conflicts become a 409 instead of
+a silent clobber). Real-time co-editing is a different animal (CRDT/Yjs) and
+out of scope here.
+
 ## 8. Runtime data (merge-field / conditional variables)
 
 Variables come from **you** via context, not the `features` list — so loading

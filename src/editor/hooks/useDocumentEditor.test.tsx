@@ -43,4 +43,22 @@ describe('useDocumentEditor', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled())
     expect(onChange.mock.calls.at(-1)![0]).toHaveProperty('doc')
   })
+
+  it('flushes a pending onChange on unmount — the last edits are never lost', async () => {
+    const onChange = vi.fn()
+    const { result, unmount } = renderHook(() =>
+      useDocumentEditor({ features: [BoldFeature], onChange }),
+    )
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+
+    act(() => {
+      result.current.editor!.commands.insertContent('last words')
+    })
+    expect(onChange).not.toHaveBeenCalled() // still inside the debounce window
+
+    unmount() // ← would previously drop the pending save on the floor
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(onChange.mock.calls[0][0].doc)).toContain('last words')
+  })
 })
