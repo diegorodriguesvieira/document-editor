@@ -3,6 +3,15 @@ import { useEffect, useRef, type RefObject } from 'react'
 type MaybeRef = RefObject<HTMLElement | null>
 
 /**
+ * Escape closes surfaces innermost-first: capture-phase listeners on document
+ * fire in REGISTRATION order, so without coordination a long-lived surface
+ * (e.g. an open header/footer region) would swallow the Escape meant for a
+ * popover opened after it. Each enabled instance registers here; only the
+ * top of the stack (the most recently enabled surface) closes per press.
+ */
+const escapeStack: Array<() => void> = []
+
+/**
  * The dismiss contract every floating surface shares — capture-phase outside
  * click (so it wins over ProseMirror's own mousedown handling) + Escape, and
  * optionally scroll/resize for surfaces anchored to fixed page coordinates
@@ -12,44 +21,64 @@ type MaybeRef = RefObject<HTMLElement | null>
  *
  * `refs` are the elements that count as "inside" (e.g. the popover AND the
  * button that toggles it, so the toggle doesn't insta-reopen).
+ *
+ * `isOutsideClick` replaces the default "not inside refs" test when a surface
+ * has a narrower exit rule — e.g. a page region that closes on clicks
+ * elsewhere in the document but stays open for toolbar/popover clicks.
  */
 export function useDismissable(
   refs: MaybeRef | readonly MaybeRef[],
   onClose: () => void,
-  options: { closeOnScroll?: boolean; enabled?: boolean } = {},
+  options: {
+    closeOnScroll?: boolean
+    enabled?: boolean
+    isOutsideClick?: (target: Node) => boolean
+  } = {},
 ): void {
   const { closeOnScroll = false, enabled = true } = options
-  // Latest refs/callback without re-subscribing every render.
+  // Latest refs/callbacks without re-subscribing every render.
   const refsRef = useRef(refs)
   refsRef.current = refs
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  const isOutsideClickRef = useRef(options.isOutsideClick)
+  isOutsideClickRef.current = options.isOutsideClick
 
   useEffect(() => {
     if (!enabled) return
     const close = () => onCloseRef.current()
     const onDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      const custom = isOutsideClickRef.current
+      if (custom) {
+        if (custom(target)) close()
+        return
+      }
       const current = refsRef.current
       const list = Array.isArray(current) ? current : [current as MaybeRef]
-      const inside = list.some((ref) => ref.current?.contains(event.target as Node))
+      const inside = list.some((ref) => ref.current?.contains(target))
       if (!inside) close()
     }
     const onKey = (event: KeyboardEvent) => {
-      // Consume Escape so ONE surface closes per press, not every open one.
       if (event.key !== 'Escape' || event.defaultPrevented) return
+      // Only the top surface (most recently enabled) closes on this press.
+      if (escapeStack[escapeStack.length - 1] !== close) return
       event.preventDefault()
       close()
     }
+    escapeStack.push(close)
     document.addEventListener('mousedown', onDown, true)
     // Capture phase: ProseMirror consumes Escape (preventDefault) inside the
     // editable, which would starve a bubble-phase listener — capture runs
-    // first. The defaultPrevented check still layers multiple dismissables.
+    // first. The defaultPrevented check still layers with other consumers.
     document.addEventListener('keydown', onKey, true)
     if (closeOnScroll) {
       window.addEventListener('scroll', close, true)
       window.addEventListener('resize', close)
     }
     return () => {
+      const index = escapeStack.indexOf(close)
+      if (index >= 0) escapeStack.splice(index, 1)
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('keydown', onKey, true)
       if (closeOnScroll) {

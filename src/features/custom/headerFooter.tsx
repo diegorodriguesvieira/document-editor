@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   defineFeature,
+  hasTopLevelNode,
   mergeAttributes,
   Node,
   NodeViewContent,
   NodeViewWrapper,
   ReactNodeViewRenderer,
   useDismissable,
+  useFeatureState,
   type NodeViewProps,
 } from '../../editor'
 import { Extension, type Editor } from '@tiptap/core'
@@ -14,61 +16,103 @@ import { GapCursor } from '@tiptap/pm/gapcursor'
 import { Fragment, type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 
-/** The region (header/footer) a resolved position sits inside, if any. */
-function regionNameAt($pos: ResolvedPos): string | null {
+/** The two region node names — single source for every rule in this file. */
+const REGION_TOP = 'documentHeader'
+const REGION_BOTTOM = 'documentFooter'
+
+/** Depth of the region (header/footer) ancestor at `$pos`, or null. */
+function regionDepthAt($pos: ResolvedPos): number | null {
   for (let depth = $pos.depth; depth > 0; depth--) {
     const name = $pos.node(depth).type.name
-    if (name === 'documentHeader' || name === 'documentFooter') return name
+    if (name === REGION_TOP || name === REGION_BOTTOM) return depth
   }
   return null
 }
 
+/** The region a resolved position sits inside, if any. */
+function regionNameAt($pos: ResolvedPos): string | null {
+  const depth = regionDepthAt($pos)
+  return depth === null ? null : $pos.node(depth).type.name
+}
+
+/** Region sizes + the body's text range — THE definition of "the body". */
+function regionBounds(doc: PMNode) {
+  const headerSize = doc.firstChild?.type.name === REGION_TOP ? doc.firstChild.nodeSize : 0
+  const footerSize = doc.lastChild?.type.name === REGION_BOTTOM ? doc.lastChild.nodeSize : 0
+  return {
+    headerSize,
+    footerSize,
+    bodyFrom: headerSize + 1,
+    bodyTo: doc.content.size - footerSize - 1,
+  }
+}
+
 /** The guard's shared editing state (which region is open for editing). */
-export function guardStorage(editor: Editor): { editing: string | null } {
+function guardStorage(editor: Editor): { editing: string | null } {
   return (editor.storage as unknown as { headerFooterGuard: { editing: string | null } })
     .headerFooterGuard
 }
 
-/** True when a top-level node of `name` exists. */
-function docHasNode(doc: PMNode, name: string): boolean {
-  let found = false
-  doc.forEach((node) => {
-    if (node.type.name === name) found = true
-  })
-  return found
+/**
+ * Closes the editing gate for `name`. The empty dispatch lets the selection
+ * gate expel a caret still inside the region (one mechanism owns the clamp)
+ * and re-renders the node view (its `editing` state derives from the storage).
+ * Exported for tests — the exit path is part of the behavior contract.
+ */
+export function closeRegion(editor: Editor, name: string): void {
+  const storage = guardStorage(editor)
+  if (storage.editing !== name) return
+  storage.editing = null
+  editor.view.dispatch(editor.state.tr)
 }
 
 /**
  * Editable header/footer region with Google-Docs entry semantics: a single
  * click does NOT drop the caret in — DOUBLE-click activates editing (and
- * places the caret where you clicked); clicking outside (or Escape) leaves.
+ * places the caret where you clicked); clicking elsewhere in the DOCUMENT
+ * (or Escape) leaves. Toolbar/bubble/popover clicks keep the region open.
  */
 function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
-  const isHeader = node.type.name === 'documentHeader'
-  // A freshly ADDED region mounts already open for editing (the add command
-  // opens the gate so the user can type immediately) — sync from the storage.
-  const [editing, setEditing] = useState(() => guardStorage(editor).editing === node.type.name)
+  const isHeader = node.type.name === REGION_TOP
+  // Derived from the guard's storage (single source of truth): the add
+  // commands and double-click both open the gate, and every open/close is
+  // followed by a dispatch, so this stays fresh.
+  const editing =
+    useFeatureState(editor, () => guardStorage(editor).editing === node.type.name) ?? false
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  const deactivate = () => {
-    setEditing(false)
-    const storage = guardStorage(editor)
-    if (storage.editing === node.type.name) storage.editing = null
-    // If the caret is still inside (Escape), push it out to the adjacent body
-    // position — otherwise typing would keep editing a "closed" region.
-    const { doc, selection } = editor.state
-    if (regionNameAt(selection.$from) === node.type.name) {
-      const headerSize = doc.firstChild?.type.name === 'documentHeader' ? doc.firstChild.nodeSize : 0
-      const footerSize = doc.lastChild?.type.name === 'documentFooter' ? doc.lastChild.nodeSize : 0
-      editor.commands.setTextSelection(isHeader ? headerSize + 1 : doc.content.size - footerSize - 1)
+  // If this region unmounts while open (Remove, undo, setJSON swap), don't
+  // leave the gate ajar for a future region of the same name.
+  useEffect(() => {
+    return () => {
+      const storage = guardStorage(editor)
+      if (storage.editing === node.type.name) storage.editing = null
     }
-  }
-  useDismissable(wrapperRef, deactivate, { enabled: editing })
+  }, [editor, node.type.name])
+
+  useDismissable(wrapperRef, () => closeRegion(editor, node.type.name), {
+    enabled: editing,
+    // Google-Docs exit rule: the ONLY clicks that keep the region open are on
+    // editor CONTROLS — toolbar/bubble buttons (so formatting applies inside
+    // the region, not to an expelled caret) and portaled popovers. Anything
+    // else — the document body, the white canvas, app chrome — closes it.
+    isOutsideClick: (target) => {
+      if (wrapperRef.current?.contains(target)) return false // the region itself
+      const el = target instanceof Element ? target : target.parentElement
+      if (!el) return true
+      if (el.closest('.document-editor-popup')) return false // portaled popovers
+      if (editor.view.dom.contains(el)) return true // elsewhere in the document
+      const shell = editor.view.dom.closest('.document-editor')
+      const isControl = Boolean(
+        shell?.contains(el) && el.closest('button, select, input, textarea, label'),
+      )
+      return !isControl
+    },
+  })
 
   const activate = (event: React.MouseEvent) => {
     // Open the gate BEFORE placing the caret, or the selection gate bounces it.
     guardStorage(editor).editing = node.type.name
-    setEditing(true)
     // The single-click caret was suppressed — place it at the click point now
     // (fallback: the region's first text position, e.g. when the double-click
     // landed on the label bar).
@@ -136,8 +180,8 @@ function regionNode(name: string, dataAttr: string, regionClass: string) {
   })
 }
 
-const DocumentHeader = regionNode('documentHeader', 'data-document-header', 'doc-region doc-region--header')
-const DocumentFooter = regionNode('documentFooter', 'data-document-footer', 'doc-region doc-region--footer')
+const DocumentHeader = regionNode(REGION_TOP, 'data-document-header', 'doc-region doc-region--header')
+const DocumentFooter = regionNode(REGION_BOTTOM, 'data-document-footer', 'doc-region doc-region--footer')
 
 /**
  * The normalized top-level sequence: at most one header (first), at most one
@@ -149,8 +193,8 @@ function normalizedRegions(doc: PMNode): PMNode[] | null {
   const body: PMNode[] = []
   doc.forEach((node) => {
     const name = node.type.name
-    if (name === 'documentHeader') headers.push(node)
-    else if (name === 'documentFooter') footers.push(node)
+    if (name === REGION_TOP) headers.push(node)
+    else if (name === REGION_BOTTOM) footers.push(node)
     else body.push(node)
   })
   if (headers.length === 0 && footers.length === 0) return null
@@ -196,27 +240,27 @@ const HeaderFooterGuard = Extension.create({
       // selection; INSIDE a region, only that region's content is selected.
       'Mod-a': ({ editor }) => {
         const { doc, selection } = editor.state
-        const first = doc.firstChild
-        const last = doc.lastChild
-        const headerSize = first?.type.name === 'documentHeader' ? first.nodeSize : 0
-        const footerSize = last?.type.name === 'documentFooter' ? last.nodeSize : 0
+        const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
         if (!headerSize && !footerSize) return false // no regions → default Cmd+A
 
-        // Caret inside a region → select that region's content only.
-        for (let depth = selection.$from.depth; depth > 0; depth--) {
-          const name = selection.$from.node(depth).type.name
-          if (name === 'documentHeader' || name === 'documentFooter') {
-            return editor.commands.setTextSelection({
-              from: selection.$from.start(depth),
-              to: selection.$from.end(depth),
-            })
-          }
+        // TextSelection.between resolves both ends into TEXT positions. Raw
+        // node-boundary positions (e.g. `end(depth)`, after a </p>) are not
+        // representable in the contenteditable — the next focus/DOM roundtrip
+        // would COLLAPSE the selection (and hide the bubble).
+        const select = (from: number, to: number) => {
+          editor.view.dispatch(
+            editor.state.tr.setSelection(
+              TextSelection.between(doc.resolve(from), doc.resolve(to)),
+            ),
+          )
+          return true
         }
-        // Caret in the body → select the body only.
-        return editor.commands.setTextSelection({
-          from: headerSize + 1,
-          to: doc.content.size - footerSize - 1,
-        })
+
+        const depth = regionDepthAt(selection.$from)
+        if (depth !== null) {
+          return select(selection.$from.start(depth), selection.$from.end(depth))
+        }
+        return select(bodyFrom, bodyTo)
       },
     }
   },
@@ -234,17 +278,20 @@ const HeaderFooterGuard = Extension.create({
           const selection = tr.selection
           if (!(selection instanceof GapCursor)) return true
           const { doc } = tr
-          if (selection.head === 0 && doc.firstChild?.type.name === 'documentHeader') return false
-          if (
-            selection.head === doc.content.size &&
-            doc.lastChild?.type.name === 'documentFooter'
-          ) {
+          if (selection.head === 0 && doc.firstChild?.type.name === REGION_TOP) return false
+          if (selection.head === doc.content.size && doc.lastChild?.type.name === REGION_BOTTOM) {
             return false
           }
           return true
         },
-        appendTransaction: (transactions, _oldState, newState) => {
-          if (transactions.some((tr) => tr.docChanged)) {
+        appendTransaction: (transactions, oldState, newState) => {
+          const docChanged = transactions.some((tr) => tr.docChanged)
+          if (docChanged) {
+            // The open region may have vanished (Remove, undo of add, setJSON
+            // swap) — don't leave the gate ajar for a future region.
+            if (storage.editing && !hasTopLevelNode(newState.doc, storage.editing)) {
+              storage.editing = null
+            }
             const desired = normalizedRegions(newState.doc)
             if (desired) {
               const tr = newState.tr
@@ -254,23 +301,36 @@ const HeaderFooterGuard = Extension.create({
             }
           }
 
+          // Deleting ALL of an open region's content strands the caret outside
+          // it: ProseMirror refills the schema hole (`block+`) and
+          // Selection.near crosses the isolating boundary. If an edit moved
+          // the caret out of the OPEN region while the region survived, pull
+          // it back to the region's first text position.
+          if (docChanged && storage.editing) {
+            const wasInside = regionNameAt(oldState.selection.$from) === storage.editing
+            const isInside = regionNameAt(newState.selection.$from) === storage.editing
+            if (wasInside && !isInside) {
+              const { footerSize } = regionBounds(newState.doc)
+              const contentStart =
+                storage.editing === REGION_TOP ? 1 : newState.doc.content.size - footerSize + 1
+              return newState.tr.setSelection(
+                TextSelection.near(newState.doc.resolve(contentStart), 1),
+              )
+            }
+          }
+
           // SELECTION GATE — regions are entered by DOUBLE-CLICK only. Any
           // selection landing inside a region that is not open for editing
           // (arrow keys, shift-selection, a load's initial selection…) is
           // clamped back to the body. Runs after every transaction, so there
           // is no path around it.
           const { doc, selection } = newState
-          const first = doc.firstChild
-          const last = doc.lastChild
-          const headerSize = first?.type.name === 'documentHeader' ? first.nodeSize : 0
-          const footerSize = last?.type.name === 'documentFooter' ? last.nodeSize : 0
+          const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
           if (!headerSize && !footerSize) return null
 
           const touched = regionNameAt(selection.$from) ?? regionNameAt(selection.$to)
           if (!touched || touched === storage.editing) return null
 
-          const bodyFrom = headerSize + 1
-          const bodyTo = doc.content.size - footerSize - 1
           const clamp = (pos: number) => Math.min(Math.max(pos, bodyFrom), bodyTo)
           const next = TextSelection.between(
             doc.resolve(clamp(selection.from)),
@@ -285,6 +345,23 @@ const HeaderFooterGuard = Extension.create({
 })
 
 /**
+ * Inserts the singleton region and opens its editing gate BEFORE focusing, so
+ * the caret is allowed in and the user can type right away (the node view
+ * mounts already in editing mode).
+ */
+function addRegion(editor: Editor, name: string, position: number, focusAt: 'start' | 'end'): boolean {
+  if (hasTopLevelNode(editor.state.doc, name)) return false
+  guardStorage(editor).editing = name
+  const applied = editor
+    .chain()
+    .insertContentAt(position, { type: name, content: [{ type: 'paragraph' }] })
+    .focus(focusAt)
+    .run()
+  if (!applied) guardStorage(editor).editing = null
+  return applied
+}
+
+/**
  * "Team" feature: a page header and footer. Each is a singleton block at the
  * top/bottom of the document (so it can hold rich content — text, merge fields…
  * — and the backend repeats it per PDF page). The hover "add" affordance is
@@ -294,33 +371,9 @@ export const HeaderFooterFeature = defineFeature({
   id: 'headerFooter',
   extensions: () => [DocumentHeader, DocumentFooter, HeaderFooterGuard],
   commands: {
-    'header.add': (editor) => {
-      if (docHasNode(editor.state.doc, 'documentHeader')) return false
-      // Open the gate BEFORE focusing, so the caret is allowed in and the
-      // user can type the header right away (the view mounts in editing mode).
-      guardStorage(editor).editing = 'documentHeader'
-      const applied = editor
-        .chain()
-        .insertContentAt(0, { type: 'documentHeader', content: [{ type: 'paragraph' }] })
-        .focus('start')
-        .run()
-      if (!applied) guardStorage(editor).editing = null
-      return applied
-    },
-    'footer.add': (editor) => {
-      if (docHasNode(editor.state.doc, 'documentFooter')) return false
-      guardStorage(editor).editing = 'documentFooter'
-      const applied = editor
-        .chain()
-        .insertContentAt(editor.state.doc.content.size, {
-          type: 'documentFooter',
-          content: [{ type: 'paragraph' }],
-        })
-        .focus('end')
-        .run()
-      if (!applied) guardStorage(editor).editing = null
-      return applied
-    },
+    'header.add': (editor) => addRegion(editor, REGION_TOP, 0, 'start'),
+    'footer.add': (editor) =>
+      addRegion(editor, REGION_BOTTOM, editor.state.doc.content.size, 'end'),
   },
   pageRegions: [
     {
@@ -328,14 +381,14 @@ export const HeaderFooterFeature = defineFeature({
       position: 'top',
       label: 'Add header',
       addCommandId: 'header.add',
-      nodeName: 'documentHeader',
+      nodeName: REGION_TOP,
     },
     {
       id: 'footer',
       position: 'bottom',
       label: 'Add footer',
       addCommandId: 'footer.add',
-      nodeName: 'documentFooter',
+      nodeName: REGION_BOTTOM,
     },
   ],
 })

@@ -56,26 +56,25 @@
     pointer-events: auto;
   }
 
-  /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
-  .document-editor__zoom {
-    overflow-x: auto;
+  /* The height chain, in one place: each link grows to fill the height handed
+     down by the consumer and stays content-sized otherwise (see the comment on
+     .document-editor__column). Breaking ONE link strands the page height. */
+  .document-editor__zoom,
+  .document-editor__scale,
+  .document-editor__surface {
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
+  .document-editor__zoom {
+    overflow-x: auto;
   }
 
   .document-editor__scale {
     width: var(--editor-page-width);
     transition: zoom 0.1s ease;
-    flex: 1 0 auto;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .document-editor__surface {
-    flex: 1 0 auto;
-    display: flex;
-    flex-direction: column;
   }
 
   /* The page: a flat content column — the CANVAS is white, the column itself

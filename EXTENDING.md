@@ -118,11 +118,27 @@ pageRegions: [{ id: 'header', position: 'top', label: 'Add header',
                 addCommandId: 'header.add', nodeName: 'documentHeader' }]
 ```
 
+**Editing semantics (Google-Docs style):** a region is entered by DOUBLE-click
+only — single clicks, arrow keys and shift-selection can't move the caret in.
+The moving parts, if you build your own region-like feature: an extension
+storage gate that names the open region (opened BEFORE focusing into it), an
+`appendTransaction` that clamps any selection landing in a closed region back
+to the body, and a node view that `preventDefault`s single-click mousedown and
+activates on double-click. `HeaderFooterFeature`
+(`src/features/custom/headerFooter.tsx`) is the reference implementation.
+
 **Empty state:** `renderEmptyState={(ctx) => <YourEmptyState/>}` renders your
 UI centered on the screen while the document is empty and removes it at the
 first content. The overlay is `pointer-events: none` (clicks reach the editor);
 your children are clickable — e.g. a "start from template" CTA calling
 `ctx.api.setJSON(template)`.
+
+Build templates against the SCHEMA, not assumptions: `setJSON` throws on nodes
+whose feature is disabled (see §7), so probe before emitting each block —
+`const has = (name) => Boolean(ctx.editor.schema.nodes[name])`. Note the
+distinction: `api.hasNode(name)` asks the current *document*;
+`ctx.editor.schema.nodes[name]` asks the enabled *feature set*. Reference
+consumer example: `src/app/contractTemplate.ts`.
 
 **The right rail is consumer-owned** — render anything in it via
 `renderRightBar`. Comments ship both a default panel and the data hook, so you

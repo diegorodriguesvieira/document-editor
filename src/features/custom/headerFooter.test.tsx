@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CreatedEditor } from '../../editor'
 import { renderEditor } from '../../test/editorHarness'
-import { guardStorage, HeaderFooterFeature } from './headerFooter'
+import { closeRegion, HeaderFooterFeature } from './headerFooter'
 
 const newEditor = () => renderEditor([HeaderFooterFeature])
 const content = (created: CreatedEditor) => created.api.getJSON().doc.content ?? []
@@ -19,8 +19,7 @@ describe('header/footer feature', () => {
     const created = newEditor()
     expect(created.api.exec('header.add')).toBe(true)
 
-    // Gate open for the new header, caret inside it.
-    expect(guardStorage(created.editor).editing).toBe('documentHeader')
+    // Caret inside the new header (the gate is open for it).
     const headerSize = created.editor.state.doc.firstChild!.nodeSize
     expect(created.editor.state.selection.from).toBeLessThan(headerSize)
 
@@ -29,7 +28,6 @@ describe('header/footer feature', () => {
     expect(created.api.getJSON().doc.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe(
       'Confidential',
     )
-    guardStorage(created.editor).editing = null
   })
 
   it('never adds a second header', () => {
@@ -112,19 +110,11 @@ describe('header/footer feature', () => {
 
   it('Cmd+A inside the header selects only the header content', () => {
     const created = newEditor()
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
-        ],
-      },
-    })
-    // The caret only lives inside a region while it's OPEN (double-click).
-    guardStorage(created.editor).editing = 'documentHeader'
+    // The realistic path into a region: add it (gate opens, caret inside)…
+    created.api.exec('header.add')
+    created.editor.commands.insertContent('head')
     created.editor.commands.focus()
-    created.editor.commands.setTextSelection(2) // caret inside the header
+
     created.editor.view.dom.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
     )
@@ -134,7 +124,7 @@ describe('header/footer feature', () => {
     expect(selected).toBe('head')
   })
 
-  it('keyboard/selection cannot enter a region — the caret is clamped back to the body', async () => {
+  it('keyboard/selection cannot enter a CLOSED region — the caret is clamped back to the body', async () => {
     const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
     created.api.setJSON({
@@ -154,12 +144,49 @@ describe('header/footer feature', () => {
     view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
     // …gets clamped back to the body start.
     expect(created.editor.state.selection.from).toBe(headerSize + 1)
+  })
 
-    // With the region OPEN for editing (double-click), the same selection sticks.
-    guardStorage(created.editor).editing = 'documentHeader'
+  it('deleting ALL of an open region keeps the caret inside it (typing refills the region)', () => {
+    const created = newEditor()
+    created.api.exec('header.add')
+    created.editor.commands.insertContent('titulo aqui')
+
+    // Cmd+A inside the region, then delete everything.
+    created.editor.commands.focus()
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
+    )
+    created.editor.commands.deleteSelection()
+
+    // The header is empty but the caret must still be INSIDE it…
+    const headerSize = created.editor.state.doc.firstChild!.nodeSize
+    expect(created.editor.state.selection.from).toBeLessThan(headerSize)
+
+    // …so typing refills the header, not the body.
+    created.editor.commands.insertContent('NOVO')
+    const content = created.api.getJSON().doc.content ?? []
+    expect(content[0]?.content?.[0]?.content?.[0]?.text).toBe('NOVO')
+  })
+
+  it('an OPEN region admits the caret; closeRegion expels it and seals the region', async () => {
+    const { TextSelection } = await import('@tiptap/pm/state')
+    const created = newEditor()
+    created.api.exec('header.add') // opens the gate, caret inside
+    const view = created.editor.view
+
+    // While open, a selection inside the region sticks.
     view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
     expect(created.editor.state.selection.from).toBe(2)
-    guardStorage(created.editor).editing = null
+
+    // Exit path (Escape / click elsewhere in the document → closeRegion):
+    // the gate shuts and the caret is expelled to the body start.
+    closeRegion(created.editor, 'documentHeader')
+    const headerSize = created.editor.state.doc.firstChild!.nodeSize
+    expect(created.editor.state.selection.from).toBe(headerSize + 1)
+
+    // And the region is sealed again.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
+    expect(created.editor.state.selection.from).toBe(headerSize + 1)
   })
 
   it('rejects the useless gap cursor above the header / below the footer', async () => {

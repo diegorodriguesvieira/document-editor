@@ -105,7 +105,7 @@ export default function App() {
                 <button
                   type="button"
                   className="empty-state__cta"
-                  onClick={() => ctx.editor && ctx.api.setJSON(contractTemplate(ctx.editor))}
+                  onClick={() => ctx.api.setJSON(contractTemplate(ctx.editor))}
                 >
                   Start from a template
                 </button>

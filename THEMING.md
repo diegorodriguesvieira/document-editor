@@ -54,7 +54,7 @@ so importing the file changes nothing until you override.
 | `--editor-border-table` | `#c7c7c7` | Table cell borders, affordance line |
 | `--editor-subtle-bg` | `#f1f3f4` | Rail hover, table header, `/`-icon chip |
 | `--editor-chrome-bg` | `#f8f9fa` | Conditional-block chrome |
-| `--editor-accent` | `#1a73e8` | Column-resize handle, "Add header" label |
+| `--editor-accent` | `#1a73e8` | Column-resize handle, "Add header" label, active page-region border |
 | `--editor-accent-ink` | `#0b57d0` | Pressed toolbar text, links, active swatch |
 | `--editor-accent-bg` | `#d3e3fd` | Pressed toolbar button background |
 | `--editor-toolbar-bg` | `#edf2fa` | Formatting toolbar background |
@@ -106,7 +106,8 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
-- **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`)
+- **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
+- **Empty state:** `.document-editor__empty-state` — a viewport-spanning `position: fixed` overlay (`pointer-events: none`, children clickable). Embedding the editor in a split pane? Restyle it (e.g. `position: absolute` under a positioned wrapper) so it centers over the editor, not the app.
 - **Features:** `.callout`, `.merge-field`, `.mf-modal`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`
 
 ## 4. Skipping the default entirely

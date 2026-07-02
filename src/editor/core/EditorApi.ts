@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { toDocumentJSON, type DocumentJSON } from './document'
+import { hasTopLevelNode, toDocumentJSON, type DocumentJSON } from './document'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -47,13 +47,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     canRedo: () => editor.can().redo?.() ?? false,
     isEmpty: () => editor.isEmpty,
     isSelectionEmpty: () => editor.state.selection.empty,
-    hasNode: (name) => {
-      const { doc } = editor.state
-      for (let i = 0; i < doc.childCount; i++) {
-        if (doc.child(i).type.name === name) return true
-      }
-      return false
-    },
+    hasNode: (name) => hasTopLevelNode(editor.state.doc, name),
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
       editor.commands.setContent(doc.doc)

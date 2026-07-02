@@ -11,7 +11,9 @@ import type { ResolvedFeatures } from '../core/registry'
 import { useDocumentEditor, type UseDocumentEditorOptions } from '../hooks/useDocumentEditor'
 
 export interface DocumentEditorRenderContext {
-  editor: Editor | null
+  /** Never null: the context is only built once the editor exists — render
+   *  props can use it directly, no guards. */
+  editor: Editor
   api: EditorApi
   resolved: ResolvedFeatures
 }
@@ -29,17 +31,14 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
   renderRightBar?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Shown centered on the SCREEN while the document is empty; disappears as
    *  soon as there is content. The overlay never steals clicks from the editor
-   *  (`pointer-events: none`; its children are clickable again). */
+   *  (`pointer-events: none`; its children are clickable again). It spans the
+   *  viewport (`position: fixed`) — intended for a full-page editor; embedded
+   *  layouts should restyle `.document-editor__empty-state` (see THEMING.md). */
   renderEmptyState?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Visual scale of the page (1 = 100%). */
   zoom?: number
 }
 
-/**
- * Drop-in editor: resolves the opt-in features, renders the toolbar, optional
- * left/right rails and the editable surface. Bars are swappable; the app never
- * touches `@tiptap/*` itself.
- */
 /** Screen-centered overlay, visible only while the document is empty. */
 function EmptyStateOverlay({
   ctx,
@@ -48,11 +47,16 @@ function EmptyStateOverlay({
   ctx: DocumentEditorRenderContext
   render: (ctx: DocumentEditorRenderContext) => ReactNode
 }) {
-  const isEmpty = useFeatureState(ctx.editor, (editor) => editor.isEmpty) ?? ctx.api.isEmpty()
+  const isEmpty = useFeatureState(ctx.editor, (editor) => editor.isEmpty) ?? false
   if (!isEmpty) return null
   return <div className="document-editor__empty-state">{render(ctx)}</div>
 }
 
+/**
+ * Drop-in editor: resolves the opt-in features, renders the toolbar, optional
+ * left/right rails and the editable surface. Bars are swappable; the app never
+ * touches `@tiptap/*` itself.
+ */
 export function DocumentEditor({
   renderToolbar,
   renderInsertBar,
@@ -62,7 +66,7 @@ export function DocumentEditor({
   ...options
 }: DocumentEditorProps) {
   const { editor, api, resolved } = useDocumentEditor(options)
-  const ctx = api ? { editor, api, resolved } : null
+  const ctx = editor && api ? { editor, api, resolved } : null
 
   const toolbar = ctx
     ? renderToolbar
