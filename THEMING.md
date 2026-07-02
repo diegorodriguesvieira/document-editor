@@ -66,7 +66,7 @@ so importing the file changes nothing until you override.
 | `--editor-inverse-fg` | `#e3e3e3` | Text on the above |
 | `--editor-inverse-accent` | `#8ab4f8` | Bubble toolbar pressed state |
 | `--editor-page-width` | `800px` | Content column width (the text measure), centered in the viewport |
-| `--editor-page-min-height` | `60vh` | Minimum editing area (click/scroll room below short content) |
+| `--editor-page-min-height` | `calc(100vh - 160px)` | FALLBACK page height. Preferred: set it to `auto` and give `.document-editor` a sized parent (flex column, editor as `flex: 1`) — the SDK's internal chain carries the height to the page, so the footer lands at the bottom for ANY app-header height, no math |
 | `--editor-page-padding` | `32px 0 96px` | Vertical breathing room around the content (no paper card — the canvas is the page) |
 | `--editor-sticky-offset` | `0px` | Top offset of the sticky toolbar/insert rail — set it to your app header's height |
 | `--editor-rail-gutter` | `32px` | Distance between the side rails and the browser edge |

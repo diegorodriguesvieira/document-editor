@@ -1,10 +1,35 @@
 /* HeaderFooterFeature — rendered header/footer regions. */
 @layer editor {
+  /* Google-Docs behavior: the FOOTER sits at the BOTTOM of the page's
+     min-height even when the body is short, and gets pushed further down as
+     content grows past it. Scoped with :has() so documents without a footer
+     keep the plain block flow (this layout change is feature-owned). The
+     `.node-documentFooter` wrapper is TipTap's stable node-view wrapper class. */
+  .document-editor__surface .ProseMirror:has(> .node-documentFooter) {
+    display: flex;
+    flex-direction: column;
+    /* The page's big bottom "click room" is pointless under a pinned footer —
+       shrink it so the footer actually reaches the bottom of the page area. */
+    padding-bottom: 16px;
+  }
+
+  .document-editor__surface .ProseMirror > .node-documentFooter {
+    margin-top: auto;
+  }
+
+  /* Inactive by default (single click doesn't enter — double-click does). */
   .document-editor__surface .doc-region {
     position: relative;
     padding: 8px 12px;
     border: 1px dashed var(--editor-border-table);
     border-radius: 6px;
+    cursor: default;
+  }
+
+  .document-editor__surface .doc-region--editing {
+    border-style: solid;
+    border-color: var(--editor-accent);
+    cursor: auto;
   }
 
   .document-editor__surface .doc-region--header {

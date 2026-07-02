@@ -27,9 +27,17 @@
     margin-right: var(--editor-rail-gutter);
   }
 
+  /* Height chain: when the consumer gives .document-editor a height (e.g. a
+     flex-column parent with the editor as flex:1), it flows down to the page —
+     so the page fills "viewport minus WHATEVER chrome the app has" with zero
+     math, any header height. Without a sized parent, everything is content-
+     sized and --editor-page-min-height is the fallback page height.
+     `flex: 1 0 auto` = grow to fill, never shrink, content-sized otherwise. */
   .document-editor__column {
     grid-column: 2;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Empty state: centered on the SCREEN (fixed, so scroll/layout don't move
@@ -51,16 +59,29 @@
   /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
   .document-editor__zoom {
     overflow-x: auto;
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .document-editor__scale {
     width: var(--editor-page-width);
     transition: zoom 0.1s ease;
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .document-editor__surface {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
   }
 
   /* The page: a flat content column — the CANVAS is white, the column itself
      has no card chrome (no background/border/shadow). */
   .document-editor__surface .ProseMirror {
+    flex: 1 0 auto;
     min-height: var(--editor-page-min-height);
     padding: var(--editor-page-padding);
     outline: none;

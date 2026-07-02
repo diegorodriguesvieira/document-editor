@@ -26,7 +26,16 @@ export function BubbleToolbar({ editor, api, resolved, filter, className }: Bubb
   if (!editor) return null
 
   return (
-    <BubbleMenu editor={editor} className={className ?? 'bubble-toolbar'}>
+    <BubbleMenu
+      editor={editor}
+      className={className ?? 'bubble-toolbar'}
+      // Presentation rule: no bubble over "nothing" — a select-all on an EMPTY
+      // document produces a technically-non-empty selection (the empty
+      // paragraph) that would summon the bubble for no reason.
+      shouldShow={({ editor: current }) =>
+        current.isEditable && !current.state.selection.empty && !current.isEmpty
+      }
+    >
       <EditorToolbar
         editor={editor}
         api={api}

@@ -9,6 +9,10 @@
   line-height: 1.5;
   /* Our sticky app header is 56px tall — the editor's sticky toolbar/rail sit below it. */
   --editor-sticky-offset: 56px;
+  /* The page height comes from the layout (flex chain below), not from math:
+     the canvas is `flex: 1` of a 100vh column, so the editor fills "viewport
+     minus the header" WHATEVER the header's height is. Neutralize the fallback. */
+  --editor-page-min-height: auto;
 }
 
 * {
@@ -79,7 +83,15 @@ body {
   flex: 1;
   /* No horizontal padding: the SDK's --editor-rail-gutter measures the rails'
      32px from the browser edge itself. */
-  padding: 24px 0 80px;
+  padding: 24px 0;
+  /* Hand the canvas height to the editor (SDK's internal chain carries it down
+     to the page — footer lands at the bottom for ANY header height). */
+  display: flex;
+  flex-direction: column;
+}
+
+.app__canvas > * {
+  flex: 1 0 auto;
 }
 
 /* Right rail wrapper — the app composes ZoomRail + CommentsPanel in here. */

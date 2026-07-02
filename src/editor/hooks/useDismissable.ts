@@ -41,14 +41,17 @@ export function useDismissable(
       close()
     }
     document.addEventListener('mousedown', onDown, true)
-    document.addEventListener('keydown', onKey)
+    // Capture phase: ProseMirror consumes Escape (preventDefault) inside the
+    // editable, which would starve a bubble-phase listener — capture runs
+    // first. The defaultPrevented check still layers multiple dismissables.
+    document.addEventListener('keydown', onKey, true)
     if (closeOnScroll) {
       window.addEventListener('scroll', close, true)
       window.addEventListener('resize', close)
     }
     return () => {
       document.removeEventListener('mousedown', onDown, true)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
       if (closeOnScroll) {
         window.removeEventListener('scroll', close, true)
         window.removeEventListener('resize', close)

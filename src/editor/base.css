@@ -41,9 +41,11 @@
     --editor-inverse-accent: #8ab4f8;
 
     /* Page: a flat, centered content column on a white canvas (no paper card).
-       Width = the text measure; padding is vertical breathing room only. */
+       Width = the text measure; padding is vertical breathing room only.
+       min-height ≈ the viewport minus typical app chrome, so a page footer
+       lands at the BOTTOM of the screen — tune it to your app's chrome. */
     --editor-page-width: 800px;
-    --editor-page-min-height: 60vh;
+    --editor-page-min-height: calc(100vh - 160px);
     --editor-page-padding: 32px 0 96px;
 
     /* Layout: how far from the viewport top the sticky toolbar/rail sit —
