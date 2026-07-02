@@ -66,8 +66,8 @@ export const CONDITION_SIGNATURES = Object.fromEntries(
 
 /** A comparison operand: a document-variable reference, or a raw typed value. */
 export type ConditionOperand =
-  | { kind: 'variable'; ref: string }
-  | { kind: 'literal'; value: string | number | boolean }
+  | { type: 'variable'; ref: string }
+  | { type: 'literal'; value: string | number | boolean }
 
 /** One comparison. `null` holes are draft state (author mid-edit). */
 export interface ConditionLeaf {
@@ -90,8 +90,8 @@ function isOperandShape(value: unknown): value is ConditionOperand | null {
   if (value === null) return true
   if (typeof value !== 'object') return false
   const operand = value as Record<string, unknown>
-  if (operand.kind === 'variable') return typeof operand.ref === 'string'
-  if (operand.kind === 'literal') {
+  if (operand.type === 'variable') return typeof operand.ref === 'string'
+  if (operand.type === 'literal') {
     const type = typeof operand.value
     // Finite only: Infinity/NaN aren't JSON — they'd stringify to null in
     // data-condition and fail the backend validator after the publish gate.
@@ -147,7 +147,7 @@ export function isCompleteCondition(value: unknown): boolean {
     return (
       cond.op != null &&
       cond.params.length === CONDITION_SIGNATURES[cond.op] &&
-      cond.params.every((p) => p != null && (p.kind !== 'variable' || p.ref !== ''))
+      cond.params.every((p) => p != null && (p.type !== 'variable' || p.ref !== ''))
     )
   }
   return complete(value)
@@ -190,7 +190,7 @@ function literalFromInput(text: string): ConditionOperand | null {
   if (text === '') return null
   const trimmed = text.trim()
   const num = NUMBER_LIKE.test(trimmed) ? Number(trimmed) : NaN
-  return { kind: 'literal', value: Number.isFinite(num) ? num : text }
+  return { type: 'literal', value: Number.isFinite(num) ? num : text }
 }
 
 /** The literal face of the right-hand operand. Holds the RAW text locally —
@@ -230,10 +230,10 @@ export function ConditionEditor({
   // Which face the right-hand operand shows while it's still null (draft).
   // With an operand present, the face is DERIVED from the data — local state
   // would go stale under undo/external changes while the panel is open.
-  const [draftRightKind, setDraftRightKind] = useState<'literal' | 'variable'>(
-    right?.kind === 'variable' ? 'variable' : 'literal',
+  const [draftRightType, setDraftRightType] = useState<'literal' | 'variable'>(
+    right?.type === 'variable' ? 'variable' : 'literal',
   )
-  const rightKind = right?.kind ?? draftRightKind
+  const rightType = right?.type ?? draftRightType
   if (!leaf) {
     return (
       <div className="cond-editor">
@@ -266,14 +266,14 @@ export function ConditionEditor({
         <span>Variable</span>
         <select
           aria-label="Variable"
-          value={left?.kind === 'variable' ? left.ref : ''}
+          value={left?.type === 'variable' ? left.ref : ''}
           onChange={(event) =>
             commit({
               ...leaf,
               params: withParam(
                 leaf.params,
                 0,
-                event.target.value ? { kind: 'variable', ref: event.target.value } : null,
+                event.target.value ? { type: 'variable', ref: event.target.value } : null,
               ),
             })
           }
@@ -309,9 +309,9 @@ export function ConditionEditor({
             <span>Compare with</span>
             <select
               aria-label="Compare with"
-              value={rightKind}
+              value={rightType}
               onChange={(event) => {
-                setDraftRightKind(event.target.value as 'literal' | 'variable')
+                setDraftRightType(event.target.value as 'literal' | 'variable')
                 // The old operand belongs to the other face — clear it.
                 commit({ ...leaf, params: withParam(leaf.params, 1, null) })
               }}
@@ -320,19 +320,19 @@ export function ConditionEditor({
               <option value="variable">a variable</option>
             </select>
           </label>
-          {rightKind === 'variable' ? (
+          {rightType === 'variable' ? (
             <label className="cond-editor__field">
               <span>Variable</span>
               <select
                 aria-label="Comparison variable"
-                value={right?.kind === 'variable' ? right.ref : ''}
+                value={right?.type === 'variable' ? right.ref : ''}
                 onChange={(event) =>
                   commit({
                     ...leaf,
                     params: withParam(
                       leaf.params,
                       1,
-                      event.target.value ? { kind: 'variable', ref: event.target.value } : null,
+                      event.target.value ? { type: 'variable', ref: event.target.value } : null,
                     ),
                   })
                 }
@@ -349,7 +349,7 @@ export function ConditionEditor({
             <label className="cond-editor__field">
               <span>Value</span>
               <LiteralValueInput
-                initial={right?.kind === 'literal' ? String(right.value) : ''}
+                initial={right?.type === 'literal' ? String(right.value) : ''}
                 onCommit={(text) =>
                   commit({ ...leaf, params: withParam(leaf.params, 1, literalFromInput(text)) })
                 }
@@ -368,7 +368,7 @@ export function ConditionEditor({
 
 function operandText(operand: ConditionOperand | null, variables: DocumentVariable[]): string {
   if (!operand) return '…'
-  if (operand.kind === 'variable')
+  if (operand.type === 'variable')
     return variables.find((v) => v.id === operand.ref)?.label ?? operand.ref
   return String(operand.value)
 }

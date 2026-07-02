@@ -84,8 +84,8 @@ const KITCHEN_SINK = {
               {
                 op: 'EQUALS',
                 params: [
-                  { kind: 'variable', ref: 'pais' },
-                  { kind: 'literal', value: 'brazil' },
+                  { type: 'variable', ref: 'pais' },
+                  { type: 'literal', value: 'brazil' },
                 ],
               },
             ],

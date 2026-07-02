@@ -41,8 +41,8 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
   const field = (id: string, label: string): Node =>
     has('mergeField') ? { type: 'mergeField', attrs: { id, label } } : text(`{${label}}`)
 
-  const cell = (kind: 'tableHeader' | 'tableCell', ...content: Node[]): Node => ({
-    type: kind,
+  const cell = (type: 'tableHeader' | 'tableCell', ...content: Node[]): Node => ({
+    type,
     content: [paragraph(...content)],
   })
   const row = (label: string, value: Node): Node => ({
@@ -118,8 +118,8 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
               {
                 op: 'GREATER_THAN',
                 params: [
-                  { kind: 'variable', ref: 'valor.mensal' },
-                  { kind: 'literal', value: 10000 },
+                  { type: 'variable', ref: 'valor.mensal' },
+                  { type: 'literal', value: 10000 },
                 ],
               },
             ],
@@ -136,8 +136,8 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
                   {
                     op: 'EQUALS',
                     params: [
-                      { kind: 'variable', ref: 'contrato.vigencia' },
-                      { kind: 'literal', value: 12 },
+                      { type: 'variable', ref: 'contrato.vigencia' },
+                      { type: 'literal', value: 12 },
                     ],
                   },
                 ],

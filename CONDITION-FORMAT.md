@@ -16,7 +16,7 @@ O documento contém blocos condicionais (`conditionalBlock`). O backend avalia a
 |---|---|---|
 | Doc JSON (attrs) | `{ "variable": "...", "condition": "EQUALS", "value": "..." }` | `{ "condition": { "all": [ ... ] } }` — objeto único, recursivo |
 | HTML | 3 atributos: `data-variable`, `data-condition` (string do operador), `data-value` | 1 atributo: `data-condition` (JSON serializado) |
-| Operandos | `value` sempre literal string; impossível comparar variável com variável | operandos tipados `{kind: "variable"}` \| `{kind: "literal"}`; literais com tipo JSON nativo (`18`, não `"18"`) |
+| Operandos | `value` sempre literal string; impossível comparar variável com variável | operandos tipados `{type: "variable"}` \| `{type: "literal"}`; literais com tipo JSON nativo (`18`, não `"18"`) |
 | Multi-condição | só por aninhamento de blocos | `all` (AND) / `any` (OR) dentro de um mesmo bloco, recursivos |
 
 ---
@@ -37,8 +37,8 @@ interface Leaf {
 }
 
 type Operand =
-  | { kind: 'variable'; ref: string }                       // referência a uma variável do documento
-  | { kind: 'literal';  value: string | number | boolean }  // valor bruto, tipado
+  | { type: 'variable'; ref: string }                       // referência a uma variável do documento
+  | { type: 'literal';  value: string | number | boolean }  // valor bruto, tipado
 
 type ConditionOp =
   | 'EXISTS' | 'NOT_EXISTS'
@@ -89,8 +89,8 @@ Operador desconhecido ou aridade errada = **erro de validação** (§5), nunca i
 
 ### 2.3 Resolução de operandos
 
-- `{kind: 'variable', ref}`: lookup de `ref` no mapa **flat** de variáveis que o backend já usa para merge fields (mesmos ids — ex.: `client.name`, `valor.mensal`). **`ref` é chave opaca**: o `.` faz parte do id, NÃO é traversal de objeto aninhado — não fazer split. Usar lookup de chave própria (`Object.hasOwn` ou equivalente): refs vindas do documento não podem alcançar herança/prototype chain (`"toString"`, `"constructor"`, ...). Variável fora do mapa (ou com valor `null`) resolve para **ausente** — não é erro; avalia pelas regras do §2.4.
-- `{kind: 'literal', value}`: o próprio `value`, já com tipo JSON (string, number ou boolean).
+- `{type: 'variable', ref}`: lookup de `ref` no mapa **flat** de variáveis que o backend já usa para merge fields (mesmos ids — ex.: `client.name`, `valor.mensal`). **`ref` é chave opaca**: o `.` faz parte do id, NÃO é traversal de objeto aninhado — não fazer split. Usar lookup de chave própria (`Object.hasOwn` ou equivalente): refs vindas do documento não podem alcançar herança/prototype chain (`"toString"`, `"constructor"`, ...). Variável fora do mapa (ou com valor `null`) resolve para **ausente** — não é erro; avalia pelas regras do §2.4.
+- `{type: 'literal', value}`: o próprio `value`, já com tipo JSON (string, number ou boolean).
 
 ### 2.4 Coerção e valores ausentes — regras normativas
 
@@ -135,7 +135,7 @@ Nenhum parsing extra: `attrs.condition` já é o objeto nativo.
   "attrs": {
     "condition": {
       "all": [
-        { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.name" }, { "kind": "literal", "value": "joao" } ] }
+        { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.name" }, { "type": "literal", "value": "joao" } ] }
       ]
     }
   },
@@ -156,7 +156,7 @@ O editor passa a emitir **um único atributo** `data-condition` contendo o JSON 
 
 <!-- DEPOIS: -->
 <div data-conditional-block class="conditional-block"
-     data-condition="{&quot;all&quot;:[{&quot;op&quot;:&quot;EQUALS&quot;,&quot;params&quot;:[{&quot;kind&quot;:&quot;variable&quot;,&quot;ref&quot;:&quot;client.name&quot;},{&quot;kind&quot;:&quot;literal&quot;,&quot;value&quot;:&quot;joao&quot;}]}]}">
+     data-condition="{&quot;all&quot;:[{&quot;op&quot;:&quot;EQUALS&quot;,&quot;params&quot;:[{&quot;type&quot;:&quot;variable&quot;,&quot;ref&quot;:&quot;client.name&quot;},{&quot;type&quot;:&quot;literal&quot;,&quot;value&quot;:&quot;joao&quot;}]}]}">
   <p>hello 1</p>
 </div>
 ```
@@ -207,13 +207,13 @@ function validateCondition(cond, path = 'condition', depth = 0, state = { leaves
     throw new Error(`${path}: op ${cond.op} expects ${arity} params, got ${cond.params?.length}`)
   cond.params.forEach((p, i) => {
     if (p == null) throw new Error(`${path}.params[${i}]: incomplete (null) — draft condition`)
-    if (p.kind === 'variable') {
+    if (p.type === 'variable') {
       if (typeof p.ref !== 'string' || p.ref === '') throw new Error(`${path}.params[${i}]: invalid variable ref`)
-    } else if (p.kind === 'literal') {
+    } else if (p.type === 'literal') {
       if (!['string', 'number', 'boolean'].includes(typeof p.value))
         throw new Error(`${path}.params[${i}]: invalid literal type`)
     } else {
-      throw new Error(`${path}.params[${i}]: unknown kind ${JSON.stringify(p?.kind)}`)
+      throw new Error(`${path}.params[${i}]: unknown type ${JSON.stringify(p?.type)}`)
     }
   })
 }
@@ -242,7 +242,7 @@ Consequência intencional do default do editor (§2.1): um bloco inserido e nunc
 
 ```js
 function resolveOperand(operand, variables) {
-  if (operand.kind === 'variable') {
+  if (operand.type === 'variable') {
     // hasOwn: refs vindas do documento não podem alcançar a prototype chain
     // ("toString", "constructor", ...). `ref` é chave OPACA — sem split em ".".
     return Object.hasOwn(variables, operand.ref) ? variables[operand.ref] : undefined
@@ -300,8 +300,8 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 ```json
 { "all": [
   { "op": "EQUALS", "params": [
-    { "kind": "variable", "ref": "client.name" },
-    { "kind": "literal", "value": "joao" }
+    { "type": "variable", "ref": "client.name" },
+    { "type": "literal", "value": "joao" }
   ] }
 ] }
 ```
@@ -311,8 +311,8 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 ```json
 { "all": [
   { "op": "EQUALS", "params": [
-    { "kind": "variable", "ref": "client.age" },
-    { "kind": "variable", "ref": "brazilianLegalAge" }
+    { "type": "variable", "ref": "client.age" },
+    { "type": "variable", "ref": "brazilianLegalAge" }
   ] }
 ] }
 ```
@@ -321,7 +321,7 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 
 ```json
 { "all": [
-  { "op": "EXISTS", "params": [ { "kind": "variable", "ref": "client.cnpj" } ] }
+  { "op": "EXISTS", "params": [ { "type": "variable", "ref": "client.cnpj" } ] }
 ] }
 ```
 
@@ -329,8 +329,8 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 
 ```json
 { "all": [
-  { "op": "GREATER_THAN", "params": [ { "kind": "variable", "ref": "valor.mensal" }, { "kind": "literal", "value": 10000 } ] },
-  { "op": "EQUALS",       "params": [ { "kind": "variable", "ref": "prazo.meses" },  { "kind": "literal", "value": 12 } ] }
+  { "op": "GREATER_THAN", "params": [ { "type": "variable", "ref": "valor.mensal" }, { "type": "literal", "value": 10000 } ] },
+  { "op": "EQUALS",       "params": [ { "type": "variable", "ref": "prazo.meses" },  { "type": "literal", "value": 12 } ] }
 ] }
 ```
 
@@ -338,8 +338,8 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 
 ```json
 { "any": [
-  { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.country" }, { "kind": "literal", "value": "Brazil" } ] },
-  { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.country" }, { "kind": "literal", "value": "Portugal" } ] }
+  { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.country" }, { "type": "literal", "value": "Brazil" } ] },
+  { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.country" }, { "type": "literal", "value": "Portugal" } ] }
 ] }
 ```
 
@@ -348,17 +348,17 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 ```json
 { "any": [
   { "all": [
-    { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.type" },       { "kind": "literal", "value": "PJ" } ] },
-    { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.taxRegime" },  { "kind": "literal", "value": "simples" } ] }
+    { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.type" },       { "type": "literal", "value": "PJ" } ] },
+    { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.taxRegime" },  { "type": "literal", "value": "simples" } ] }
   ] },
-  { "op": "EQUALS", "params": [ { "kind": "variable", "ref": "client.type" }, { "kind": "literal", "value": "PF" } ] }
+  { "op": "EQUALS", "params": [ { "type": "variable", "ref": "client.type" }, { "type": "literal", "value": "PF" } ] }
 ] }
 ```
 
 **Rascunho (deve ser REJEITADO pela validação):**
 
 ```json
-{ "all": [ { "op": null, "params": [ { "kind": "variable", "ref": "client.name" }, null ] } ] }
+{ "all": [ { "op": null, "params": [ { "type": "variable", "ref": "client.name" }, null ] } ] }
 ```
 
 **Mapeamento formato antigo → novo** (para atualizar fixtures/templates):
@@ -368,14 +368,14 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 { "variable": "valor.mensal", "condition": "GREATER_THAN", "value": "10000" }
 // novo (note o literal virando número — operador de comparação numérica):
 { "all": [ { "op": "GREATER_THAN", "params": [
-  { "kind": "variable", "ref": "valor.mensal" },
-  { "kind": "literal", "value": 10000 }
+  { "type": "variable", "ref": "valor.mensal" },
+  { "type": "literal", "value": 10000 }
 ] } ] }
 
 // antigo (unário — value era null/ignorado):
 { "variable": "client.cnpj", "condition": "EXISTS", "value": null }
 // novo:
-{ "all": [ { "op": "EXISTS", "params": [ { "kind": "variable", "ref": "client.cnpj" } ] } ] }
+{ "all": [ { "op": "EXISTS", "params": [ { "type": "variable", "ref": "client.cnpj" } ] } ] }
 ```
 
 **Aninhamento de blocos (inalterado — AND por contenção):**
@@ -409,7 +409,7 @@ Uso no render: para cada `conditionalBlock`, `validateCondition` → `evaluateCo
 Documentadas apenas para que ninguém "invente" um formato diferente quando chegarem:
 
 - **`BETWEEN`** (aridade 3: `[valor, min, max]`) — entra como nova linha em `SIGNATURES`, sem mudança de forma.
-- **Operando computado** `{ "kind": "conditional", "if": <Condition>, "then": <Operand>, "else": <Operand> }` — novo `kind`, avaliado como `evaluate(if) ? resolve(then) : resolve(else)`.
+- **Operando computado** `{ "type": "conditional", "if": <Condition>, "then": <Operand>, "else": <Operand> }` — novo `type`, avaliado como `evaluate(if) ? resolve(then) : resolve(else)`.
 - **ELSE de bloco** (`condição ? conteúdo A : conteúdo B`) — extensão do **nó** `conditionalBlock`, não deste formato de condição.
 - **Combinador `not`** — se necessário; hoje os operadores negados (`NOT_EQUALS`, `NOT_EXISTS`) cobrem os casos.
 

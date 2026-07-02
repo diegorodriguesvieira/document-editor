@@ -17,7 +17,7 @@ import {
 
 /** Canonical single-comparison condition: `ref` EXISTS. */
 const existsCondition = (ref: string): Condition => ({
-  all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref }] }],
+  all: [{ op: 'EXISTS', params: [{ type: 'variable', ref }] }],
 })
 
 /** Canonical `ref` EQUALS `value` condition (typed literal). */
@@ -26,8 +26,8 @@ const equalsCondition = (ref: string, value: string | number): Condition => ({
     {
       op: 'EQUALS',
       params: [
-        { kind: 'variable', ref },
-        { kind: 'literal', value },
+        { type: 'variable', ref },
+        { type: 'literal', value },
       ],
     },
   ],
@@ -158,7 +158,7 @@ describe('conditional block', () => {
   it('degrades prototype-chain and wrong-arity ops to a draft (never a fake operator)', () => {
     for (const condition of [
       { op: 'toString', params: [] }, // Object.prototype key ≠ operator
-      { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }, null] }, // unary with 2 params
+      { op: 'EXISTS', params: [{ type: 'variable', ref: 'a' }, null] }, // unary with 2 params
     ]) {
       const created = renderEditor([ConditionalBlockFeature])
       created.editor.commands.insertContent(
@@ -170,7 +170,7 @@ describe('conditional block', () => {
   })
 
   it('caps the pasted condition tree: over-deep and over-wide payloads degrade to a draft', () => {
-    const LEAF = { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }] }
+    const LEAF = { op: 'EXISTS', params: [{ type: 'variable', ref: 'a' }] }
     const deep = (levels: number) => {
       let c: unknown = LEAF
       for (let i = 0; i < levels; i++) c = { all: [c] }
@@ -193,7 +193,7 @@ describe('conditional block', () => {
 
   it('round-trips a draft condition (null holes) through HTML unchanged', () => {
     const partialDraft: Condition = {
-      all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'gross.salary' }, null] }],
+      all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'gross.salary' }, null] }],
     }
     const source = renderEditor([ConditionalBlockFeature])
     source.api.setJSON({
@@ -246,11 +246,11 @@ describe('isCompleteCondition', () => {
     expect(
       isCompleteCondition({
         any: [
-          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }] },
+          { op: 'EXISTS', params: [{ type: 'variable', ref: 'a' }] },
           {
             all: [
-              { op: 'EQUALS', params: [{ kind: 'variable', ref: 'b' }, { kind: 'literal', value: 1 }] },
-              { op: 'EXISTS', params: [{ kind: 'variable', ref: 'c' }] },
+              { op: 'EQUALS', params: [{ type: 'variable', ref: 'b' }, { type: 'literal', value: 1 }] },
+              { op: 'EXISTS', params: [{ type: 'variable', ref: 'c' }] },
             ],
           },
         ],
@@ -265,28 +265,28 @@ describe('isCompleteCondition', () => {
     expect(isCompleteCondition({ all: [] })).toBe(false)
     // Missing second param for a binary operator.
     expect(
-      isCompleteCondition({ all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'a' }] }] }),
+      isCompleteCondition({ all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'a' }] }] }),
     ).toBe(false)
     // Unary operator carrying a stray second param.
     expect(
       isCompleteCondition({
-        all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: 'a' }, { kind: 'literal', value: 1 }] }],
+        all: [{ op: 'EXISTS', params: [{ type: 'variable', ref: 'a' }, { type: 'literal', value: 1 }] }],
       }),
     ).toBe(false)
     expect(
-      isCompleteCondition({ all: [{ op: 'BETWEEN', params: [{ kind: 'variable', ref: 'a' }] }] }),
+      isCompleteCondition({ all: [{ op: 'BETWEEN', params: [{ type: 'variable', ref: 'a' }] }] }),
     ).toBe(false)
     // A node can't be two forms at once.
     expect(isCompleteCondition({ all: [existsCondition('a')], any: [] })).toBe(false)
     // Empty variable ref: shape-valid (paste can carry it) but not publishable —
     // the backend rejects it (spec §4 "invalid variable ref").
     expect(
-      isCompleteCondition({ all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: '' }] }] }),
+      isCompleteCondition({ all: [{ op: 'EXISTS', params: [{ type: 'variable', ref: '' }] }] }),
     ).toBe(false)
     // Infinity isn't JSON — it would stringify to null in data-condition.
     expect(
       isCompleteCondition({
-        all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'a' }, { kind: 'literal', value: Infinity }] }],
+        all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'a' }, { type: 'literal', value: Infinity }] }],
       }),
     ).toBe(false)
   })
@@ -569,8 +569,8 @@ describe('<ConditionEditor />', () => {
         {
           op: 'GREATER_THAN',
           params: [
-            { kind: 'variable', ref: 'gross.salary' },
-            { kind: 'literal', value: 10000 },
+            { type: 'variable', ref: 'gross.salary' },
+            { type: 'literal', value: 10000 },
           ],
         },
       ],
@@ -593,8 +593,8 @@ describe('<ConditionEditor />', () => {
         {
           op: 'EQUALS',
           params: [
-            { kind: 'variable', ref: 'gross.salary' },
-            { kind: 'variable', ref: 'company.name' },
+            { type: 'variable', ref: 'gross.salary' },
+            { type: 'variable', ref: 'company.name' },
           ],
         },
       ],
@@ -612,7 +612,7 @@ describe('<ConditionEditor />', () => {
     await user.selectOptions(screen.getByLabelText('Condition'), 'EXISTS')
 
     expect(last).toEqual({
-      all: [{ op: 'EXISTS', params: [{ kind: 'variable', ref: 'gross.salary' }] }],
+      all: [{ op: 'EXISTS', params: [{ type: 'variable', ref: 'gross.salary' }] }],
     })
     expect(isCompleteCondition(last)).toBe(true)
   })
@@ -629,7 +629,7 @@ describe('<ConditionEditor />', () => {
 
     // The literal belongs to the other face — it must not linger in params[1].
     expect(last).toEqual({
-      all: [{ op: 'EQUALS', params: [{ kind: 'variable', ref: 'gross.salary' }, null] }],
+      all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'gross.salary' }, null] }],
     })
     expect(isCompleteCondition(last)).toBe(false)
   })
@@ -647,23 +647,23 @@ describe('<ConditionEditor />', () => {
     }
 
     await user.type(value, '0001') // leading zeros: not a JSON number → stays a string
-    expect(lastLiteral()).toEqual({ kind: 'literal', value: '0001' })
+    expect(lastLiteral()).toEqual({ type: 'literal', value: '0001' })
 
     await user.clear(value)
     await user.type(value, '1e3') // JSON exponent form → number
-    expect(lastLiteral()).toEqual({ kind: 'literal', value: 1000 })
+    expect(lastLiteral()).toEqual({ type: 'literal', value: 1000 })
 
     await user.clear(value)
     await user.type(value, '-3.5')
-    expect(lastLiteral()).toEqual({ kind: 'literal', value: -3.5 })
+    expect(lastLiteral()).toEqual({ type: 'literal', value: -3.5 })
 
     await user.clear(value)
     await user.type(value, '1e999') // overflows to Infinity → must stay a string (JSON-safe)
-    expect(lastLiteral()).toEqual({ kind: 'literal', value: '1e999' })
+    expect(lastLiteral()).toEqual({ type: 'literal', value: '1e999' })
 
     await user.clear(value)
     await user.type(value, '1.2.3') // not a number → free text
-    expect(lastLiteral()).toEqual({ kind: 'literal', value: '1.2.3' })
+    expect(lastLiteral()).toEqual({ type: 'literal', value: '1.2.3' })
   })
 
   it('does not canonicalize the value input while typing ("1.50" keeps its trailing zero)', async () => {
@@ -677,15 +677,15 @@ describe('<ConditionEditor />', () => {
     await user.type(value, '1.50')
     expect(value.value).toBe('1.50') // the box shows what was typed…
     expect((last as unknown as { all: [{ params: unknown[] }] }).all[0].params[1]).toEqual({
-      kind: 'literal',
+      type: 'literal',
       value: 1.5, // …while the stored literal is the parsed number
     })
   })
 
   it('refuses to flatten a multi-condition tree it cannot represent', () => {
     const leaves = [
-      { op: 'EXISTS' as const, params: [{ kind: 'variable' as const, ref: 'a' }] },
-      { op: 'EXISTS' as const, params: [{ kind: 'variable' as const, ref: 'b' }] },
+      { op: 'EXISTS' as const, params: [{ type: 'variable' as const, ref: 'a' }] },
+      { op: 'EXISTS' as const, params: [{ type: 'variable' as const, ref: 'b' }] },
     ]
     for (const tree of [{ any: leaves }, { all: leaves }] as Condition[]) {
       const { unmount } = render(
@@ -730,8 +730,8 @@ describe('conditional block — summary bar text', () => {
           {
             op: 'GREATER_THAN',
             params: [
-              { kind: 'variable', ref: 'gross.salary' },
-              { kind: 'literal', value: 10000 },
+              { type: 'variable', ref: 'gross.salary' },
+              { type: 'literal', value: 10000 },
             ],
           },
         ],
@@ -747,8 +747,8 @@ describe('conditional block — summary bar text', () => {
     expect(
       await renderSummary({
         any: [
-          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'gross.salary' }] },
-          { op: 'EXISTS', params: [{ kind: 'variable', ref: 'company.name' }] },
+          { op: 'EXISTS', params: [{ type: 'variable', ref: 'gross.salary' }] },
+          { op: 'EXISTS', params: [{ type: 'variable', ref: 'company.name' }] },
         ],
       }),
     ).toBe('Gross salary is in the document or Company is in the document')
