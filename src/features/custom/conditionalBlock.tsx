@@ -9,8 +9,9 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from '../../editor'
+import { GapCursor } from '@tiptap/pm/gapcursor'
 import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, Selection } from '@tiptap/pm/state'
 import { useDocumentVariable, useDocumentVariables, type DocumentVariable } from './documentVariables'
 
 /** Hard cap on conditional-block nesting (1 = a single, top-level block). */
@@ -168,10 +169,22 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
     if (at == null || !self) return
     // Append a NEW empty nested conditional as the last child, so existing content
     // (e.g. text above) stays put — instead of wrapping it into the nested block.
+    // If the block currently ENDS in an empty paragraph (e.g. it was just created),
+    // the nested block replaces that line instead of leaving a blank line above.
+    // Focus lands INSIDE the new nested block, ready to type its content; the
+    // gap cursor (arrows ↑/↓) still reaches the gaps above/below it.
+    const contentEnd = at + self.nodeSize - 1
+    const last = self.lastChild
+    const trailingEmptyLine = last != null && last.isTextblock && last.content.size === 0
+    const insertAt = trailingEmptyLine ? contentEnd - last.nodeSize : contentEnd
     editor
       .chain()
-      .insertContentAt(at + self.nodeSize - 1, { type: 'conditionalBlock', content: [{ type: 'paragraph' }] })
-      .focus()
+      .insertContentAt(
+        trailingEmptyLine ? { from: insertAt, to: contentEnd } : insertAt,
+        { type: 'conditionalBlock', content: [{ type: 'paragraph' }] },
+      )
+      // insertAt+1 = the nested block's empty paragraph; +2 = the caret spot in it.
+      .focus(insertAt + 2)
       .run()
   }
 
@@ -270,6 +283,34 @@ const ConditionalBlock = Node.create({
       mergeAttributes(HTMLAttributes, { 'data-conditional-block': '', class: 'conditional-block' }),
       0,
     ]
+  },
+
+  addKeyboardShortcuts() {
+    // An EMPTY line inside a conditional, next to an isolating block (a nested
+    // conditional), can't be removed by the default commands: Backspace can't
+    // join/lift across the isolating boundary and Delete can't merge into the
+    // nested block — every key is a no-op and the line is stuck. So the feature
+    // handles it: remove the empty line (never the block's last one — the
+    // schema needs block+) and leave the gap cursor where it was.
+    const removeEmptyLine = () => {
+      const { $from, empty } = this.editor.state.selection
+      if (!empty || !$from.parent.isTextblock || $from.parent.content.size > 0) return false
+      if ($from.node(-1).type.name !== this.name) return false
+      if ($from.node(-1).childCount <= 1) return false
+      const from = $from.before()
+      const to = $from.after()
+      return this.editor.commands.command(({ tr, dispatch }) => {
+        if (dispatch) {
+          tr.delete(from, to)
+          const $gap = tr.doc.resolve(from)
+          // `valid` exists at runtime but is missing from the typings.
+          const gapOk = (GapCursor as unknown as { valid: (pos: ResolvedPos) => boolean }).valid($gap)
+          tr.setSelection(gapOk ? new GapCursor($gap) : Selection.near($gap, -1))
+        }
+        return true
+      })
+    }
+    return { Backspace: removeEmptyLine, Delete: removeEmptyLine }
   },
 
   addNodeView() {

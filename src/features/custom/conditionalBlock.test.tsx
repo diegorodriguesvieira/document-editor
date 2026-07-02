@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { JSONContent } from '@tiptap/core'
+import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { createEditor, DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
 import type { DocumentVariable } from './documentVariables'
@@ -219,6 +219,58 @@ describe('conditional block — editing around the isolating boundary', () => {
   })
 })
 
+describe('conditional block — removing an empty line next to a nested block', () => {
+  const DOC_WITH_EMPTY_LINE = {
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'conditionalBlock',
+          content: [
+            { type: 'paragraph' }, // the stuck empty line
+            {
+              type: 'conditionalBlock',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+            },
+          ],
+        },
+      ],
+    },
+  }
+
+  // Dispatch a REAL keydown: `commands.keyboardShortcut` replays only the
+  // captured STEPS, dropping the selection our handler sets.
+  const pressBackspace = (editor: Editor) =>
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
+    )
+
+  it('Backspace removes it (isolating otherwise makes every key a no-op) and leaves the gap cursor', () => {
+    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    created.api.setJSON(DOC_WITH_EMPTY_LINE)
+    created.editor.commands.focus()
+    created.editor.commands.setTextSelection(2) // caret in the empty first line
+    pressBackspace(created.editor)
+
+    const kids = created.api.getJSON().doc.content?.[0]?.content ?? []
+    expect(kids.map((k) => k.type)).toEqual(['conditionalBlock'])
+    expect(created.editor.state.selection.toJSON().type).toBe('gapcursor')
+  })
+
+  it('never removes the block last line (the schema needs block+)', () => {
+    created = createEditor({ features: [ConditionalBlockFeature], element: mountTarget() })
+    created.api.setJSON({
+      doc: { type: 'doc', content: [{ type: 'conditionalBlock', content: [{ type: 'paragraph' }] }] },
+    })
+    created.editor.commands.focus()
+    created.editor.commands.setTextSelection(2)
+    pressBackspace(created.editor)
+
+    const kids = created.api.getJSON().doc.content?.[0]?.content ?? []
+    expect(kids.map((k) => k.type)).toEqual(['paragraph'])
+  })
+})
+
 describe('conditional block — the ＋ (add nested) button', () => {
   it('appends an empty nested block on click, keeping existing text above it', async () => {
     const user = userEvent.setup()
@@ -253,6 +305,40 @@ describe('conditional block — the ＋ (add nested) button', () => {
       expect(kids).toHaveLength(2)
       expect(kids[0]?.content?.[0]?.text).toBe('brazil') // text stays on top…
       expect(kids[1]?.type).toBe('conditionalBlock') // …nested added below
+    })
+
+    // …and focus lands INSIDE the new nested block: typing fills its content.
+    const pmEl = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
+    pmEl.editor?.commands.insertContent('X')
+    const nested = api!.getJSON().doc.content?.[0]?.content?.[1]
+    expect(nested?.content?.[0]?.content?.[0]?.text).toBe('X')
+  })
+
+  it('replaces a trailing EMPTY line with the nested block (no blank line left above)', async () => {
+    const user = userEvent.setup()
+    let api: EditorApi | null = null
+    render(
+      <DocumentEditor
+        features={[ConditionalBlockFeature]}
+        content={{
+          doc: {
+            type: 'doc',
+            // A freshly created conditional: its only child is an empty paragraph.
+            content: [{ type: 'conditionalBlock', content: [{ type: 'paragraph' }] }],
+          },
+        }}
+        onReady={(ready) => {
+          api = ready
+        }}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Add nested condition' }))
+
+    await waitFor(() => {
+      const kids = api?.getJSON().doc.content?.[0]?.content ?? []
+      // The empty line was consumed — the nested block is the only child.
+      expect(kids.map((k) => k.type)).toEqual(['conditionalBlock'])
     })
   })
 })
