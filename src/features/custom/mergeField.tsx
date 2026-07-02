@@ -200,10 +200,11 @@ function MergeFieldPanel({
                       event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
                       event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
                     }}
-                    // Don't steal the editor's focus/caret — the insert needs it.
-                    // (Native drag of a draggable element still starts fine with
-                    // mousedown's default prevented — it only kills selection.)
-                    onMouseDown={(event) => event.preventDefault()}
+                    // NO onMouseDown preventDefault here: in Chromium that
+                    // BLOCKS native drag initiation (dragstart never fires).
+                    // Click-insert doesn't need it — the insert command's
+                    // chain().focus() restores the editor focus, and the caret
+                    // position survives the button's momentary focus grab.
                     // Menu semantics: picking inserts AND closes — unless
                     // pinned, which keeps it open for several inserts.
                     onClick={() => {
