@@ -8,6 +8,7 @@ export const CodeBlockFeature = defineFeature({
   commands: {
     'codeBlock.toggle': (editor) => editor.chain().focus().toggleCodeBlock().run(),
   },
+  keymap: { 'Mod-Shift-c': 'codeBlock.toggle' },
   insert: [
     {
       id: 'codeBlock',

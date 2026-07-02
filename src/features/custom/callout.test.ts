@@ -29,8 +29,8 @@ describe('callout feature', () => {
     expect(editor.view.dom.querySelector('.callout__emoji')?.textContent).toBe('⚠️')
   })
 
-  it('registers its Mod-Shift-c shortcut in the resolved keymap', () => {
+  it('registers its Mod-Shift-e shortcut in the resolved keymap', () => {
     const { resolved } = renderEditor([CalloutFeature])
-    expect(resolved.keymap['Mod-Shift-c']).toBe('callout.toggle')
+    expect(resolved.keymap['Mod-Shift-e']).toBe('callout.toggle')
   })
 })

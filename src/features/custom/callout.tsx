@@ -69,7 +69,8 @@ export const CalloutFeature = defineFeature({
     'callout.toggle': (editor) => editor.chain().focus().toggleWrap('callout').run(),
   },
   // A genuinely new shortcut, routed through the SDK's registry keymap.
-  keymap: { 'Mod-Shift-c': 'callout.toggle' },
+  // Mod-Shift-c belongs to the code block (product shortcut map).
+  keymap: { 'Mod-Shift-e': 'callout.toggle' },
   toolbar: [
     {
       id: 'callout',

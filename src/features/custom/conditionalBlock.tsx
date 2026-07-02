@@ -357,5 +357,6 @@ export const ConditionalBlockFeature = defineFeature({
       return editor.chain().focus().wrapIn('conditionalBlock').run()
     },
   },
+  keymap: { 'Mod-Shift-k': 'conditional.wrap' },
   insert: [{ id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.wrap' }],
 })

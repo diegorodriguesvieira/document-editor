@@ -34,6 +34,7 @@ export const LinkFeature = defineFeature({
         .run()
     },
   },
+  keymap: { 'Mod-k': 'link.set' },
   toolbar: [
     {
       id: 'link',

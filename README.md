@@ -25,6 +25,9 @@ src/
 └── app/               # demo playground
 ```
 
+Docs: `EXTENDING.md` (consumers) · `THEMING.md` (skin/tokens) ·
+`ARCHITECTURE.md` (how the SDK works inside — for maintainers and feature authors).
+
 ## Getting started
 
 ```bash

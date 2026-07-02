@@ -28,5 +28,6 @@ export const ImageFeature = defineFeature({
       return editor.chain().focus().setImage({ src }).run()
     },
   },
+  keymap: { 'Mod-Shift-i': 'image.insert' },
   insert: [{ id: 'image', label: 'Image', icon: 'I', commandId: 'image.insert' }],
 })

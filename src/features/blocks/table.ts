@@ -21,6 +21,7 @@ export const TableFeature = defineFeature({
     'table.toggleHeaderRow': (editor) => editor.chain().focus().toggleHeaderRow().run(),
     'table.delete': (editor) => editor.chain().focus().deleteTable().run(),
   },
+  keymap: { 'Mod-Shift-t': 'table.insert' },
   insert: [{ id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' }],
   // Right-click inside a table → row/column/cell actions. Each item shows only
   // when it currently applies (via `editor.can()`): e.g. Merge needs a multi-cell
