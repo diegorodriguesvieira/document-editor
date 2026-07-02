@@ -6,6 +6,7 @@ import { EditorContextMenu } from './EditorContextMenu'
 import { EditorToolbar } from './EditorToolbar'
 import { InsertToolbar } from './InsertToolbar'
 import { PageAffordances } from './PageAffordances'
+import { useFeatureState } from '../hooks/useFeatureState'
 import type { ResolvedFeatures } from '../core/registry'
 import { useDocumentEditor, type UseDocumentEditorOptions } from '../hooks/useDocumentEditor'
 
@@ -26,6 +27,10 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
    *  a comments panel via `<CommentsPanel editor={ctx.editor}/>`, your own
    *  UI built on hooks like `useDocumentComments`). Omit for no rail. */
   renderRightBar?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Shown centered on the SCREEN while the document is empty; disappears as
+   *  soon as there is content. The overlay never steals clicks from the editor
+   *  (`pointer-events: none`; its children are clickable again). */
+  renderEmptyState?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Visual scale of the page (1 = 100%). */
   zoom?: number
 }
@@ -35,10 +40,24 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
  * left/right rails and the editable surface. Bars are swappable; the app never
  * touches `@tiptap/*` itself.
  */
+/** Screen-centered overlay, visible only while the document is empty. */
+function EmptyStateOverlay({
+  ctx,
+  render,
+}: {
+  ctx: DocumentEditorRenderContext
+  render: (ctx: DocumentEditorRenderContext) => ReactNode
+}) {
+  const isEmpty = useFeatureState(ctx.editor, (editor) => editor.isEmpty) ?? ctx.api.isEmpty()
+  if (!isEmpty) return null
+  return <div className="document-editor__empty-state">{render(ctx)}</div>
+}
+
 export function DocumentEditor({
   renderToolbar,
   renderInsertBar,
   renderRightBar,
+  renderEmptyState,
   zoom = 1,
   ...options
 }: DocumentEditorProps) {
@@ -82,6 +101,7 @@ export function DocumentEditor({
       {rightBar ? (
         <aside className="document-editor__rail document-editor__rail--right">{rightBar}</aside>
       ) : null}
+      {ctx && renderEmptyState ? <EmptyStateOverlay ctx={ctx} render={renderEmptyState} /> : null}
       {ctx && resolved.contextMenu.length > 0 ? (
         <EditorContextMenu editor={ctx.editor} api={ctx.api} sections={resolved.contextMenu} />
       ) : null}

@@ -118,6 +118,12 @@ pageRegions: [{ id: 'header', position: 'top', label: 'Add header',
                 addCommandId: 'header.add', nodeName: 'documentHeader' }]
 ```
 
+**Empty state:** `renderEmptyState={(ctx) => <YourEmptyState/>}` renders your
+UI centered on the screen while the document is empty and removes it at the
+first content. The overlay is `pointer-events: none` (clicks reach the editor);
+your children are clickable — e.g. a "start from template" CTA calling
+`ctx.api.setJSON(template)`.
+
 **The right rail is consumer-owned** — render anything in it via
 `renderRightBar`. Comments ship both a default panel and the data hook, so you
 can drop the panel in as-is or rebuild the UI without losing behavior:

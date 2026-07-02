@@ -1,16 +1,51 @@
-/* Editor shell + the white page surface. */
+/* Editor shell + the flat page surface. */
 @layer editor {
+  /* 3-column grid: side rails live in the gutters pinned to the browser edges,
+     so the content column is centered in the VIEWPORT (a flex row would center
+     the rail+column+rail group instead, pushing the text off-center). */
   .document-editor {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 16px;
+    display: grid;
+    grid-template-columns:
+      minmax(min-content, 1fr)
+      minmax(0, var(--editor-page-width))
+      minmax(min-content, 1fr);
+    column-gap: 16px;
+  }
+
+  /* Rails stretch with the row (so their inner sticky bars can stick) and pin
+     to the edges at --editor-rail-gutter. */
+  .document-editor__rail {
+    grid-column: 1;
+    justify-self: start;
+    margin-left: var(--editor-rail-gutter);
+  }
+
+  .document-editor__rail--right {
+    grid-column: 3;
+    justify-self: end;
+    margin-left: 0;
+    margin-right: var(--editor-rail-gutter);
   }
 
   .document-editor__column {
-    width: 100%;
-    max-width: var(--editor-page-width);
+    grid-column: 2;
     min-width: 0;
+  }
+
+  /* Empty state: centered on the SCREEN (fixed, so scroll/layout don't move
+     it), invisible to the mouse so the editor beneath keeps receiving clicks —
+     the consumer's own children (e.g. a CTA button) become clickable again. */
+  .document-editor__empty-state {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .document-editor__empty-state > * {
+    pointer-events: auto;
   }
 
   /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
@@ -23,14 +58,11 @@
     transition: zoom 0.1s ease;
   }
 
-  /* The white page */
+  /* The page: a flat content column — the CANVAS is white, the column itself
+     has no card chrome (no background/border/shadow). */
   .document-editor__surface .ProseMirror {
     min-height: var(--editor-page-min-height);
     padding: var(--editor-page-padding);
-    background: var(--editor-surface);
-    border: 1px solid var(--editor-border);
-    border-radius: 2px;
-    box-shadow: var(--editor-shadow-sm);
     outline: none;
   }
 

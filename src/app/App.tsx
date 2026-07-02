@@ -90,6 +90,43 @@ export default function App() {
               console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
               console.log('document JSON:', doc)
             }}
+            // Shown centered on screen while the doc is empty; the CTA inserts
+            // a starter template (and the overlay vanishes — no longer empty).
+            renderEmptyState={(ctx) => (
+              <div className="empty-state">
+                <span className="empty-state__icon" aria-hidden>
+                  📄
+                </span>
+                <span className="empty-state__title">Blank document</span>
+                <span className="empty-state__hint">
+                  Start typing — <kbd>/</kbd> inserts blocks, <kbd>@</kbd> inserts variables
+                </span>
+                <button
+                  type="button"
+                  className="empty-state__cta"
+                  onClick={() =>
+                    ctx.api.setJSON({
+                      doc: {
+                        type: 'doc',
+                        content: [
+                          {
+                            type: 'heading',
+                            attrs: { level: 1 },
+                            content: [{ type: 'text', text: 'Service agreement' }],
+                          },
+                          {
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: 'This agreement is made between…' }],
+                          },
+                        ],
+                      },
+                    })
+                  }
+                >
+                  Start from a template
+                </button>
+              </div>
+            )}
             // The right rail is consumer-owned: render anything here. This app
             // ships its OWN comments UI (CommentCards, built on the SDK's
             // useDocumentComments hook) — swap back to the SDK's CommentsPanel

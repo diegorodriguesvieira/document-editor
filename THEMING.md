@@ -28,7 +28,7 @@ so importing the file changes nothing until you override.
   --editor-accent: #7c3aed;      /* toolbar active, links, resize handle, affordance */
   --editor-surface: #0f1116;     /* page + popovers + inputs (a dark theme) */
   --editor-text: #e6e6e6;
-  --editor-page-width: 794px;    /* A4 @96dpi instead of US Letter */
+  --editor-page-width: 720px;    /* a narrower text measure */
 }
 ```
 
@@ -48,7 +48,7 @@ so importing the file changes nothing until you override.
 | `--editor-text-muted` | `#5f6368` | Blockquotes, secondary labels |
 | `--editor-text-subtle` | `#80868b` | Headings in menus, empty states, quotes |
 | `--editor-control-fg` | `#444746` | Toolbar / rail / menu-icon glyphs |
-| `--editor-surface` | `#fff` | Page, popovers, panels, inputs |
+| `--editor-surface` | `#fff` | Popovers, panels, inputs |
 | `--editor-border` | `#e0e0e0` | Page + container borders |
 | `--editor-border-muted` | `#dadce0` | Inputs, `hr`, blockquote rule |
 | `--editor-border-table` | `#c7c7c7` | Table cell borders, affordance line |
@@ -65,13 +65,14 @@ so importing the file changes nothing until you override.
 | `--editor-inverse-bg` | `#1b1b1b` | Code block + bubble toolbar |
 | `--editor-inverse-fg` | `#e3e3e3` | Text on the above |
 | `--editor-inverse-accent` | `#8ab4f8` | Bubble toolbar pressed state |
-| `--editor-page-width` | `816px` | Page width (US Letter @96dpi) |
-| `--editor-page-min-height` | `1056px` | Page height (US Letter) |
-| `--editor-page-padding` | `96px` | Page margins (1in) |
+| `--editor-page-width` | `800px` | Content column width (the text measure), centered in the viewport |
+| `--editor-page-min-height` | `60vh` | Minimum editing area (click/scroll room below short content) |
+| `--editor-page-padding` | `32px 0 96px` | Vertical breathing room around the content (no paper card — the canvas is the page) |
 | `--editor-sticky-offset` | `0px` | Top offset of the sticky toolbar/insert rail — set it to your app header's height |
+| `--editor-rail-gutter` | `32px` | Distance between the side rails and the browser edge |
 | `--editor-z-popup` | `1000` | Caret popups (`/`, `@`), colour picker, merge-field modal |
 | `--editor-z-menu` | `1100` | Right-click context menu |
-| `--editor-shadow-sm` | `0 1px 3px …` | Page + insert-rail shadow |
+| `--editor-shadow-sm` | `0 1px 3px …` | Insert-rail shadow |
 | `--editor-shadow-pop` | `0 6px 24px …` | Context menu + colour picker shadow |
 | `--editor-callout-*` | amber set | Callout block |
 | `--editor-mergefield-*` | blue set | Merge-field chip + modal chips |
@@ -101,7 +102,7 @@ protecting) is styled under `.document-editor` — custom shells that skip
 `DocumentEditor` should keep that class on their wrapper to retain
 shell-scoped chrome. Feature CSS should follow the same convention.
 
-- **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom`, `.document-editor__scale`, `.document-editor__surface`
+- **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom`, `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)

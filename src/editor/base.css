@@ -40,14 +40,17 @@
     --editor-inverse-fg: #e3e3e3;
     --editor-inverse-accent: #8ab4f8;
 
-    /* Page (US Letter @96dpi, like Google Docs) */
-    --editor-page-width: 816px;
-    --editor-page-min-height: 1056px;
-    --editor-page-padding: 96px;
+    /* Page: a flat, centered content column on a white canvas (no paper card).
+       Width = the text measure; padding is vertical breathing room only. */
+    --editor-page-width: 800px;
+    --editor-page-min-height: 60vh;
+    --editor-page-padding: 32px 0 96px;
 
     /* Layout: how far from the viewport top the sticky toolbar/rail sit —
        set this to your app header's height (the SDK assumes none). */
     --editor-sticky-offset: 0px;
+    /* Distance between the side rails and the browser edge. */
+    --editor-rail-gutter: 32px;
 
     /* Stacking of floating surfaces (caret popups / colour picker vs menus). */
     --editor-z-popup: 1000;
