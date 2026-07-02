@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CreatedEditor } from '../../editor'
+import { ImageFeature } from '../../features'
 import { renderEditor } from '../../test/editorHarness'
 import { closeRegion, HeaderFooterFeature } from './headerFooter'
 
@@ -144,6 +145,42 @@ describe('header/footer feature', () => {
     view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
     // …gets clamped back to the body start.
     expect(created.editor.state.selection.from).toBe(headerSize + 1)
+  })
+
+  it('Cmd+A in the body includes a leading IMAGE — Delete removes it and restores an empty body', () => {
+    const created = renderEditor([HeaderFooterFeature, ImageFeature])
+    created.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+          { type: 'image', attrs: { src: 'data:,logo' } },
+          { type: 'paragraph', content: [{ type: 'text', text: 'texto do corpo' }] },
+          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
+        ],
+      },
+    })
+    const doc = created.editor.state.doc
+    const headerSize = doc.firstChild!.nodeSize
+    const imageSize = doc.child(1).nodeSize
+
+    created.editor.commands.focus()
+    created.editor.commands.setTextSelection(headerSize + imageSize + 2) // caret no corpo
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
+    )
+
+    // A seleção começa ANTES da imagem (TextSelection a pularia).
+    expect(created.editor.state.selection.from).toBe(headerSize)
+    expect(created.editor.state.selection.from).toBeLessThanOrEqual(headerSize + imageSize - 1)
+
+    created.editor.commands.deleteSelection()
+    const content = created.api.getJSON().doc.content ?? []
+    expect(content.some((n) => n.type === 'image')).toBe(false)
+    // Regiões intactas + corpo restaurado com um parágrafo vazio editável.
+    expect(content.map((n) => n.type)).toEqual(['documentHeader', 'paragraph', 'documentFooter'])
+    const bounds = created.editor.state.doc.firstChild!.nodeSize
+    expect(created.editor.state.selection.from).toBe(bounds + 1) // caret no corpo
   })
 
   it('deleting ALL of an open region keeps the caret inside it (typing refills the region)', () => {

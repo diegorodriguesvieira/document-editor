@@ -14,7 +14,8 @@ import {
 import { Extension, type Editor } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { Fragment, type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
+import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state'
+import type { Mappable } from '@tiptap/pm/transform'
 
 /** The two region node names — single source for every rule in this file. */
 const REGION_TOP = 'documentHeader'
@@ -45,6 +46,43 @@ function regionBounds(doc: PMNode) {
     bodyFrom: headerSize + 1,
     bodyTo: doc.content.size - footerSize - 1,
   }
+}
+
+/**
+ * A selection spanning [from, to] whose endpoints may sit on NODE boundaries
+ * (image, table…) — `TextSelection` can't (its endpoints must be inline), so a
+ * body/region select-all built on it would skip a leading image and Delete
+ * would leave the image behind. Modeled on ProseMirror's own `AllSelection`;
+ * degrades to a plain TextSelection after any document change.
+ */
+class RangeSelection extends Selection {
+  static create(doc: PMNode, from: number, to: number): RangeSelection {
+    return new RangeSelection(doc.resolve(from), doc.resolve(to))
+  }
+
+  map(doc: PMNode, mapping: Mappable): Selection {
+    return TextSelection.between(
+      doc.resolve(mapping.map(this.from)),
+      doc.resolve(mapping.map(this.to)),
+    )
+  }
+
+  eq(other: Selection): boolean {
+    return other instanceof RangeSelection && other.from === this.from && other.to === this.to
+  }
+
+  toJSON(): { type: string; from: number; to: number } {
+    return { type: 'regionRangeSelectAll', from: this.from, to: this.to }
+  }
+
+  static fromJSON(doc: PMNode, json: { from: number; to: number }): RangeSelection {
+    return RangeSelection.create(doc, json.from, json.to)
+  }
+}
+try {
+  Selection.jsonID('regionRangeSelectAll', RangeSelection)
+} catch {
+  // Already registered (dev HMR re-evaluates the module) — safe to ignore.
 }
 
 /** The guard's shared editing state (which region is open for editing). */
@@ -240,17 +278,18 @@ const HeaderFooterGuard = Extension.create({
       // selection; INSIDE a region, only that region's content is selected.
       'Mod-a': ({ editor }) => {
         const { doc, selection } = editor.state
-        const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
+        const { headerSize, footerSize } = regionBounds(doc)
         if (!headerSize && !footerSize) return false // no regions → default Cmd+A
 
-        // TextSelection.between resolves both ends into TEXT positions. Raw
-        // node-boundary positions (e.g. `end(depth)`, after a </p>) are not
-        // representable in the contenteditable — the next focus/DOM roundtrip
-        // would COLLAPSE the selection (and hide the bubble).
+        // RangeSelection (AllSelection-style) so leading/trailing NODES
+        // (image, table) are part of the selection too — TextSelection would
+        // skip them and Delete would leave them behind.
         const select = (from: number, to: number) => {
           editor.view.dispatch(
             editor.state.tr.setSelection(
-              TextSelection.between(doc.resolve(from), doc.resolve(to)),
+              from < to
+                ? RangeSelection.create(doc, from, to)
+                : TextSelection.between(doc.resolve(from), doc.resolve(to)),
             ),
           )
           return true
@@ -260,7 +299,10 @@ const HeaderFooterGuard = Extension.create({
         if (depth !== null) {
           return select(selection.$from.start(depth), selection.$from.end(depth))
         }
-        return select(bodyFrom, bodyTo)
+        // NODE boundaries (not the first/last text position): the body starts
+        // right after the header node — a leading image lives at
+        // [headerSize, headerSize + 1] and `+ 1` would skip it.
+        return select(headerSize, doc.content.size - footerSize)
       },
     }
   },
@@ -297,6 +339,21 @@ const HeaderFooterGuard = Extension.create({
               const tr = newState.tr
               tr.replaceWith(0, newState.doc.content.size, Fragment.fromArray(desired))
               tr.setMeta('addToHistory', false)
+              return tr
+            }
+
+            // The BODY must keep at least one block: deleting a select-all
+            // that includes edge nodes can leave just [header, footer] — an
+            // uneditable document. Restore an empty paragraph (with the caret
+            // in it) between the regions.
+            const bounds = regionBounds(newState.doc)
+            const regionCount = (bounds.headerSize ? 1 : 0) + (bounds.footerSize ? 1 : 0)
+            if (regionCount > 0 && newState.doc.childCount === regionCount) {
+              const tr = newState.tr.insert(
+                bounds.headerSize,
+                newState.schema.nodes.paragraph.create(),
+              )
+              tr.setSelection(TextSelection.create(tr.doc, bounds.headerSize + 1))
               return tr
             }
           }
