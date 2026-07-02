@@ -53,4 +53,19 @@ describe('image resize (width attribute)', () => {
     created.api.exec('image.insert', 'https://example.com/a.png')
     expect(created.api.getHTML()).not.toContain('width=')
   })
+
+  it('round-trips height (edge-handle stretch persists both dimensions)', () => {
+    const created = renderEditor([ImageFeature])
+    created.api.exec('image.insert', 'https://example.com/a.png')
+    created.editor.commands.updateAttributes('image', { width: 400, height: 250 })
+
+    const html = created.api.getHTML()
+    expect(html).toContain('width="400"')
+    expect(html).toContain('height="250"')
+
+    const reloaded = renderEditor([ImageFeature])
+    reloaded.api.setJSON(created.api.getJSON())
+    const image = reloaded.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    expect(image?.attrs?.height).toBe(250)
+  })
 })

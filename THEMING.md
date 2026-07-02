@@ -102,13 +102,13 @@ protecting) is styled under `.document-editor` — custom shells that skip
 `DocumentEditor` should keep that class on their wrapper to retain
 shell-scoped chrome. Feature CSS should follow the same convention.
 
-- **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom`, `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
+- **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
 - **Empty state:** `.document-editor__empty-state` — a viewport-spanning `position: fixed` overlay (`pointer-events: none`, children clickable). Embedding the editor in a split pane? Restyle it (e.g. `position: absolute` under a positioned wrapper) so it centers over the editor, not the app.
-- **Features:** `.callout`, `.merge-field`, `.mf-panel*`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/ne/sw/se`)
+- **Features:** `.callout`, `.merge-field`, `.mf-panel*`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
 
 ## 4. Skipping the default entirely
 

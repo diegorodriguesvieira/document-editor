@@ -67,9 +67,17 @@
     flex-direction: column;
   }
 
-  /* Page zoom: the page scrolls inside its column when zoomed in (rails stay put). */
-  .document-editor__zoom {
+  /* Page zoom: the page scrolls inside its column when zoomed IN (rails stay
+     put). The overflow clip exists ONLY then — at 100% it would slice off
+     chrome that legitimately pokes past a full-width block (an image's resize
+     handles and selection ring at the column edge). While zoomed, the same
+     chrome survives because overflow clips at the PADDING box: the 8px
+     padding (offset by the negative margin, so layout doesn't move) is paint
+     slack for the handles (5px + 2px border) and the ring (3px). */
+  .document-editor__zoom--scrolls {
     overflow-x: auto;
+    padding: 0 8px;
+    margin: 0 -8px;
   }
 
   .document-editor__scale {

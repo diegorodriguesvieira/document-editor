@@ -90,7 +90,9 @@ export function DocumentEditor({
       <div className="document-editor__column">
         {toolbar}
         {/* The page scrolls inside its column when zoomed — the rails stay put. */}
-        <div className="document-editor__zoom">
+        <div
+          className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}
+        >
           <div className="document-editor__scale" style={{ zoom }}>
             {ctx && resolved.pageRegions.length > 0 ? (
               <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="top" />

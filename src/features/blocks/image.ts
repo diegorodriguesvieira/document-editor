@@ -18,13 +18,36 @@ function isSafeImageSrc(src: string): boolean {
 }
 
 const MIN_WIDTH = 60
+const MIN_HEIGHT = 40
+
+function parseDimension(raw: string | null): number | null {
+  const value = raw ? Number.parseInt(String(raw), 10) : NaN
+  return Number.isFinite(value) && value > 0 ? value : null
+}
 
 /**
- * TipTap's Image + resize: a `width` attribute (px) written by drag handles in
- * a pure-DOM node view (same idiom as the merge-field chip — no React needed).
- * Height stays `auto`, so the aspect ratio is always preserved; width is
- * clamped between MIN_WIDTH and the content column. Serialized as the standard
- * HTML `width` attribute — the backend/PDF contract stays plain HTML.
+ * The 8 handles. `dx`/`dy` say which axis each handle drives (Docs semantics):
+ * corners resize proportionally; edge handles stretch ONE dimension and freeze
+ * the other (deliberate distortion, like Google Docs).
+ */
+const HANDLES: Array<{ id: string; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }> = [
+  { id: 'nw', dx: -1, dy: -1 },
+  { id: 'n', dx: 0, dy: -1 },
+  { id: 'ne', dx: 1, dy: -1 },
+  { id: 'w', dx: -1, dy: 0 },
+  { id: 'e', dx: 1, dy: 0 },
+  { id: 'sw', dx: -1, dy: 1 },
+  { id: 's', dx: 0, dy: 1 },
+  { id: 'se', dx: 1, dy: 1 },
+]
+
+/**
+ * TipTap's Image + Docs-style resize, in a pure-DOM node view (same idiom as
+ * the merge-field chip — no React needed): 8 handles, corners keep the aspect
+ * ratio, edge handles stretch width OR height and freeze the other. Live
+ * feedback is style-only; the document is written ONCE on drop (a single
+ * clean undo step). `width`/`height` serialize as standard HTML attributes —
+ * the backend/PDF contract stays plain HTML.
  */
 const ResizableImage = Image.extend({
   addAttributes() {
@@ -32,13 +55,17 @@ const ResizableImage = Image.extend({
       ...this.parent?.(),
       width: {
         default: null,
-        parseHTML: (element) => {
-          const raw = element.getAttribute('width') ?? element.style.width
-          const value = raw ? Number.parseInt(String(raw), 10) : NaN
-          return Number.isFinite(value) && value > 0 ? value : null
-        },
+        parseHTML: (element) =>
+          parseDimension(element.getAttribute('width') ?? element.style.width),
         renderHTML: (attributes) =>
           attributes.width ? { width: String(attributes.width) } : {},
+      },
+      height: {
+        default: null,
+        parseHTML: (element) =>
+          parseDimension(element.getAttribute('height') ?? element.style.height),
+        renderHTML: (attributes) =>
+          attributes.height ? { height: String(attributes.height) } : {},
       },
     }
   },
@@ -50,50 +77,90 @@ const ResizableImage = Image.extend({
       dom.className = 'image-resizer'
       const img = document.createElement('img')
       img.draggable = false // ProseMirror owns block dragging; kill the native ghost
+
       const sync = (n: typeof node) => {
         if (img.getAttribute('src') !== n.attrs.src) img.setAttribute('src', n.attrs.src as string)
         if (n.attrs.alt) img.alt = n.attrs.alt as string
         if (n.attrs.title) img.title = n.attrs.title as string
         img.style.width = n.attrs.width ? `${n.attrs.width}px` : ''
+        img.style.height = n.attrs.height ? `${n.attrs.height}px` : ''
       }
       sync(node)
       dom.appendChild(img)
 
-      let drag: { startX: number; startWidth: number; dir: 1 | -1; width: number; moved: boolean } | null = null
+      const setAttrs = (attrs: Record<string, unknown>) => {
+        const pos = typeof getPos === 'function' ? getPos() : null
+        if (pos == null) return
+        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, ...attrs }))
+      }
+
+      let drag: {
+        startX: number
+        startY: number
+        startW: number
+        startH: number
+        dx: -1 | 0 | 1
+        dy: -1 | 0 | 1
+        width: number
+        height: number
+        moved: boolean
+      } | null = null
       const onMove = (event: MouseEvent) => {
         if (!drag) return
         drag.moved = true
         // Live feedback is style-only; the document is written once, on drop.
         const max = dom.parentElement?.clientWidth || Number.POSITIVE_INFINITY
-        const next = drag.startWidth + drag.dir * (event.clientX - drag.startX)
-        drag.width = Math.round(Math.min(Math.max(next, MIN_WIDTH), max))
+        if (drag.dx !== 0) {
+          const next = drag.startW + drag.dx * (event.clientX - drag.startX)
+          drag.width = Math.round(Math.min(Math.max(next, MIN_WIDTH), max))
+          if (drag.dy !== 0) {
+            // Corner: proportional — height follows the width's scale.
+            drag.height = Math.round((drag.startH * drag.width) / drag.startW)
+          }
+        }
+        if (drag.dx === 0 && drag.dy !== 0) {
+          const next = drag.startH + drag.dy * (event.clientY - drag.startY)
+          drag.height = Math.round(Math.max(next, MIN_HEIGHT))
+        }
         img.style.width = `${drag.width}px`
+        img.style.height = `${drag.height}px`
       }
       const onUp = () => {
         if (!drag) return
-        const { width, moved } = drag
+        const { dx, dy, width, height, moved } = drag
         drag = null
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', onUp)
-        const pos = typeof getPos === 'function' ? getPos() : null
         // A click on a handle without movement writes nothing (no undo noise).
-        if (moved && pos != null && width !== current.attrs.width) {
-          view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width }))
-        } else {
+        if (!moved) {
           sync(current)
+          return
+        }
+        if (dx !== 0 && dy !== 0) {
+          // Corner: keep proportionality. Height is stored only if it already
+          // was (a never-stretched image stays natural-ratio via height:auto).
+          setAttrs(current.attrs.height != null ? { width, height } : { width })
+        } else {
+          // Edge handles: stretch one dimension, FREEZE the other at its
+          // current pixels (deliberate distortion, like Docs).
+          setAttrs({ width, height })
         }
       }
-      for (const corner of ['nw', 'ne', 'sw', 'se'] as const) {
+      for (const { id, dx, dy } of HANDLES) {
         const handle = document.createElement('span')
-        handle.className = `image-resizer__handle image-resizer__handle--${corner}`
+        handle.className = `image-resizer__handle image-resizer__handle--${id}`
         handle.addEventListener('mousedown', (event) => {
           event.preventDefault()
           event.stopPropagation()
           drag = {
             startX: event.clientX,
-            startWidth: img.offsetWidth || (current.attrs.width as number) || MIN_WIDTH,
-            dir: corner.endsWith('e') ? 1 : -1, // west handles grow leftwards
+            startY: event.clientY,
+            startW: img.offsetWidth || (current.attrs.width as number) || MIN_WIDTH,
+            startH: img.offsetHeight || (current.attrs.height as number) || MIN_HEIGHT,
+            dx,
+            dy,
             width: img.offsetWidth,
+            height: img.offsetHeight,
             moved: false,
           }
           document.addEventListener('mousemove', onMove)

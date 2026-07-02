@@ -1,13 +1,13 @@
-/* ImageFeature — images inside the page + the resize node view. */
+/* ImageFeature — images inside the page + the 8 resize handles. */
 @layer editor {
   .document-editor__surface img {
     max-width: 100%;
     height: auto;
   }
 
-  /* fit-content, NOT inline-block: the page turns into a flex column when a
-     footer exists, and flex blockifies inline-block children into stretched
-     blocks — the handles would anchor to the column edge, not the image. */
+  /* fit-content, NOT inline-block: a flex/grid parent blockifies inline-block
+     children into stretched blocks — the handles would anchor to the column
+     edge, not the image. */
   .document-editor__surface .image-resizer {
     position: relative;
     display: block;
@@ -21,7 +21,7 @@
     outline-offset: 1px;
   }
 
-  /* Corner handles — visible only while the image node is selected. */
+  /* The 8 resize handles — visible only while the image node is selected. */
   .document-editor__surface .image-resizer__handle {
     display: none;
     position: absolute;
@@ -41,4 +41,8 @@
   .document-editor__surface .image-resizer__handle--ne { top: -5px; right: -5px; cursor: nesw-resize; }
   .document-editor__surface .image-resizer__handle--sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
   .document-editor__surface .image-resizer__handle--se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+  .document-editor__surface .image-resizer__handle--n { top: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+  .document-editor__surface .image-resizer__handle--s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+  .document-editor__surface .image-resizer__handle--w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+  .document-editor__surface .image-resizer__handle--e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
 }
