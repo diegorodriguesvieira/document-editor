@@ -20,6 +20,10 @@ export { ConditionalBlockFeature, MAX_CONDITIONAL_DEPTH } from './custom/conditi
 export type { ConditionId, ConditionValue } from './custom/conditionalBlock'
 export { CommentsFeature } from './custom/comments'
 export type { CommentThread } from './custom/comments'
+// The comments SURFACE for the consumer-owned right rail: the default panel,
+// or rebuild your own UI on the same reactive hook (click-to-scroll included —
+// see CommentsPanel as the reference implementation).
+export { CommentsPanel, useDocumentComments } from './custom/commentsPanel'
 export type { AnchoredComment } from './custom/commentsPanel'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'

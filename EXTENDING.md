@@ -39,7 +39,6 @@ defineFeature({
   insert: [/* ToolbarItem[] — left rail; `/` menu mirrors runnable ones */],
   contextMenu: [/* ContextMenuSection[] — right-click */],
   pageRegions: [/* PageRegion[] — header/footer-style page chrome */],
-  panels: [/* PanelContribution[] — side panels next to the page */],
 })
 ```
 
@@ -111,20 +110,35 @@ Every matching section from every feature is shown (registration order) — two
 features can both own the clicked spot. `isAvailable` receives the raw editor
 (deliberately: `editor.can()` probes aren't expressible on the thin state view).
 
-## 6. Page regions & side panels
+## 6. Page regions & the right rail
 
 ```tsx
 // Page-edge chrome with a hover "add" affordance (see HeaderFooterFeature):
 pageRegions: [{ id: 'header', position: 'top', label: 'Add header',
                 addCommandId: 'header.add', nodeName: 'documentHeader' }]
-
-// A side panel next to the page (see CommentsFeature — zero consumer wiring):
-panels: [{ id: 'myPanel', render: ({ editor, api }) => <MyPanel editor={editor} /> }]
 ```
 
-Panels render in the right rail automatically. A consumer replacing the rail
-via `renderRightBar` keeps them by dropping `<FeaturePanels {...ctx} />`
-wherever they fit.
+**The right rail is consumer-owned** — render anything in it via
+`renderRightBar`. Comments ship both a default panel and the data hook, so you
+can drop the panel in as-is or rebuild the UI without losing behavior:
+
+```tsx
+import { CommentsPanel, useDocumentComments } from '../features'
+
+// Default UI:
+<DocumentEditor features={…}
+  renderRightBar={(ctx) => <CommentsPanel editor={ctx.editor} />} />
+
+// …or your own UI on the same reactive data (click-to-scroll included):
+function MyComments({ editor }) {
+  const comments = useDocumentComments(editor) // [{ id, text, quote, from, to }]
+  return comments.map((c) => (
+    <button key={c.id} onClick={() =>
+      editor?.chain().focus().setTextSelection({ from: c.from, to: c.to }).scrollIntoView().run()
+    }>{c.text}</button>
+  ))
+}
+```
 
 ## 7. Save & load
 

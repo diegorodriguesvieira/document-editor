@@ -13,7 +13,6 @@ export type {
   FeatureDefinition,
   FeatureRenderContext,
   PageRegion,
-  PanelContribution,
   ToolbarItem,
 } from './core/types'
 
@@ -45,7 +44,6 @@ export { InsertToolbar } from './components/InsertToolbar'
 export type { InsertToolbarProps } from './components/InsertToolbar'
 export { EditorContextMenu } from './components/EditorContextMenu'
 export { PageAffordances } from './components/PageAffordances'
-export { FeaturePanels } from './components/FeaturePanels'
 export { DocumentEditor } from './components/DocumentEditor'
 export type { DocumentEditorProps, DocumentEditorRenderContext } from './components/DocumentEditor'
 export { EditorContent } from '@tiptap/react'

@@ -1,5 +1,5 @@
 import { defineFeature, Mark, mergeAttributes } from '../../editor'
-import { commentsPanelContribution, getCommentThreads } from './commentsPanel'
+import { getCommentThreads } from './commentsPanel'
 import { promptOr } from '../promptFallback'
 
 export interface CommentThread {
@@ -89,7 +89,4 @@ export const CommentsFeature = defineFeature({
       isDisabled: (state) => state.isSelectionEmpty(),
     },
   ],
-  // The side panel ships WITH the feature — enabling comments shows it, no
-  // consumer wiring (the app can still take over the rail via renderRightBar).
-  panels: [commentsPanelContribution],
 })

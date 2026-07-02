@@ -1,6 +1,5 @@
 import { useEditorState } from '@tiptap/react'
 import type { Editor } from '@tiptap/core'
-import type { PanelContribution } from '../../editor'
 import type { CommentThread } from './comments'
 
 export interface AnchoredComment {
@@ -68,16 +67,6 @@ export function useDocumentComments(editor: Editor | null): AnchoredComment[] {
  * scrolls the editor to it — the way to find a comment without hunting for the
  * yellow highlight.
  */
-/**
- * The panel as a `panels`-channel contribution — this is what makes enabling
- * CommentsFeature show the panel with zero consumer wiring. (Declared here, in
- * the .tsx, so comments.ts stays JSX-free; the import is one-way at runtime.)
- */
-export const commentsPanelContribution: PanelContribution = {
-  id: 'comments',
-  render: ({ editor }) => <CommentsPanel editor={editor} />,
-}
-
 export function CommentsPanel({ editor }: { editor: Editor | null }) {
   const comments = useDocumentComments(editor)
 

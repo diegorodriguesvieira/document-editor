@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { BubbleToolbar, DocumentEditor, EditorToolbar, FeaturePanels } from '../editor'
-import { DocumentVariablesProvider, type DocumentVariable } from '../features'
+import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
+import { CommentsPanel, DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
@@ -89,8 +89,8 @@ export default function App() {
               console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
               console.log('document JSON:', doc)
             }}
-            // Custom rail (zoom is app state) — FeaturePanels keeps the panels
-            // the enabled features contribute (e.g. comments).
+            // The right rail is consumer-owned: render anything here. Swap
+            // CommentsPanel for your own UI built on useDocumentComments.
             renderRightBar={(ctx) => (
               <div className="right-rail">
                 <ZoomRail
@@ -98,7 +98,7 @@ export default function App() {
                   onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
                   onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
                 />
-                <FeaturePanels {...ctx} />
+                <CommentsPanel editor={ctx.editor} />
               </div>
             )}
             renderToolbar={(ctx) => {

@@ -4,7 +4,6 @@ import { EditorContent } from '@tiptap/react'
 import type { EditorApi } from '../core/EditorApi'
 import { EditorContextMenu } from './EditorContextMenu'
 import { EditorToolbar } from './EditorToolbar'
-import { FeaturePanels } from './FeaturePanels'
 import { InsertToolbar } from './InsertToolbar'
 import { PageAffordances } from './PageAffordances'
 import type { ResolvedFeatures } from '../core/registry'
@@ -23,9 +22,9 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
   /** Replace the left insert rail. Defaults to {@link InsertToolbar}, which is
    *  shown automatically whenever an opted-in feature contributes inserts. */
   renderInsertBar?: (ctx: DocumentEditorRenderContext) => ReactNode
-  /** Replace the right rail. Defaults to the feature-contributed side panels
-   *  ({@link FeaturePanels}, the `panels` channel) — include `<FeaturePanels
-   *  {...ctx}/>` in your custom rail to keep them. */
+  /** The right rail is CONSUMER-owned: render anything here (zoom controls,
+   *  a comments panel via `<CommentsPanel editor={ctx.editor}/>`, your own
+   *  UI built on hooks like `useDocumentComments`). Omit for no rail. */
   renderRightBar?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Visual scale of the page (1 = 100%). */
   zoom?: number
@@ -60,13 +59,7 @@ export function DocumentEditor({
         : null
     : null
 
-  const rightBar = ctx
-    ? renderRightBar
-      ? renderRightBar(ctx)
-      : resolved.panels.length > 0
-        ? <FeaturePanels editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
-        : null
-    : null
+  const rightBar = ctx && renderRightBar ? renderRightBar(ctx) : null
 
   return (
     <div className="document-editor">

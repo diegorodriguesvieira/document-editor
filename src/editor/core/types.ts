@@ -72,18 +72,6 @@ export interface ContextMenuSection {
 }
 
 /**
- * A side-panel contribution: UI that lives NEXT to the page (comments list,
- * word count…), auto-mounted in the right rail by {@link DocumentEditor} —
- * or wherever the consumer places {@link FeaturePanels} in a custom rail.
- */
-export interface PanelContribution {
-  id: string
-  /** Sort hint within the rail (ascending; default 0, stable for ties). */
-  order?: number
-  render: (ctx: FeatureRenderContext) => ReactNode
-}
-
-/**
  * A page-edge "chrome" region (header/footer). The hover affordance to add it
  * shows while no node of `nodeName` exists; clicking runs `addCommandId`.
  */
@@ -125,6 +113,4 @@ export interface FeatureDefinition {
   contextMenu?: ContextMenuSection[]
   /** Page-edge regions (header/footer) with a hover "add" affordance. */
   pageRegions?: PageRegion[]
-  /** Side panels next to the page (comments list, word count…). */
-  panels?: PanelContribution[]
 }
