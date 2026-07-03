@@ -175,9 +175,13 @@ function MergeFieldPanel({
   // Align with the rail: top = rail top, left = just past the rail. The rail
   // is sticky, but its rect still moves before the sticky engages — track it.
   useLayoutEffect(() => {
-    // Preferred anchor: the rail (top-aligned). Fallback: the button itself
-    // (e.g. the item rendered outside a rail, or in tests).
-    const target = anchor?.closest('.document-editor__rail') ?? anchor
+    // Preferred anchor: the STICKY bar (.insert-rail), top-aligned. NOT the
+    // .document-editor__rail grid wrapper — that one stretches the full
+    // document height and its rect scrolls with the paper, which would drag
+    // this fixed panel along with the scroll. The sticky bar's rect is stable
+    // once stuck (and pre-stick it moves with the page, keeping alignment).
+    // Fallback: the button itself (item rendered outside a rail, or tests).
+    const target = anchor?.closest('.insert-rail') ?? anchor
     const place = () => {
       if (!target) {
         setPosition({ top: 16, left: 16 })

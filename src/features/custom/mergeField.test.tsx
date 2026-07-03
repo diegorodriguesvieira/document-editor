@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
+import { DocumentEditor, InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
 import { jsonHasNode, renderEditor } from '../../test/editorHarness'
 import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
@@ -207,6 +207,32 @@ describe('mergeField', () => {
     created.editor.commands.insertContent(html)
     const paragraph = created.api.getJSON().doc.content?.[0]
     expect(paragraph?.content?.[0]).toMatchObject({ type: 'mergeField', attrs: hostile })
+  })
+
+  it('anchors the panel to the STICKY .insert-rail, not the full-height rail wrapper', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <DocumentVariablesProvider variables={SAMPLE}>
+        <DocumentEditor features={[MergeFieldFeature]} />
+      </DocumentVariablesProvider>,
+    )
+    const stickyBar = container.querySelector('.insert-rail') as HTMLElement
+    const wrapper = container.querySelector('.document-editor__rail') as HTMLElement
+    expect(stickyBar).not.toBeNull()
+    expect(wrapper).not.toBeNull()
+    const rectAt = (top: number, right: number) =>
+      ({ top, right, left: right - 48, bottom: top + 300, width: 48, height: 300, x: right - 48, y: top, toJSON: () => ({}) }) as DOMRect
+    // Simulate a scrolled document: the sticky bar is pinned at 72px while the
+    // full-height wrapper has scrolled far above the viewport.
+    stickyBar.getBoundingClientRect = () => rectAt(72, 60)
+    wrapper.getBoundingClientRect = () => rectAt(-400, 60)
+
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    const dialog = screen.getByRole('dialog', { name: 'Variables' })
+    // Anchored to the sticky bar (72px / right+12) — NOT dragged to -400px by
+    // the scrolling wrapper (the "panel rides the paper" bug).
+    expect(dialog.style.top).toBe('72px')
+    expect(dialog.style.left).toBe('72px')
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
