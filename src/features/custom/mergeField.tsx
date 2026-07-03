@@ -161,6 +161,10 @@ function MergeFieldPanel({
   const cardRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [pinned, setPinned] = useState(false)
+  // While a chip drag is in flight, the panel steps aside: see-through AND
+  // click-through (pointer-events: none), so the paper it covers stays visible
+  // and remains a valid drop target — native drag hit-testing skips it.
+  const [dragging, setDragging] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
 
   // The anchor (@ button) counts as "inside" so toggling it doesn't
@@ -211,7 +215,7 @@ function MergeFieldPanel({
   return (
     <div
       ref={cardRef}
-      className="document-editor-popup mf-panel"
+      className={`document-editor-popup mf-panel${dragging ? ' mf-panel--drag-through' : ''}`}
       role="dialog"
       aria-label="Variables"
       style={{ top: position.top, left: position.left }}
@@ -264,7 +268,9 @@ function MergeFieldPanel({
                       event.dataTransfer.setData('text/html', mergeFieldDragHTML(variable))
                       event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
                       event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
-                      // "Lift" the source chip while the drag is in flight.
+                      // The whole panel steps aside (fade + click-through)…
+                      setDragging(true)
+                      // …and the source chip "lifts" while the drag is in flight.
                       event.currentTarget.classList.add('mf-chip--dragging')
                       // Carry the DOCUMENT chip ({{label}}) as the drag image,
                       // not a screenshot of the panel button — you drag what
@@ -281,6 +287,8 @@ function MergeFieldPanel({
                       }
                     }}
                     onDragEnd={(event) => {
+                      // Fires on drop AND on cancel (Esc) — the panel returns either way.
+                      setDragging(false)
                       event.currentTarget.classList.remove('mf-chip--dragging')
                     }}
                     // NO onMouseDown preventDefault here: in Chromium that

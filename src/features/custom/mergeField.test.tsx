@@ -166,11 +166,14 @@ describe('mergeField', () => {
     expect(staged['text/plain']).toBe('{{Client name}}')
     expect(dataTransfer.effectAllowed).toBe('copy')
 
-    // "Lift" feedback: the source chip fades while the drag is in flight…
+    // "Lift" feedback: the source chip fades, and the whole panel steps aside
+    // (see-through + click-through) so the paper it covers stays droppable…
     expect(chip.classList.contains('mf-chip--dragging')).toBe(true)
+    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true)
     fireEvent.dragEnd(chip)
-    // …and recovers when the drag ends (dropped or cancelled).
+    // …and both recover when the drag ends (dropped or cancelled).
     expect(chip.classList.contains('mf-chip--dragging')).toBe(false)
+    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
 
   it('the drag payload parses back into a mergeField chip (what PM does on drop)', () => {

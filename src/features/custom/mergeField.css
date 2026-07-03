@@ -123,6 +123,18 @@
 
   /* ---- Drag & drop micro-interactions ---------------------------------- */
 
+  /* While a chip drag is in flight the panel steps aside: see-through, and
+     click-through (pointer-events: none) so the paper underneath stays a
+     valid drop target — native drag hit-testing skips the panel entirely. */
+  .document-editor-popup.mf-panel {
+    transition: opacity 0.15s ease;
+  }
+
+  .document-editor-popup.mf-panel--drag-through {
+    opacity: 0.25;
+    pointer-events: none;
+  }
+
   /* The source chip "lifts" (fades) while its drag is in flight. */
   .document-editor-popup .mf-chip--dragging {
     opacity: 0.45;
