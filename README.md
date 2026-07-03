@@ -8,7 +8,7 @@ A Google-Docs-style rich text editor built on **TipTap v3** (ProseMirror), with 
 - **Engine kept behind a seam** — app code talks to a small `EditorApi` facade and never imports `@tiptap/*` (enforced by a test). `createMockEditor()` lets you test toolbars/commands with no real editor.
 - **Headless + skinnable UI** — `useToolbar`/`useInsertBar` expose the live buttons; `EditorToolbar`, `BubbleToolbar` and `InsertToolbar` are thin, overridable skins over them.
 - **Portable content** — documents persist as a thin ProseMirror-JSON envelope (`DocumentJSON`, `{ doc }`). Loading content whose feature is disabled throws instead of silently wiping the document.
-- **Optional skin** — one `editor.css` import; theme via `--editor-*` tokens, override anything without `!important` thanks to `@layer` (see `THEMING.md`).
+- **Built-in skin** — Emotion `<Global>` (`EditorSkin`, mounted by `DocumentEditor`; no .css files); theme via `--editor-*` tokens (see `THEMING.md`).
 
 ## Project layout
 
@@ -19,7 +19,7 @@ src/
 │   ├── hooks/         # useDocumentEditor, useFeatureState, useToolbar, createSuggestionPopup
 │   ├── components/    # DocumentEditor, toolbars (top/bubble/insert), SlashMenu, EditorContextMenu, PageAffordances
 │   ├── authoring.ts   # convenience TipTap re-exports for feature authors
-│   ├── editor.css     # optional default skin (tokens + @layer, see THEMING.md)
+│   ├── skin.tsx       # default skin: Emotion Global aggregating *.styles.ts partials (see THEMING.md)
 │   └── index.ts       # public barrel
 ├── features/          # marks/ · blocks/ · custom/ · history
 └── app/               # demo playground

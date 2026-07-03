@@ -1,5 +1,8 @@
 /* CodeBlockFeature — <pre> inside the page. */
-@layer editor {
+/* Migrated from codeBlock.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+import { css } from '@emotion/react'
+
+export const codeBlockStyles = css`
   .document-editor__surface pre {
     margin: 0.5em 0;
     padding: 12px 16px;
@@ -10,4 +13,4 @@
     font-family: var(--editor-font-mono);
     font-size: 13px;
   }
-}
+`

@@ -1,5 +1,7 @@
-/* Right-side comments panel. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* Right-side comments panel. Migrated from commentsPanel.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const commentsPanelStyles = css`
   .comments-panel {
     width: 260px;
     max-height: 70vh;
@@ -62,4 +64,4 @@
     color: var(--editor-text);
     font-size: 13px;
   }
-}
+`

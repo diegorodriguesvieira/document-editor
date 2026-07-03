@@ -1,5 +1,8 @@
-/* ImageFeature — images inside the page + the 8 resize handles. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* ImageFeature — images inside the page + the 8 resize handles.
+   Migrated from image.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const imageStyles = css`
   .document-editor__surface img {
     max-width: 100%;
     height: auto;
@@ -45,4 +48,4 @@
   .document-editor__surface .image-resizer__handle--s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
   .document-editor__surface .image-resizer__handle--w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
   .document-editor__surface .image-resizer__handle--e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
-}
+`

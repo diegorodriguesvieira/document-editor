@@ -1,6 +1,9 @@
+import { css } from '@emotion/react'
+
 /* TableFeature — table, cells, column resizing + cell selection. Aligned with
-   prosemirror-tables' own style/tables.css, scoped to our surface. */
-@layer editor {
+   prosemirror-tables' own style/tables.css, scoped to our surface.
+   Migrated from table.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const tableStyles = css`
   .document-editor__surface table {
     border-collapse: collapse;
     table-layout: fixed;
@@ -50,4 +53,4 @@
     font-weight: 600;
     text-align: left;
   }
-}
+`

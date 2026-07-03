@@ -1,5 +1,8 @@
-/* Header/footer hover affordance — "Add header +". */
-@layer editor {
+/* Header/footer hover affordance — "Add header +".
+   Migrated from PageAffordances.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+import { css } from '@emotion/react'
+
+export const pageAffordancesStyles = css`
   .document-editor .page-affordance {
     display: flex;
     align-items: center;
@@ -31,4 +34,4 @@
     font-weight: 500;
     white-space: nowrap;
   }
-}
+`

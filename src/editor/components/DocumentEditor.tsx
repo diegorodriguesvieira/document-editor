@@ -9,6 +9,7 @@ import { PageAffordances } from './PageAffordances'
 import { useFeatureState } from '../hooks/useFeatureState'
 import type { ResolvedFeatures } from '../core/registry'
 import { useDocumentEditor, type UseDocumentEditorOptions } from '../hooks/useDocumentEditor'
+import { EditorSkin } from '../skin'
 
 export interface DocumentEditorRenderContext {
   /** Never null: the context is only built once the editor exists — render
@@ -86,6 +87,9 @@ export function DocumentEditor({
 
   return (
     <div className="document-editor">
+      {/* The skin travels with the component now (Emotion Global) — there is
+          no editor.css to import. Duplicate mounts are harmless. */}
+      <EditorSkin />
       {insertBar ? <aside className="document-editor__rail">{insertBar}</aside> : null}
       <div className="document-editor__column">
         {toolbar}

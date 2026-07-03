@@ -1,5 +1,8 @@
-/* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>.
+   Migrated from SlashMenu.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const slashMenuStyles = css`
   .document-editor-popup .slash-menu {
     display: flex;
     flex-direction: column;
@@ -53,4 +56,4 @@
     color: var(--editor-text-subtle);
     font-size: 13px;
   }
-}
+`

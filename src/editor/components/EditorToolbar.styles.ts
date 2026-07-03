@@ -1,5 +1,7 @@
-/* Formatting toolbar. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* Formatting toolbar. Migrated from EditorToolbar.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const editorToolbarStyles = css`
   .editor-toolbar {
     position: sticky;
     top: var(--editor-sticky-offset);
@@ -45,4 +47,4 @@
     opacity: 0.4;
     cursor: default;
   }
-}
+`

@@ -1,6 +1,24 @@
 /* MergeFieldFeature — pure-DOM chip + the variables side panel (portals to
-   <body>, anchored to the right of the insert rail, top-aligned with it). */
-@layer editor {
+   <body>, anchored to the right of the insert rail, top-aligned with it).
+   Migrated from mergeField.css into the Emotion Global skin (aggregated by
+   src/editor/skin.tsx). */
+import { css, keyframes } from '@emotion/react'
+
+const editorChipLand = keyframes`
+  0% {
+    transform: scale(0.85);
+    background: var(--editor-accent-bg);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+    background: var(--editor-mergefield-bg);
+  }
+`
+
+export const mergeFieldStyles = css`
   .document-editor__surface .merge-field {
     display: inline-block;
     padding: 0 6px;
@@ -160,21 +178,7 @@
      removed on animationend). Subtle by design; off under reduced motion. */
   @media (prefers-reduced-motion: no-preference) {
     .document-editor__surface .merge-field--dropped {
-      animation: editor-chip-land 220ms ease-out;
-    }
-
-    @keyframes editor-chip-land {
-      0% {
-        transform: scale(0.85);
-        background: var(--editor-accent-bg);
-      }
-      60% {
-        transform: scale(1.04);
-      }
-      100% {
-        transform: scale(1);
-        background: var(--editor-mergefield-bg);
-      }
+      animation: ${editorChipLand} 220ms ease-out;
     }
   }
-}
+`

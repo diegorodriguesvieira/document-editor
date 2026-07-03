@@ -1,5 +1,8 @@
-/* ConditionalBlockFeature — React node view + condition editor. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* ConditionalBlockFeature — React node view + condition editor.
+   Migrated from conditionalBlock.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const conditionalBlockStyles = css`
   .document-editor__surface .conditional-block {
     margin: 0.6em 0;
     border: 1px solid var(--editor-border);
@@ -109,4 +112,4 @@
     font-size: 13px;
     cursor: pointer;
   }
-}
+`

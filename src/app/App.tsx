@@ -6,8 +6,7 @@ import { contractTemplate } from './contractTemplate'
 import { PillToolbar } from './PillToolbar'
 import { ZoomRail } from './ZoomRail'
 import { presets } from './presets'
-import '../editor/editor.css' // SDK default skin (optional import)
-import './styles.css'
+import './styles.css' // demo-app chrome (the SDK skin now ships inside the components)
 
 type ToolbarStyle = 'default' | 'pill' | 'bubble'
 

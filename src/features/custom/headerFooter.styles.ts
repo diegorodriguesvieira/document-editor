@@ -1,10 +1,14 @@
-/* HeaderFooterFeature — rendered header/footer regions. */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* HeaderFooterFeature — rendered header/footer regions.
+   Migrated from headerFooter.css into the Emotion Global skin (aggregated by
+   src/editor/skin.tsx). */
+export const headerFooterStyles = css`
   /* Google-Docs behavior: the FOOTER sits at the BOTTOM of the page's
      min-height even when the body is short, and gets pushed further down as
      content grows past it. Scoped with :has() so documents without a footer
      keep the plain block flow (this layout change is feature-owned). The
-     `.node-documentFooter` wrapper is TipTap's stable node-view wrapper class.
+     '.node-documentFooter' wrapper is TipTap's stable node-view wrapper class.
      NOTE for a future image-text-wrap phase: floats don't apply inside a flex
      container — this pin must become absolute+measured-padding then. */
   .document-editor__surface .ProseMirror:has(> .node-documentFooter) {
@@ -75,4 +79,4 @@
   .document-editor__surface .doc-region__content {
     outline: none;
   }
-}
+`

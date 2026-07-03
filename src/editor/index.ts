@@ -46,6 +46,9 @@ export { EditorContextMenu } from './components/EditorContextMenu'
 export { PageAffordances } from './components/PageAffordances'
 export { DocumentEditor } from './components/DocumentEditor'
 export type { DocumentEditorProps, DocumentEditorRenderContext } from './components/DocumentEditor'
+// The Emotion skin (successor of the editor.css import). DocumentEditor mounts
+// one automatically; custom shells render it once themselves.
+export { EditorSkin } from './skin'
 export { EditorContent } from '@tiptap/react'
 
 // Content / persistence

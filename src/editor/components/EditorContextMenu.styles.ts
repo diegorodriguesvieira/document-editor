@@ -1,5 +1,8 @@
 /* Right-click context menu (e.g. table actions). Portals to <body>. */
-@layer editor {
+/* Migrated from EditorContextMenu.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+import { css } from '@emotion/react'
+
+export const editorContextMenuStyles = css`
   .document-editor-popup.context-menu {
     z-index: var(--editor-z-menu);
     display: flex;
@@ -66,4 +69,4 @@
     width: 20px;
     font-size: 14px;
   }
-}
+`

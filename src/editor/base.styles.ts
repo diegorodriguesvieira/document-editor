@@ -1,9 +1,13 @@
+import { css } from '@emotion/react'
+
 /**
  * Base tokens + reset for the editor SDK skin. Every other partial builds on
- * these `--editor-*` custom properties — override them (unlayered) to theme.
- * Aggregated by `./editor.css`; see THEMING.md for the full token contract.
+ * these '--editor-*' custom properties — override them to theme.
+ * Migrated from base.css into the Emotion Global skin (aggregated by
+ * src/editor/skin.tsx). The Emotion skin is unlayered; token overrides still
+ * work, specificity is standard. See THEMING.md for the full token contract.
  */
-@layer editor {
+export const baseStyles = css`
   :root {
     /* Typography */
     --editor-font: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
@@ -76,9 +80,9 @@
   }
 
   /* Self-contained base so the SDK doesn't rely on a global reset. Two roots:
-   * `.document-editor` (the shell) and `.document-editor-popup` (the namespace
-   * class every body-portaled surface carries — context menu, `/` and `@`
-   * menus, colour picker, merge-field modal). `:where()` keeps specificity 0,
+   * '.document-editor' (the shell) and '.document-editor-popup' (the namespace
+   * class every body-portaled surface carries — context menu, '/' and '@'
+   * menus, colour picker, merge-field modal). ':where()' keeps specificity 0,
    * so consumers override effortlessly. */
   :where(.document-editor, .document-editor-popup) {
     box-sizing: border-box;
@@ -97,4 +101,4 @@
   .document-editor-popup {
     z-index: var(--editor-z-popup);
   }
-}
+`

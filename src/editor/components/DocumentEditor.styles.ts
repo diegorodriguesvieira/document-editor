@@ -1,5 +1,17 @@
-/* Editor shell + the flat page surface. */
-@layer editor {
+import { css, keyframes } from '@emotion/react'
+
+/* Editor shell + the flat page surface.
+   Migrated from DocumentEditor.css into the Emotion Global skin (aggregated by
+   src/editor/skin.tsx). The Emotion skin is unlayered; token overrides still
+   work, specificity is standard. */
+
+const editorGapcursorBlink = keyframes`
+  to {
+    visibility: hidden;
+  }
+`
+
+export const documentEditorStyles = css`
   /* 3-column grid: side rails live in the gutters pinned to the browser edges,
      so the content column is centered in the VIEWPORT (a flex row would center
      the rail+column+rail group instead, pushing the text off-center). */
@@ -32,7 +44,7 @@
      so the page fills "viewport minus WHATEVER chrome the app has" with zero
      math, any header height. Without a sized parent, everything is content-
      sized and --editor-page-min-height is the fallback page height.
-     `flex: 1 0 auto` = grow to fill, never shrink, content-sized otherwise. */
+     'flex: 1 0 auto' = grow to fill, never shrink, content-sized otherwise. */
   .document-editor__column {
     grid-column: 2;
     min-width: 0;
@@ -98,42 +110,35 @@
     margin-top: 0.6em;
   }
 
-}
-
-/* Gap cursor: a blinking caret in the gaps around isolating/atom blocks (a
-   nested conditional, a table…) so you can type before/after them.
-   DELIBERATELY OUTSIDE @layer editor: TipTap injects its own gap-cursor CSS at
-   runtime as an UNLAYERED <style>, and unlayered rules beat any layer — so
-   these overrides must be unlayered too, or the injected `top: -2px` etc. win.
-   They compete with the ENGINE's injected styles, not with consumer CSS. */
-.document-editor__surface .ProseMirror-gapcursor {
-  display: none;
-  pointer-events: none;
-  position: absolute;
-}
-.document-editor__surface .ProseMirror-gapcursor::after {
-  content: '';
-  display: block;
-  position: absolute;
-  top: -2px;
-  width: 20px;
-  border-top: 1px solid var(--editor-text);
-  animation: editor-gapcursor-blink 1.1s steps(2, start) infinite;
-}
-
-/* A gap BELOW a block sits after its collapsed bottom margin (~10px of air),
-   but a gap ABOVE one lands exactly on the block's top border — glued to it.
-   When a block follows the cursor (:not(:last-child)), lift the dash to
-   mirror the below-gap breathing room. */
-.document-editor__surface .ProseMirror-gapcursor:not(:last-child)::after {
-  top: -9px;
-}
-.document-editor__surface .ProseMirror-focused .ProseMirror-gapcursor {
-  display: block;
-}
-
-@keyframes editor-gapcursor-blink {
-  to {
-    visibility: hidden;
+  /* Gap cursor: a blinking caret in the gaps around isolating/atom blocks (a
+     nested conditional, a table…) so you can type before/after them.
+     DELIBERATELY OUTSIDE @layer editor: TipTap injects its own gap-cursor CSS at
+     runtime as an UNLAYERED <style>, and unlayered rules beat any layer — so
+     these overrides must be unlayered too, or the injected 'top: -2px' etc. win.
+     They compete with the ENGINE's injected styles, not with consumer CSS. */
+  .document-editor__surface .ProseMirror-gapcursor {
+    display: none;
+    pointer-events: none;
+    position: absolute;
   }
-}
+  .document-editor__surface .ProseMirror-gapcursor::after {
+    content: '';
+    display: block;
+    position: absolute;
+    top: -2px;
+    width: 20px;
+    border-top: 1px solid var(--editor-text);
+    animation: ${editorGapcursorBlink} 1.1s steps(2, start) infinite;
+  }
+
+  /* A gap BELOW a block sits after its collapsed bottom margin (~10px of air),
+     but a gap ABOVE one lands exactly on the block's top border — glued to it.
+     When a block follows the cursor (:not(:last-child)), lift the dash to
+     mirror the below-gap breathing room. */
+  .document-editor__surface .ProseMirror-gapcursor:not(:last-child)::after {
+    top: -9px;
+  }
+  .document-editor__surface .ProseMirror-focused .ProseMirror-gapcursor {
+    display: block;
+  }
+`

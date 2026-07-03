@@ -1,19 +1,23 @@
 # Theming the editor
 
-The SDK ships a **clean default skin** as one optional stylesheet. It's plain CSS
-with **zero runtime** — no CSS-in-JS, no theme provider, nothing to render. It
-styles the React chrome, the ProseMirror-managed document DOM, and the pure-DOM
-node views uniformly (a CSS-in-JS runtime can't reach the last two).
+The SDK ships a **clean default skin** built with Emotion (`@emotion/react`) —
+there are **no .css files**: every style partial is a `*.styles.ts` module next
+to its source, aggregated by `src/editor/skin.tsx` and injected once as a
+`<Global>`. Descendant selectors from that Global reach everything uniformly:
+the React chrome, the ProseMirror-managed document DOM, and the pure-DOM node
+views (per-component CSS-in-JS can't reach the last two — the Global can).
 
-## 1. Import it
+## 1. It's built in
 
-```ts
-import '@your-sdk/editor/editor.css' // once, at your app root
-```
+`DocumentEditor` mounts the skin automatically — nothing to import. Custom
+shells that assemble the exported components themselves (`EditorToolbar`,
+`CommentsPanel`, …) render `<EditorSkin />` once near their root; duplicate
+mounts are harmless.
 
-Everything is wrapped in a single `@layer editor` cascade layer. That's the whole
-trick: **any rule you write outside a layer beats the SDK's, regardless of
-specificity** — no `!important`, no specificity wars.
+The skin's rules are **unlayered** (Emotion injects plain rules), so consumer
+overrides compete on normal specificity and source order — Emotion's style tags
+are injected at runtime, so equal-specificity app rules loaded earlier lose;
+be one class more specific (or use the tokens, which is the supported path).
 
 ## 2. Re-skin with tokens (the easy 90%)
 
@@ -23,7 +27,7 @@ on a wrapper (scoped) — and you're done. Each default equals the original valu
 so importing the file changes nothing until you override.
 
 ```css
-/* your app, unlayered — wins over the layer */
+/* your app CSS (or an Emotion Global of your own) */
 :root {
   --editor-accent: #7c3aed;      /* toolbar active, links, resize handle, affordance */
   --editor-surface: #0f1116;     /* page + popovers + inputs (a dark theme) */
@@ -112,7 +116,9 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 
 ## 4. Skipping the default entirely
 
-The SDK works with **no stylesheet** — components just render with their class
-names. If you'd rather own all styling, don't import `editor.css`; write your own
-CSS against the class contract above. The headless `useToolbar` / `useInsertBar`
-hooks let you replace the markup too (see `EXTENDING.md`).
+The components render plain class names; only `<EditorSkin />` gives them
+looks. `DocumentEditor` mounts it automatically — to own ALL styling, assemble
+a custom shell from the exported components (skip `DocumentEditor`, don't
+render `EditorSkin`) and write your own styles against the class contract
+above. The headless `useToolbar` / `useInsertBar` hooks let you replace the
+markup too (see `EXTENDING.md`).

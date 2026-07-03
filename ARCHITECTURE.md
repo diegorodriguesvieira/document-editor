@@ -130,7 +130,7 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
 
 ## 5. The shell: `<DocumentEditor>`
 
-`components/DocumentEditor.tsx` + `DocumentEditor.css`.
+`components/DocumentEditor.tsx` + `DocumentEditor.styles.ts`.
 
 - **Layout** is a 3-column grid: `minmax(min-content,1fr) | minmax(0,
   --editor-page-width) | minmax(min-content,1fr)`. Rails pin to the browser
@@ -251,20 +251,28 @@ The mark + storage + click-to-scroll behavior is the feature;
 consumer rebuilds UI on (the demo's `CommentCards` proves the rewrite path).
 This is the pattern that replaced the deleted "panels channel".
 
-## 9. CSS architecture
+## 9. CSS architecture (Emotion, no .css files)
 
-- One optional import (`editor.css`) aggregating co-located partials — every
-  component/feature owns its `.css` next to its `.tsx`.
-- Everything lives in `@layer editor`, so ANY unlayered consumer rule wins
-  without `!important`.
+- The skin is Emotion: every component/feature owns a `*.styles.ts` (a
+  module-scope `css` template) next to its `.tsx`; `editor/skin.tsx` aggregates
+  them in cascade order into one `<Global>` (`EditorSkin`), which
+  `DocumentEditor` mounts automatically (custom shells render it once).
+- Rules are UNLAYERED (the old `@layer editor` contract is gone): consumer
+  overrides compete on normal specificity/source order; the supported theming
+  path is the `--editor-*` tokens.
+- Performance rules that keep Emotion invisible: every template lives at
+  module scope (serialized once); high-frequency values (panel position,
+  resize/zoom) stay in inline `style`; pure-DOM node views (mergeField chip)
+  stay pure — they're styled by the Global's descendant selectors, never
+  converted to styled/React.
 - Tokens (`--editor-*`) are the theming contract; `THEMING.md` is the
   authoritative table (including the class-name contract — those names are
-  public API).
+  public API and what the imperative class toggles/tests rely on).
 - Scoping convention: in-page UI under `.document-editor__surface`, portals
   carry `.document-editor-popup`.
-- **Exception, on purpose**: gap-cursor rules are UNLAYERED because TipTap
-  injects its own unlayered gap-cursor CSS at runtime, which would beat any
-  layered rule. Don't "fix" that back into the layer.
+- Gap-cursor overrides still beat TipTap's runtime-injected unlayered CSS —
+  now via higher specificity (`.document-editor__surface .ProseMirror-gapcursor`),
+  since the whole skin is unlayered anyway.
 
 ## 10. Persistence & backend contract
 

@@ -1,5 +1,8 @@
-/* ColorFeature — toolbar swatch + preset/custom picker (picker portals to <body>). */
-@layer editor {
+import { css } from '@emotion/react'
+
+/* ColorFeature — toolbar swatch + preset/custom picker (picker portals to <body>).
+   Migrated from color.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const colorStyles = css`
   .color-swatch {
     display: inline-flex;
     align-items: center;
@@ -76,4 +79,4 @@
     opacity: 0;
     pointer-events: none;
   }
-}
+`

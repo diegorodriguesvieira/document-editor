@@ -1,5 +1,8 @@
+import { css } from '@emotion/react'
+
 /* Insert rail — vertical toolbar to the left of the page. */
-@layer editor {
+/* Migrated from InsertToolbar.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+export const insertToolbarStyles = css`
   .insert-rail {
     position: sticky;
     top: calc(var(--editor-sticky-offset) + 16px);
@@ -33,4 +36,4 @@
     outline: 2px solid var(--editor-accent);
     outline-offset: 1px;
   }
-}
+`

@@ -1,9 +1,0 @@
-/* CommentsFeature — the anchored mark. The comment body shows in the side panel
-   (see commentsPanel.css). Scoped: a consumer page's own `.comment` class must
-   not pick up SDK styles. */
-@layer editor {
-  .document-editor__surface .comment {
-    background: var(--editor-comment-bg);
-    border-bottom: 2px solid var(--editor-comment-accent);
-  }
-}

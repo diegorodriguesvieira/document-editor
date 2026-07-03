@@ -241,22 +241,29 @@ The condition grammar, coercion rules and error policy live in
 
 ## 9. Styling your feature
 
-Ship your own CSS file and import it from your feature module — **never edit
-`editor.css`**. Follow the skin's conventions (they're what keeps consumer
-pages collision-free, see THEMING.md):
+Ship a `myFeature.styles.ts` next to your feature (an Emotion `css` template at
+module scope — serialized once, never built inside a render) and register it in
+the skin aggregator (`src/editor/skin.tsx` SKIN array), or mount your own
+`<Global styles={myFeatureStyles} />` once. Follow the skin's conventions
+(they're what keeps consumer pages collision-free, see THEMING.md):
 
-```css
-/* myFeature.css */
-@layer editor {                           /* consumers out-cascade you for free */
+```ts
+/* myFeature.styles.ts */
+import { css } from '@emotion/react'
+
+export const myFeatureStyles = css`
   .document-editor__surface .my-node {    /* in-page content: scope under the surface */
     background: var(--editor-subtle-bg);  /* build on the --editor-* tokens */
   }
-  /* Body-portaled UI: put `document-editor-popup` in the root's className,
+  /* Body-portaled UI: put 'document-editor-popup' in the root's className,
      then style the ROOT with a compound selector and children as descendants: */
   .document-editor-popup.my-popover { … }
   .document-editor-popup .my-popover__item { … }
-}
+`
 ```
+
+Keep dynamic, high-frequency values (positions, sizes mid-drag) in inline
+`style` props — never interpolated into the Emotion template.
 
 ## 10. Testing your feature
 
