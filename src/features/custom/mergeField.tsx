@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { defineFeature, mergeAttributes, Node, useDismissable, type EditorApi } from '../../editor'
 import type { Node as PMNode, Slice } from '@tiptap/pm/model'
@@ -164,7 +164,32 @@ function MergeFieldPanel({
   // While a chip drag is in flight, the panel steps aside: see-through AND
   // click-through (pointer-events: none), so the paper it covers stays visible
   // and remains a valid drop target — native drag hit-testing skips it.
+  // MUST be applied AFTER dragstart's task finishes: Chromium ABORTS a drag
+  // whose source (or an ancestor) turns non-interactive/restyled while the
+  // drag is still initiating — hence the deferred setTimeout( , 0) below.
   const [dragging, setDragging] = useState(false)
+  const dragAsideTimer = useRef<number | undefined>(undefined)
+
+  // Belt and braces for the ghost-stuck failure mode: if the dragged chip
+  // unmounts mid-drag (the consumer's variable list can update async), its own
+  // onDragEnd never runs and the panel would stay translucent AND unclickable
+  // (pointer-events: none). Any drag ending anywhere still fires dragend/drop
+  // through the document — reset there, independent of the chip's survival.
+  // Perf: listeners exist ONLY while a drag is in flight, and dragend/drop
+  // fire once per gesture (unlike dragover) — zero steady-state cost.
+  useEffect(() => {
+    if (!dragging) return
+    const reset = () => {
+      window.clearTimeout(dragAsideTimer.current)
+      setDragging(false)
+    }
+    document.addEventListener('dragend', reset, true)
+    document.addEventListener('drop', reset, true)
+    return () => {
+      document.removeEventListener('dragend', reset, true)
+      document.removeEventListener('drop', reset, true)
+    }
+  }, [dragging])
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
 
   // The anchor (@ button) counts as "inside" so toggling it doesn't
@@ -268,9 +293,11 @@ function MergeFieldPanel({
                       event.dataTransfer.setData('text/html', mergeFieldDragHTML(variable))
                       event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
                       event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
-                      // The whole panel steps aside (fade + click-through)…
-                      setDragging(true)
-                      // …and the source chip "lifts" while the drag is in flight.
+                      // The whole panel steps aside (fade + click-through) —
+                      // DEFERRED past this task, or Chromium aborts the drag
+                      // it's still initiating (see dragAsideTimer above).
+                      dragAsideTimer.current = window.setTimeout(() => setDragging(true), 0)
+                      // The source chip "lifts" while the drag is in flight.
                       event.currentTarget.classList.add('mf-chip--dragging')
                       // Carry the DOCUMENT chip ({{label}}) as the drag image,
                       // not a screenshot of the panel button — you drag what
@@ -287,7 +314,11 @@ function MergeFieldPanel({
                       }
                     }}
                     onDragEnd={(event) => {
-                      // Fires on drop AND on cancel (Esc) — the panel returns either way.
+                      // Fires on drop AND on cancel (Esc) — the panel returns
+                      // either way. Clear the deferred step-aside too: an
+                      // instantly-cancelled drag must not leave the panel
+                      // ghosted after dragend already ran.
+                      window.clearTimeout(dragAsideTimer.current)
                       setDragging(false)
                       event.currentTarget.classList.remove('mf-chip--dragging')
                     }}

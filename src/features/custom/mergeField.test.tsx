@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DocumentEditor, InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
@@ -166,12 +166,17 @@ describe('mergeField', () => {
     expect(staged['text/plain']).toBe('{{Client name}}')
     expect(dataTransfer.effectAllowed).toBe('copy')
 
-    // "Lift" feedback: the source chip fades, and the whole panel steps aside
-    // (see-through + click-through) so the paper it covers stays droppable…
+    // "Lift" feedback: the source chip fades right away…
     expect(chip.classList.contains('mf-chip--dragging')).toBe(true)
-    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true)
+    // …but the panel's step-aside MUST be deferred past the dragstart task:
+    // restyling the source's ancestor (pointer-events: none) while Chromium is
+    // still initiating the drag ABORTS it (the "can't drag anymore" bug).
+    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
+    await waitFor(() =>
+      expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true),
+    )
     fireEvent.dragEnd(chip)
-    // …and both recover when the drag ends (dropped or cancelled).
+    // Both recover when the drag ends (dropped or cancelled).
     expect(chip.classList.contains('mf-chip--dragging')).toBe(false)
     expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
@@ -210,6 +215,36 @@ describe('mergeField', () => {
     created.editor.commands.insertContent(html)
     const paragraph = created.api.getJSON().doc.content?.[0]
     expect(paragraph?.content?.[0]).toMatchObject({ type: 'mergeField', attrs: hostile })
+  })
+
+  it('recovers the panel even if the dragged chip unmounts mid-drag (document-level reset)', async () => {
+    const user = userEvent.setup()
+    const api = createMockEditor().api
+    const ui = (variables: DocumentVariable[]) => (
+      <DocumentVariablesProvider variables={variables}>
+        <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
+      </DocumentVariablesProvider>
+    )
+    const { rerender } = render(ui(SAMPLE))
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+
+    const chip = screen.getByRole('button', { name: 'Client name' })
+    fireEvent.dragStart(chip, {
+      dataTransfer: { setData: () => {}, effectAllowed: 'none' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true),
+    )
+
+    // The consumer's variable list updates mid-drag: the dragged chip unmounts,
+    // so its own onDragEnd handler will never run.
+    rerender(ui([{ id: 'other', label: 'Other' }]))
+    expect(screen.queryByRole('button', { name: 'Client name' })).toBeNull()
+
+    // The drag still ends SOMEWHERE (drop on the page, dragend on <body>) —
+    // the document-level capture listener restores the panel.
+    fireEvent.drop(document.body)
+    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
 
   it('anchors the panel to the STICKY .insert-rail, not the full-height rail wrapper', async () => {
