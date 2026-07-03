@@ -120,4 +120,49 @@
     color: var(--editor-text-subtle);
     font-size: 13px;
   }
+
+  /* ---- Drag & drop micro-interactions ---------------------------------- */
+
+  /* The source chip "lifts" (fades) while its drag is in flight. */
+  .document-editor-popup .mf-chip--dragging {
+    opacity: 0.45;
+  }
+
+  /* Custom drag image: the DOCUMENT chip ({{label}}), parked offscreen just
+     long enough for the browser to snapshot it at dragstart. */
+  .mf-drag-ghost {
+    position: fixed;
+    top: -100px;
+    left: -100px;
+    pointer-events: none;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--editor-mergefield-bg);
+    border: 1px solid var(--editor-mergefield-border);
+    color: var(--editor-mergefield-fg);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Landing pop on the freshly dropped chip (class applied by handleDrop,
+     removed on animationend). Subtle by design; off under reduced motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    .document-editor__surface .merge-field--dropped {
+      animation: editor-chip-land 220ms ease-out;
+    }
+
+    @keyframes editor-chip-land {
+      0% {
+        transform: scale(0.85);
+        background: var(--editor-accent-bg);
+      }
+      60% {
+        transform: scale(1.04);
+      }
+      100% {
+        transform: scale(1);
+        background: var(--editor-mergefield-bg);
+      }
+    }
+  }
 }

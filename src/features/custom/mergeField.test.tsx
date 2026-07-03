@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
 import { jsonHasNode, renderEditor } from '../../test/editorHarness'
-import { MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
+import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const SAMPLE: DocumentVariable[] = [
@@ -165,6 +165,12 @@ describe('mergeField', () => {
     expect(staged['text/html']).toContain('data-merge-field="client.name"')
     expect(staged['text/plain']).toBe('{{Client name}}')
     expect(dataTransfer.effectAllowed).toBe('copy')
+
+    // "Lift" feedback: the source chip fades while the drag is in flight…
+    expect(chip.classList.contains('mf-chip--dragging')).toBe(true)
+    fireEvent.dragEnd(chip)
+    // …and recovers when the drag ends (dropped or cancelled).
+    expect(chip.classList.contains('mf-chip--dragging')).toBe(false)
   })
 
   it('the drag payload parses back into a mergeField chip (what PM does on drop)', () => {
@@ -221,5 +227,26 @@ describe('mergeField', () => {
     rerender(ui([{ id: 'a', label: 'Arrived later' }]))
     // Modal stayed open (no remount) and now shows the loaded variable.
     expect(screen.getByRole('button', { name: 'Arrived later' })).toBeInTheDocument()
+  })
+})
+
+describe('drop → caret to the right of the chip', () => {
+  it('chipFromSlice accepts a bare chip or one chip alone in a paragraph — nothing richer', async () => {
+    const { DOMParser } = await import('@tiptap/pm/model')
+    const created = renderEditor([MergeFieldFeature])
+    const parse = (html: string) => {
+      const el = document.createElement('div')
+      el.innerHTML = html
+      return DOMParser.fromSchema(created.editor.schema).parseSlice(el)
+    }
+
+    const bare = parse(mergeFieldDragHTML(SAMPLE[0]))
+    expect(chipFromSlice(bare)?.attrs.id).toBe('client.name')
+
+    const inParagraph = parse(`<p>${mergeFieldDragHTML(SAMPLE[0])}</p>`)
+    expect(chipFromSlice(inParagraph)?.attrs.id).toBe('client.name')
+
+    const richer = parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`)
+    expect(chipFromSlice(richer)).toBeNull()
   })
 })

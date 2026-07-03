@@ -108,7 +108,7 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
 - **Empty state:** `.document-editor__empty-state` — a viewport-spanning `position: fixed` overlay (`pointer-events: none`, children clickable). Embedding the editor in a split pane? Restyle it (e.g. `position: absolute` under a positioned wrapper) so it centers over the editor, not the app.
-- **Features:** `.callout`, `.merge-field`, `.mf-panel*`/`.mf-chip`, `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
+- **Features:** `.callout`, `.merge-field` (`--dropped` landing animation), `.mf-panel*`/`.mf-chip` (`--dragging`), `.mf-drag-ghost` (custom drag image), `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
 
 ## 4. Skipping the default entirely
 

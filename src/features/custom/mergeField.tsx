@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { defineFeature, mergeAttributes, Node, useDismissable, type EditorApi } from '../../editor'
+import type { Node as PMNode, Slice } from '@tiptap/pm/model'
+import { Plugin, TextSelection } from '@tiptap/pm/state'
+import { dropPoint } from '@tiptap/pm/transform'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 import { createMergeFieldSuggestion } from './mergeFieldSuggestion'
 
@@ -53,7 +56,65 @@ const MergeField = Node.create({
       return { dom }
     }
   },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          // Dropping a chip: PM's default leaves the dropped node NODE-selected
+          // (blue). We want typing to continue right away — insert the chip and
+          // put the CARET immediately to its right.
+          handleDrop: (view, event, slice, moved) => {
+            if (moved) return false // internal drags keep PM's move semantics
+            const chip = chipFromSlice(slice)
+            if (!chip) return false
+            const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+            if (!coords) return false
+            const insert = dropPoint(view.state.doc, coords.pos, slice) ?? coords.pos
+            const tr = view.state.tr.insert(insert, chip.type.create(chip.attrs))
+            // Trailing space + caret after it — same feel as click-insert
+            // (typing isn't glued to the chip).
+            tr.insertText(' ', insert + chip.nodeSize)
+            tr.setSelection(TextSelection.create(tr.doc, insert + chip.nodeSize + 1))
+            view.dispatch(tr.scrollIntoView())
+            view.focus()
+            // Subtle "landing" pop on the chip that was just dropped (CSS,
+            // gated by prefers-reduced-motion). Class scoped to THIS drop —
+            // load/undo recreate node views without it, nothing animates
+            // spuriously.
+            const dom = view.nodeDOM(insert)
+            if (dom instanceof HTMLElement) {
+              dom.classList.add('merge-field--dropped')
+              dom.addEventListener(
+                'animationend',
+                () => dom.classList.remove('merge-field--dropped'),
+                { once: true },
+              )
+            }
+            return true
+          },
+        },
+      }),
+    ]
+  },
 })
+
+/**
+ * The single mergeField chip inside a drop payload, if that's ALL the payload
+ * is (a bare chip, or a chip alone inside one paragraph — both shapes come out
+ * of parsing the panel's text/html). Anything richer falls back to PM's
+ * default drop. Exported for tests.
+ */
+export function chipFromSlice(slice: Slice): PMNode | null {
+  const first = slice.content.firstChild
+  if (!first || slice.content.childCount !== 1) return null
+  if (first.type.name === 'mergeField') return first
+  if (first.type.name === 'paragraph' && first.childCount === 1) {
+    const inner = first.firstChild
+    if (inner?.type.name === 'mergeField') return inner
+  }
+  return null
+}
 
 /**
  * The drag payload IS the chip's HTML serialization: ProseMirror handles
@@ -199,6 +260,24 @@ function MergeFieldPanel({
                       event.dataTransfer.setData('text/html', mergeFieldDragHTML(variable))
                       event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
                       event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
+                      // "Lift" the source chip while the drag is in flight.
+                      event.currentTarget.classList.add('mf-chip--dragging')
+                      // Carry the DOCUMENT chip ({{label}}) as the drag image,
+                      // not a screenshot of the panel button — you drag what
+                      // you're about to drop. jsdom has no setDragImage: guard.
+                      if (typeof event.dataTransfer.setDragImage === 'function') {
+                        const ghost = document.createElement('span')
+                        ghost.className = 'mf-drag-ghost'
+                        ghost.textContent = `{{${variable.label}}}`
+                        document.body.appendChild(ghost)
+                        event.dataTransfer.setDragImage(ghost, 12, 12)
+                        // The browser snapshots the ghost at dragstart; it can
+                        // leave the DOM on the next frame.
+                        requestAnimationFrame(() => ghost.remove())
+                      }
+                    }}
+                    onDragEnd={(event) => {
+                      event.currentTarget.classList.remove('mf-chip--dragging')
                     }}
                     // NO onMouseDown preventDefault here: in Chromium that
                     // BLOCKS native drag initiation (dragstart never fires).
