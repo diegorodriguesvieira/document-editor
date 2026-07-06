@@ -61,7 +61,6 @@ so importing the file changes nothing until you override.
 | `--editor-accent` | `#1a73e8` | Column-resize handle, "Add header" label, active page-region border |
 | `--editor-accent-ink` | `#0b57d0` | Pressed toolbar text, links, active swatch |
 | `--editor-accent-bg` | `#d3e3fd` | Pressed toolbar button background |
-| `--editor-toolbar-bg` | `#edf2fa` | Formatting toolbar background |
 | `--editor-menu-active-bg` | `#edf2fa` | Highlighted `/` item, context-menu hover |
 | `--editor-control-hover-bg` | `#e2e7ef` | Toolbar button + colour-swatch hover |
 | `--editor-danger` | `#d93025` | "Delete row", remove-region, etc. |
@@ -72,7 +71,6 @@ so importing the file changes nothing until you override.
 | `--editor-page-width` | `800px` | Content column width (the text measure), centered in the viewport |
 | `--editor-page-min-height` | `calc(100vh - 160px)` | FALLBACK page height. Preferred: set it to `auto` and give `.document-editor` a sized parent (flex column, editor as `flex: 1`) — the SDK's internal chain carries the height to the page, so the footer lands at the bottom for ANY app-header height, no math |
 | `--editor-page-padding` | `32px 0 96px` | Vertical breathing room around the content (no paper card — the canvas is the page) |
-| `--editor-sticky-offset` | `0px` | Top offset of sticky surfaces (an opt-in static `EditorToolbar`, the right rail's bars) — set it to your app header's height |
 | `--editor-rail-gutter` | `32px` | Distance between the right rail and the browser edge |
 | `--editor-header-height` | `72px` | The editor header bar (fill it via `renderHeader`) |
 | `--editor-dock-height` | `66px` | The fixed footer bar's height (the shell reserves matching clearance under the page) |
@@ -112,7 +110,7 @@ protecting) is styled under `.document-editor` — custom shells that skip
 shell-scoped chrome. Feature CSS should follow the same convention.
 
 - **Shell:** `.document-editor`, `.document-editor__panel--left` / `--right` (the consumer gutter asides), `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
-- **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.document-editor__header` (the fixed header bar), `.document-editor__footer` (the fixed footer bar; shape via `--editor-dock-height`/`--editor-dock-gap`), `.insert-dock`, `.insert-dock__btn` (the actions row inside it)
+- **Toolbars:** `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled` — the button skin, shared by the bubble), `.bubble-toolbar__inner`, `.document-editor__header` (the fixed header bar), `.document-editor__footer` (the fixed footer bar; shape via `--editor-dock-height`/`--editor-dock-gap`), `.insert-dock`, `.insert-dock__btn` (the actions row inside it)
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`

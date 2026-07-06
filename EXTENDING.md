@@ -325,10 +325,10 @@ render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([My
 
 ## Swapping the whole toolbar (optional)
 
-The default toolbar surface is the selection bubble (`BubbleToolbar`) — there
-is no static top bar. `DocumentEditor` takes render props for full control
-while still driving off the same registry data (e.g. to filter the bubble, or
-to bring a static `EditorToolbar` back):
+The toolbar surface is the selection bubble (`BubbleToolbar`) — the product
+has no static formatting bar. `DocumentEditor` takes render props for full
+control while still driving off the same registry data (e.g. to filter the
+bubble):
 
 ```tsx
 <DocumentEditor

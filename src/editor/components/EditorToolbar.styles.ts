@@ -1,21 +1,9 @@
 import { css } from '@emotion/react'
 
-/* Formatting toolbar. */
+/* Toolbar BUTTONS — the shared skin behind the bubble's controls (via
+   .bubble-toolbar__inner) and any consumer-rendered button row. There is no
+   styled toolbar container: the product has no static formatting bar. */
 export const editorToolbarStyles = css`
-  .editor-toolbar {
-    position: sticky;
-    top: var(--editor-sticky-offset);
-    z-index: 10;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
-    padding: 6px 8px;
-    margin-bottom: 16px;
-    background: var(--editor-toolbar-bg);
-    border: 1px solid var(--editor-border);
-    border-radius: 24px;
-  }
-
   .editor-toolbar__btn {
     min-width: 32px;
     height: 32px;

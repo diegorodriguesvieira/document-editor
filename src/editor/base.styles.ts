@@ -35,7 +35,6 @@ export const baseStyles = css`
     --editor-accent: #1a73e8;
     --editor-accent-ink: #0b57d0;
     --editor-accent-bg: #d3e3fd;
-    --editor-toolbar-bg: #edf2fa;
     --editor-menu-active-bg: #edf2fa;
     --editor-control-hover-bg: #e2e7ef;
 
@@ -56,10 +55,6 @@ export const baseStyles = css`
     --editor-page-min-height: calc(100vh - 160px);
     --editor-page-padding: 32px 0 96px;
 
-    /* Layout: how far from the viewport top sticky surfaces sit — set this to
-       the chrome ABOVE them (e.g. the editor header's height, plus any app
-       chrome of your own). */
-    --editor-sticky-offset: 0px;
     /* Distance between the side panels and the browser edge. */
     --editor-rail-gutter: 32px;
     /* The editor HEADER bar (shown by default; fill it via renderHeader).

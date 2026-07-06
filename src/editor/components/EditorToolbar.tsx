@@ -21,11 +21,14 @@ export interface EditorToolbarProps {
 }
 
 /**
- * Default toolbar skin over {@link useToolbar}. Renders the registry's
- * contributions, but every part is overridable — `className` to restyle,
- * `renderButton` to change markup, `children` to drop in custom controls,
- * and a feature's own `ToolbarItem.render` to ship a bespoke control. For a
- * totally different toolbar, skip this and use `useToolbar` directly.
+ * The registry-driven button row over {@link useToolbar} — the BUBBLE's
+ * content engine and the mock-seam test surface (render it against
+ * `createMockEditor` to test toolbar wiring without ProseMirror). The
+ * container itself ships unstyled (the product has no static formatting
+ * bar); every part is overridable — `className` to restyle, `renderButton`
+ * to change markup, `children` for custom controls, and a feature's own
+ * `ToolbarItem.render` for bespoke ones. For a totally different toolbar,
+ * skip this and use `useToolbar` directly.
  */
 export function EditorToolbar({
   editor,
