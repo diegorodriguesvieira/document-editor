@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
 import { EditorContent } from '@tiptap/react'
 import type { EditorApi } from '../core/EditorApi'
+import { BubbleToolbar } from './BubbleToolbar'
 import { EditorContextMenu } from './EditorContextMenu'
-import { EditorToolbar } from './EditorToolbar'
 import { InsertToolbar } from './InsertToolbar'
 import { PageAffordances } from './PageAffordances'
 import { useFeatureState } from '../hooks/useFeatureState'
@@ -20,11 +20,15 @@ export interface DocumentEditorRenderContext {
 }
 
 export interface DocumentEditorProps extends UseDocumentEditorOptions {
-  /** Replace the whole toolbar with your own (Level 4). Defaults to
-   *  {@link EditorToolbar}. */
+  /** Replace the toolbar surface with your own (Level 4). There is no static
+   *  top bar: the default is {@link BubbleToolbar} — a floating formatting
+   *  bar over the text selection. */
   renderToolbar?: (ctx: DocumentEditorRenderContext) => ReactNode
-  /** Replace the left insert rail. Defaults to {@link InsertToolbar}, which is
-   *  shown automatically whenever an opted-in feature contributes inserts. */
+  /** Replace the bottom insert dock. Defaults to {@link InsertToolbar} — a
+   *  fixed bar over the page footer, shown automatically whenever an opted-in
+   *  feature contributes inserts. Replacing it means owning its FOOTPRINT
+   *  too: the SDK reserves bottom clearance under the page only for its own
+   *  `.insert-dock`. */
   renderInsertBar?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** The right rail is CONSUMER-owned: render anything here (zoom controls,
    *  a comments panel via `<CommentsPanel editor={ctx.editor}/>`, your own
@@ -40,7 +44,9 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
   zoom?: number
 }
 
-/** Screen-centered overlay, visible only while the document is empty. */
+/** Screen-centered overlay, visible only while the document is BLANK. Reads
+ *  the facade's `isEmpty` (the blank-document check), not TipTap's — inserting
+ *  a table with no text yet must dismiss it. */
 function EmptyStateOverlay({
   ctx,
   render,
@@ -48,7 +54,7 @@ function EmptyStateOverlay({
   ctx: DocumentEditorRenderContext
   render: (ctx: DocumentEditorRenderContext) => ReactNode
 }) {
-  const isEmpty = useFeatureState(ctx.editor, (editor) => editor.isEmpty) ?? false
+  const isEmpty = useFeatureState(ctx.editor, () => ctx.api.isEmpty()) ?? false
   if (!isEmpty) return null
   return <div className="document-editor__empty-state">{render(ctx)}</div>
 }
@@ -72,7 +78,7 @@ export function DocumentEditor({
   const toolbar = ctx
     ? renderToolbar
       ? renderToolbar(ctx)
-      : <EditorToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
+      : <BubbleToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
     : null
 
   const insertBar = ctx
@@ -90,7 +96,9 @@ export function DocumentEditor({
       {/* The skin travels with the component now (Emotion Global) — there is
           no editor.css to import. Duplicate mounts are harmless. */}
       <EditorSkin />
-      {insertBar ? <aside className="document-editor__rail">{insertBar}</aside> : null}
+      {/* Fixed over the page footer (out of flow) — the document scrolls
+          behind it and the shell reserves clearance below the page. */}
+      {insertBar}
       <div className="document-editor__column">
         {toolbar}
         {/* The page scrolls inside its column when zoomed — the rails stay put. */}

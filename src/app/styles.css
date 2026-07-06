@@ -7,8 +7,12 @@
   font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   color: #202124;
   line-height: 1.5;
-  /* Our sticky app header is 56px tall — the editor's sticky toolbar/rail sit below it. */
-  --editor-sticky-offset: 56px;
+  /* The app chrome's dimensions, declared ONCE — everything that depends on
+     them derives via var(). (The bottom insert dock is the SDK's: shape and
+     document clearance ship with the skin, tunable via --editor-dock-*.) */
+  --app-header-h: 72px;
+  /* The editor's sticky surfaces sit right below the sticky header. */
+  --editor-sticky-offset: var(--app-header-h);
   /* The page height comes from the layout (flex chain below), not from math:
      the canvas is `flex: 1` of a 100vh column, so the editor fills "viewport
      minus the header" WHATEVER the header's height is. Neutralize the fallback. */
@@ -37,7 +41,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 56px;
+  height: var(--app-header-h);
   padding: 0 24px;
   background: #fff;
   border-bottom: 1px solid #e0e0e0;
@@ -84,12 +88,16 @@ body {
   /* No horizontal padding: the SDK's --editor-rail-gutter measures the rails'
      32px from the browser edge itself. */
   padding: 24px 0;
+  /* Bottom clearance for the footer dock. The app REPLACES the SDK's insert
+     dock (renderInsertBar), so the SDK's own clearance (keyed to its
+     .insert-dock) never fires — the footprint is ours to reserve, using the
+     same shape tokens the dock is drawn with. */
+  padding-bottom: calc(var(--editor-dock-height) + 2 * var(--editor-dock-gap));
   /* Hand the canvas height to the editor (SDK's internal chain carries it down
      to the page — footer lands at the bottom for ANY header height). */
   display: flex;
   flex-direction: column;
 }
-
 .app__canvas > * {
   flex: 1 0 auto;
 }
@@ -184,12 +192,6 @@ body {
   text-align: center;
 }
 
-.comment-cards__empty {
-  margin: 0;
-  font-size: 12px;
-  color: #9aa0a6;
-}
-
 .comment-cards__card {
   display: flex;
   gap: 8px;
@@ -230,58 +232,86 @@ body {
   color: #9aa0a6;
 }
 
-/* Zoom readout inside the rail (ZoomRail reuses the SDK's .insert-rail skin). */
-.insert-rail__zoom {
-  font-size: 11px;
+/* Footer dock (APP-composed via renderInsertBar): zoom left, the SDK's insert
+   items centered, Send right. The shape reuses the SDK's dock tokens so both
+   docks stay in sync — but the class is the app's own (no piggybacking on SDK
+   class names; that coupling bit us once with the old zoom rail). */
+.app-dock {
+  position: fixed;
+  left: var(--editor-dock-gap);
+  right: var(--editor-dock-gap);
+  bottom: var(--editor-dock-gap);
+  height: var(--editor-dock-height);
+  display: grid;
+  /* 1fr | auto | 1fr keeps the middle GEOMETRICALLY centered regardless of
+     how wide the zoom/send zones are. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 16px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.15);
+  z-index: 20;
+}
+
+/* Middle zone: the headless InsertToolbar row. Full dock height so popovers
+   anchored to it (the variables panel) measure from the dock's top edge. */
+.app-dock__items {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-controls {
+  grid-column: 1;
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-controls__btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444746;
+  cursor: pointer;
+}
+
+.zoom-controls__btn:hover {
+  background: #f1f3f4;
+}
+
+.zoom-controls__zoom {
+  min-width: 40px;
+  font-size: 12px;
   color: #5f6368;
   text-align: center;
   user-select: none;
 }
 
-/* Level 4 demo — a team's own toolbar (dark pill) built on the headless
-   `useToolbar` hook. Lives in the app to show the SDK imposes no toolbar markup. */
-.pill-toolbar {
-  position: sticky;
-  top: 56px;
-  z-index: 10;
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding: 6px;
-  margin-bottom: 16px;
-  background: #1b1b1b;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32);
-}
-
-.pill-toolbar__btn {
-  min-width: 32px;
-  height: 30px;
-  padding: 0 8px;
+.app-dock__send {
+  grid-column: 3;
+  justify-self: end;
+  height: 40px;
+  padding: 0 24px;
   border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #e3e3e3;
+  border-radius: 10px;
+  background: #1b1b1b;
+  color: #fff;
+  font: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
-.pill-toolbar__btn:hover {
+.app-dock__send:hover {
   background: #343434;
 }
 
-.pill-toolbar__btn[data-on='true'] {
-  background: #8ab4f8;
-  color: #1b1b1b;
-}
-
-.pill-toolbar__btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.pill-toolbar__custom {
-  display: inline-flex;
-}

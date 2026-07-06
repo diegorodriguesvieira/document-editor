@@ -1,70 +1,103 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import type { Editor } from '../editor'
 import App from './App'
 
+/** The app's editor instance (ProseMirror exposes it on its root element). */
+function editor(): Editor {
+  const pm = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
+  return pm.editor!
+}
+
+/** Select real text so the bubble (the only toolbar) has a reason to show. */
+async function selectSomeText() {
+  await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+  act(() => {
+    editor().commands.insertContent('hello mundo')
+    editor().commands.setTextSelection({ from: 1, to: 6 })
+  })
+  return await screen.findByRole('toolbar', { name: 'Formatting' })
+}
+
 describe('<App /> toolbar', () => {
-  it('defaults to the full preset; switching to basic hides the full-only features', async () => {
-    const user = userEvent.setup()
+  it('ships NO static toolbar — the bubble appears on selection, with the formatting set', async () => {
     render(<App />)
 
-    // The bubble toolbar is the default now (shows on selection); switch to the
-    // static toolbar so we can assert on its buttons directly.
-    await user.selectOptions(screen.getByLabelText(/Toolbar/), 'default')
-    const toolbar = await screen.findByRole('toolbar', { name: 'Formatting' })
-    // Full preset is the default: bold + the app-level HTML button + team features.
-    expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: /HTML/ })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: 'Callout' })).toBeInTheDocument()
-    expect(within(toolbar).getByRole('button', { name: 'Comment' })).toBeInTheDocument()
+    // Before any selection there is no formatting toolbar anywhere.
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+    expect(screen.queryByRole('toolbar', { name: 'Formatting' })).toBeNull()
 
-    // Switch to the basic preset → the full-only features disappear.
-    await user.selectOptions(screen.getByLabelText(/Features/), 'basic')
-    await waitFor(() => {
-      const tb = screen.getByRole('toolbar', { name: 'Formatting' })
-      expect(within(tb).queryByRole('button', { name: 'Callout' })).toBeNull()
-      expect(within(tb).queryByRole('button', { name: 'Comment' })).toBeNull()
-      expect(within(tb).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
+    const bubble = await selectSomeText()
+    expect(within(bubble).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
+    expect(within(bubble).getByRole('button', { name: 'Callout' })).toBeInTheDocument()
+    expect(within(bubble).getByRole('button', { name: 'Comment' })).toBeInTheDocument()
+  })
+
+  it('ships the FULL feature set — the footer dock carries every team insert, no preset switcher', async () => {
+    render(<App />)
+
+    const items = await screen.findByRole('toolbar', { name: 'Insert' })
+    for (const insert of ['Table', 'Image', 'Conditional block', 'Variables']) {
+      expect(within(items).getByRole('button', { name: insert })).toBeInTheDocument()
+    }
+    // The header no longer offers feature presets.
+    expect(screen.queryByLabelText(/Features/)).toBeNull()
+  })
+
+  it('composes the footer dock: zoom on the left, inserts centered, Send on the right', async () => {
+    render(<App />)
+    await screen.findByRole('toolbar', { name: 'Insert' })
+
+    // The three zones live INSIDE the same fixed bar…
+    const dock = document.querySelector('.app-dock') as HTMLElement
+    expect(dock).not.toBeNull()
+    const zoom = within(dock).getByRole('toolbar', { name: 'Zoom' })
+    const items = within(dock).getByRole('toolbar', { name: 'Insert' })
+    const send = within(dock).getByRole('button', { name: 'Send' })
+
+    // …in left→center→right order (the grid maps DOM order to columns).
+    expect(zoom.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(items.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('mounts the app-level feature on both surfaces (dock + bubble); history stays out of the bubble', async () => {
+    render(<App />)
+
+    // FOOTER DOCK: the app's "Insert date" contribution.
+    const dock = await screen.findByRole('toolbar', { name: 'Insert' })
+    expect(within(dock).getByRole('button', { name: 'Insert date' })).toBeInTheDocument()
+
+    // BUBBLE: both app actions ride along — and undo/redo are filtered out
+    // (not selection-scoped; keyboard covers them).
+    const bubble = await selectSomeText()
+    expect(within(bubble).getByRole('button', { name: 'Clear formatting' })).toBeInTheDocument()
+    expect(within(bubble).getByRole('button', { name: 'Copy selection' })).toBeInTheDocument()
+    expect(within(bubble).queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('shows the comments panel only when there ARE comments (right rail stays clean otherwise)', async () => {
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+
+    // No comments → no panel at all.
+    expect(screen.queryByRole('complementary', { name: 'Review notes' })).toBeNull()
+
+    // Anchor a comment (what comment.add does to the doc) → the app-rewritten
+    // panel appears in the consumer-owned right rail, reactively.
+    act(() => {
+      editor()
+        .chain()
+        .insertContent('hello world')
+        .setTextSelection({ from: 1, to: 6 })
+        .setMark('comment', { commentId: 'c-1' })
+        .run()
     })
-  })
-
-  it('swaps to a completely custom toolbar (Level 4) without losing features', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-
-    await user.selectOptions(await screen.findByLabelText(/Toolbar/), 'pill')
-
-    await waitFor(() => {
-      const pill = document.querySelector('.pill-toolbar')
-      expect(pill).not.toBeNull()
-      // Same registry data, different skin: bold is still there.
-      expect(within(pill as HTMLElement).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
-    })
-  })
-
-  it('mounts the app-level feature on every surface (rail, toolbar, bubble-only via group)', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-
-    // LEFT RAIL: the app's "Insert date" contribution.
-    const rail = await screen.findByRole('toolbar', { name: 'Insert' })
-    expect(within(rail).getByRole('button', { name: 'Insert date' })).toBeInTheDocument()
-
-    // TOP TOOLBAR: "Clear formatting" shows; the 'selection' group does NOT
-    // (it is bubble-only — placement decided by the consumer's filter).
-    await user.selectOptions(screen.getByLabelText(/Toolbar/), 'default')
-    const toolbar = await screen.findByRole('toolbar', { name: 'Formatting' })
-    expect(within(toolbar).getByRole('button', { name: 'Clear formatting' })).toBeInTheDocument()
-    expect(within(toolbar).queryByRole('button', { name: 'Copy selection' })).toBeNull()
-  })
-
-  it('renders the app-rewritten comments UI in the consumer-owned right rail', async () => {
-    render(<App />)
     const cards = await screen.findByRole('complementary', { name: 'Review notes' })
-    expect(within(cards).getByText(/Select text and hit/)).toBeInTheDocument()
+    expect(within(cards).getByText(/on “hello”/)).toBeInTheDocument()
   })
 
-  it('zooms the document in and out via the right rail', async () => {
+  it('zooms the document in and out via the footer dock', async () => {
     const user = userEvent.setup()
     render(<App />)
 

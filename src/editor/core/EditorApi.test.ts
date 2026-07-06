@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { docWith, renderEditor } from '../../test/editorHarness'
-import { BoldFeature, HistoryFeature } from '../../features'
+import { BoldFeature, HistoryFeature, TableFeature } from '../../features'
 
 describe('EditorApi (the facade over a real editor)', () => {
   it('canUndo/canRedo degrade to false — not a crash — when no history feature is enabled', () => {
@@ -16,11 +16,19 @@ describe('EditorApi (the facade over a real editor)', () => {
     expect(created.api.canUndo()).toBe(true)
   })
 
-  it('isEmpty reflects the document', () => {
-    const created = renderEditor([BoldFeature])
+  it('isEmpty means BLANK document — text ends it, and so does text-less structure', () => {
+    const created = renderEditor([TableFeature])
     expect(created.api.isEmpty()).toBe(true)
+
     created.editor.commands.insertContent('algo')
     expect(created.api.isEmpty()).toBe(false)
+
+    // Structure without a single character is content too: an inserted table
+    // is all empty cells, and it must flip isEmpty exactly like text does.
+    const withTable = renderEditor([TableFeature])
+    withTable.api.exec('table.insert')
+    expect(withTable.editor.getText().trim()).toBe('')
+    expect(withTable.api.isEmpty()).toBe(false)
   })
 
   it('focus() delegates to the view (modals hand focus back through the api)', async () => {

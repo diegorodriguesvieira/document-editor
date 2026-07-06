@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { BoldFeature } from '../../features'
@@ -26,10 +26,24 @@ describe('<CommentsPanel />', () => {
     expect(created.editor.state.selection.to).toBe(6)
   })
 
-  it('shows an empty state when there are no comments', () => {
-    const created = renderEditor([CommentsFeature])
-    render(<CommentsPanel editor={created.editor} />)
-    expect(screen.getByText(/Select text/)).toBeInTheDocument()
+  it('renders NOTHING while there are no comments — and appears with the first one', () => {
+    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const { container } = render(<CommentsPanel editor={created.editor} />)
+    expect(container).toBeEmptyDOMElement()
+
+    // The first anchored comment brings the panel in, reactively.
+    act(() => {
+      created.editor.commands.setTextSelection({ from: 1, to: 6 })
+      created.api.exec('comment.add', { text: 'primeira' })
+    })
+    expect(screen.getByRole('complementary', { name: 'Comments' })).toBeInTheDocument()
+
+    // Deleting the anchored text removes the last comment → panel leaves.
+    act(() => {
+      created.editor.commands.setTextSelection({ from: 1, to: 6 })
+      created.editor.commands.deleteSelection()
+    })
+    expect(screen.queryByRole('complementary', { name: 'Comments' })).toBeNull()
   })
 
   it('a comment split across marks (bold inside it) is ONE panel entry spanning the whole range', async () => {
@@ -63,8 +77,8 @@ describe('<CommentsPanel />', () => {
     expect(panel.querySelector('.comments-panel__text')).toBeNull() // no body → no text span
   })
 
-  it('renders the empty state with no editor at all', () => {
-    render(<CommentsPanel editor={null} />)
-    expect(screen.getByText(/Select text/)).toBeInTheDocument()
+  it('renders nothing with no editor at all', () => {
+    const { container } = render(<CommentsPanel editor={null} />)
+    expect(container).toBeEmptyDOMElement()
   })
 })

@@ -274,30 +274,54 @@ describe('mergeField', () => {
     expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
 
-  it('anchors the panel to the STICKY .insert-rail, not the full-height rail wrapper', async () => {
+  it('opens ABOVE the fixed insert dock, left-aligned with the @ button', async () => {
     const user = userEvent.setup()
     const { container } = render(
       <DocumentVariablesProvider variables={SAMPLE}>
         <DocumentEditor features={[MergeFieldFeature]} />
       </DocumentVariablesProvider>,
     )
-    const stickyBar = container.querySelector('.insert-rail') as HTMLElement
-    const wrapper = container.querySelector('.document-editor__rail') as HTMLElement
-    expect(stickyBar).not.toBeNull()
-    expect(wrapper).not.toBeNull()
-    const rectAt = (top: number, right: number) =>
-      ({ top, right, left: right - 48, bottom: top + 300, width: 48, height: 300, x: right - 48, y: top, toJSON: () => ({}) }) as DOMRect
-    // Simulate a scrolled document: the sticky bar is pinned at 72px while the
-    // full-height wrapper has scrolled far above the viewport.
-    stickyBar.getBoundingClientRect = () => rectAt(72, 60)
-    wrapper.getBoundingClientRect = () => rectAt(-400, 60)
+    const dock = container.querySelector('.insert-dock') as HTMLElement
+    expect(dock).not.toBeNull()
+    const button = screen.getByRole('button', { name: 'Variables' })
+    const rect = (partial: Partial<DOMRect>) =>
+      ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}), ...partial }) as DOMRect
+    // A 1024×768 viewport (jsdom default) with the dock pinned at its bottom.
+    dock.getBoundingClientRect = () => rect({ top: 694, bottom: 760, left: 8, right: 1016 })
+    button.getBoundingClientRect = () => rect({ top: 709, bottom: 745, left: 500, right: 536 })
+
+    await user.click(button)
+    const dialog = screen.getByRole('dialog', { name: 'Variables' })
+    // Bottom-anchored 12px above the dock (the panel grows UPWARD and never
+    // covers it), left-aligned with the button that opened it.
+    expect(dialog.style.bottom).toBe(`${window.innerHeight - 694 + 12}px`)
+    expect(dialog.style.left).toBe('500px')
+  })
+
+  it('falls back to the nearest toolbar container in a consumer-composed bar (no .insert-dock)', async () => {
+    const user = userEvent.setup()
+    // A consumer bar: InsertToolbar with its OWN class (renderInsertBar
+    // composition) — the SDK dock class is nowhere in the tree.
+    render(
+      <DocumentVariablesProvider variables={SAMPLE}>
+        <InsertToolbar
+          editor={null}
+          api={createMockEditor().api}
+          resolved={resolveFeatures([MergeFieldFeature])}
+          className="consumer-dock-items"
+        />
+      </DocumentVariablesProvider>,
+    )
+    const bar = screen.getByRole('toolbar', { name: 'Insert' })
+    expect(bar.className).toBe('consumer-dock-items')
+    bar.getBoundingClientRect = () =>
+      ({ top: 700, bottom: 760, left: 400, right: 900, width: 500, height: 60, x: 400, y: 700, toJSON: () => ({}) }) as DOMRect
 
     await user.click(screen.getByRole('button', { name: 'Variables' }))
     const dialog = screen.getByRole('dialog', { name: 'Variables' })
-    // Anchored to the sticky bar (72px / right+12) — NOT dragged to -400px by
-    // the scrolling wrapper (the "panel rides the paper" bug).
-    expect(dialog.style.top).toBe('72px')
-    expect(dialog.style.left).toBe('72px')
+    // Anchored above the [role="toolbar"] container, not stranded at the
+    // bare-button fallback.
+    expect(dialog.style.bottom).toBe(`${window.innerHeight - 700 + 12}px`)
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {

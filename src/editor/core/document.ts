@@ -30,3 +30,19 @@ export function hasTopLevelNode(doc: PMNode, name: string): boolean {
   }
   return false
 }
+
+/**
+ * Whether the document is still the BLANK initial document: exactly one empty
+ * paragraph (what {@link createEmptyDocument} produces). This is the check
+ * behind `api.isEmpty` and the empty-state overlay — deliberately NOT
+ * TipTap's `editor.isEmpty`, which means "no text" and stays true for
+ * structure without words (a freshly inserted table is all empty cells; same
+ * for a callout or blockquote). Structure IS content: only the true blank
+ * slate counts as empty.
+ */
+export function isBlankDocument(doc: PMNode): boolean {
+  if (doc.childCount === 0) return true
+  if (doc.childCount > 1) return false
+  const only = doc.child(0)
+  return only.type.name === 'paragraph' && only.childCount === 0
+}

@@ -4,11 +4,17 @@ import { css } from '@emotion/react'
  * Base tokens + reset for the editor SDK skin. Every other partial builds on
  * these '--editor-*' custom properties — override them to theme.
  * Migrated from base.css into the Emotion Global skin (aggregated by
- * src/editor/skin.tsx). The Emotion skin is unlayered; token overrides still
- * work, specificity is standard. See THEMING.md for the full token contract.
+ * src/editor/skin.tsx).
+ *
+ * ':where(:root)' — specificity ZERO on purpose. The Emotion <Global> injects
+ * its <style> at RENDER time, i.e. AFTER any consumer stylesheet loaded via
+ * import; with plain ':root' the SDK defaults would re-win the cascade and
+ * silently revert every consumer token override (page min-height, sticky
+ * offset…). At zero specificity, a consumer's ':root { --editor-*: … }'
+ * always wins, whatever the injection order. See THEMING.md.
  */
 export const baseStyles = css`
-  :root {
+  :where(:root) {
     /* Typography */
     --editor-font: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
     --editor-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -57,8 +63,14 @@ export const baseStyles = css`
     --editor-sticky-offset: 0px;
     /* Distance between the side rails and the browser edge. */
     --editor-rail-gutter: 32px;
+    /* Bottom insert dock (the insert surface): shape + inset from the
+       viewport edges. The shell reserves matching clearance below the page. */
+    --editor-dock-height: 66px;
+    --editor-dock-gap: 8px;
 
-    /* Stacking of floating surfaces (caret popups / colour picker vs menus). */
+    /* Stacking of floating surfaces (caret popups / colour picker vs menus).
+       The dock sits below them all — popups and menus must float above it. */
+    --editor-z-dock: 900;
     --editor-z-popup: 1000;
     --editor-z-menu: 1100;
 

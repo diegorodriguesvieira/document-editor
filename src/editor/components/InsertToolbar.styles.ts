@@ -1,22 +1,28 @@
 import { css } from '@emotion/react'
 
-/* Insert rail — vertical toolbar to the left of the page. */
-/* Migrated from InsertToolbar.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* Insert dock — a fixed, full-width rounded bar over the page footer, items
+   centered. The document scrolls BEHIND it; the shell reserves clearance
+   (see DocumentEditor.styles) so content can still scroll into view above it. */
 export const insertToolbarStyles = css`
-  .insert-rail {
-    position: sticky;
-    top: calc(var(--editor-sticky-offset) + 16px);
+  .insert-dock {
+    position: fixed;
+    left: var(--editor-dock-gap);
+    right: var(--editor-dock-gap);
+    bottom: var(--editor-dock-gap);
+    height: var(--editor-dock-height);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 4px;
-    padding: 6px;
+    padding: 0 16px;
     background: var(--editor-surface);
     border: 1px solid var(--editor-border);
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: var(--editor-shadow-sm);
+    z-index: var(--editor-z-dock);
   }
 
-  .insert-rail__btn {
+  .insert-dock__btn {
     width: 36px;
     height: 36px;
     border: 1px solid transparent;
@@ -28,11 +34,11 @@ export const insertToolbarStyles = css`
     cursor: pointer;
   }
 
-  .insert-rail__btn:hover {
+  .insert-dock__btn:hover {
     background: var(--editor-subtle-bg);
   }
 
-  .insert-rail__btn:focus-visible {
+  .insert-dock__btn:focus-visible {
     outline: 2px solid var(--editor-accent);
     outline-offset: 1px;
   }

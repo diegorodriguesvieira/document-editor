@@ -20,12 +20,6 @@ export const commentsPanelStyles = css`
     color: var(--editor-text);
   }
 
-  .comments-panel__empty {
-    margin: 0;
-    font-size: 12px;
-    color: var(--editor-text-subtle);
-  }
-
   .comments-panel__list {
     display: flex;
     flex-direction: column;

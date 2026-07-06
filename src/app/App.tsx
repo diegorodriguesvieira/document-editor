@@ -1,24 +1,16 @@
 import { useEffect, useState } from 'react'
-import { BubbleToolbar, DocumentEditor, EditorToolbar } from '../editor'
+import { BubbleToolbar, DocumentEditor, InsertToolbar, useZoom } from '../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { CommentCards } from './CommentCards'
 import { contractTemplate } from './contractTemplate'
-import { PillToolbar } from './PillToolbar'
-import { ZoomRail } from './ZoomRail'
-import { presets } from './presets'
+import { ZoomControls } from './ZoomControls'
+import { fullFeatures } from './presets'
 import './styles.css' // demo-app chrome (the SDK skin now ships inside the components)
 
-type ToolbarStyle = 'default' | 'pill' | 'bubble'
-
-const clampZoom = (z: number) => Math.min(Math.max(Math.round(z * 10) / 10, 0.5), 2)
-
 export default function App() {
-  const [presetId, setPresetId] = useState(
-    presets.find((p) => p.id === 'full')?.id ?? presets[0].id,
-  )
-  const [toolbarStyle, setToolbarStyle] = useState<ToolbarStyle>('bubble')
-  const [zoom, setZoom] = useState(1)
-  const preset = presets.find((p) => p.id === presetId) ?? presets[0]
+  // Zoom state + policy (clamp/step/rounding) come ready from the SDK hook;
+  // the buttons below are the app's own UI on top of it.
+  const { zoom, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom()
 
   // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
   // context (not the `features` list), the editor mounts immediately and does
@@ -45,32 +37,6 @@ export default function App() {
           <span className="app__hint">
             @ variables: {mergeVariables.length ? `${mergeVariables.length} loaded` : 'loading…'}
           </span>
-          <label className="app__preset">
-            Features:{' '}
-            <select
-              aria-label="Features"
-              value={presetId}
-              onChange={(event) => setPresetId(event.target.value)}
-            >
-              {presets.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="app__preset">
-            Toolbar:{' '}
-            <select
-              aria-label="Toolbar"
-              value={toolbarStyle}
-              onChange={(event) => setToolbarStyle(event.target.value as ToolbarStyle)}
-            >
-              <option value="default">Default (+ custom button)</option>
-              <option value="pill">Pill (custom via useToolbar)</option>
-              <option value="bubble">Bubble (on selection)</option>
-            </select>
-          </label>
         </div>
       </header>
 
@@ -80,9 +46,7 @@ export default function App() {
         <DocumentVariablesProvider variables={mergeVariables}>
           {/* Same features, three different toolbar presentations — chosen by the app. */}
           <DocumentEditor
-            // Remount only when the feature set changes; toolbar style just re-renders.
-            key={preset.id}
-            features={preset.features}
+            features={fullFeatures}
             zoom={zoom}
             // `onChange` is debounced (~250ms after edits stop) — i.e. the exact
             // moment an autosave would fire. Here we just log the generated JSON.
@@ -116,39 +80,37 @@ export default function App() {
             // any time, same data, same click-to-scroll.
             renderRightBar={(ctx) => (
               <div className="right-rail">
-                <ZoomRail
-                  zoom={zoom}
-                  onZoomIn={() => setZoom((z) => clampZoom(z + 0.1))}
-                  onZoomOut={() => setZoom((z) => clampZoom(z - 0.1))}
-                />
                 <CommentCards editor={ctx.editor} />
               </div>
             )}
-            renderToolbar={(ctx) => {
-              // Placement by `group`: 'selection' items (e.g. Copy selection)
-              // live ONLY in the bubble; the top bars filter them out.
-              if (toolbarStyle === 'bubble') {
-                // Formatting on selection; skip undo/redo (not selection-scoped).
-                return <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
-              }
-              if (toolbarStyle === 'pill') {
-                return <PillToolbar {...ctx} />
-              }
-              return (
-                <EditorToolbar {...ctx} filter={(item) => item.group !== 'selection'}>
-                  {/* Level 2: an app-level custom button dropped into the default toolbar */}
-                  <button
-                    type="button"
-                    className="editor-toolbar__btn"
-                    title="Exportar HTML (console)"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => console.log(ctx.api.getHTML())}
-                  >
-                    ⤓ HTML
-                  </button>
-                </EditorToolbar>
-              )
-            }}
+            // The footer dock is APP-composed (Level 4): zoom on the left, the
+            // SDK's insert items centered (headless InsertToolbar) and the Send
+            // action on the right. Replacing the SDK dock means the app owns
+            // its bottom clearance too (see .app__canvas).
+            renderInsertBar={(ctx) => (
+              <div className="app-dock">
+                <ZoomControls
+                  zoom={zoom}
+                  onZoomIn={zoomIn}
+                  onZoomOut={zoomOut}
+                  canZoomIn={canZoomIn}
+                  canZoomOut={canZoomOut}
+                />
+                <InsertToolbar {...ctx} className="app-dock__items" />
+                <button
+                  type="button"
+                  className="app-dock__send"
+                  onClick={() => console.log('send → would submit', ctx.api.getJSON())}
+                >
+                  Send
+                </button>
+              </div>
+            )}
+            // The bubble is the ONLY toolbar (plus the footer insert dock).
+            // Undo/redo stay out: not selection-scoped (keyboard covers them).
+            renderToolbar={(ctx) => (
+              <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
+            )}
           />
         </DocumentVariablesProvider>
       </main>

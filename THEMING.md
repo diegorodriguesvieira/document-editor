@@ -99,7 +99,7 @@ picks up SDK styles); every **body-portaled surface** (context menu, `/` and
 `@` menus, colour picker, merge-field modal) carries the namespace class
 `.document-editor-popup` and is styled under it. Editor chrome keeps its
 distinctive prefixed names unscoped so exported components keep their skin in
-custom layouts too — that exemption covers `.editor-toolbar`, `.insert-rail`,
+custom layouts too — that exemption covers `.editor-toolbar`, `.insert-dock`,
 `.bubble-toolbar`, `.comments-panel` and `.color-swatch`. One
 exception to the exception: `.page-affordance` (a generic name worth
 protecting) is styled under `.document-editor` — custom shells that skip
@@ -107,7 +107,7 @@ protecting) is styled under `.document-editor` — custom shells that skip
 shell-scoped chrome. Feature CSS should follow the same convention.
 
 - **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
-- **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-rail`, `.insert-rail__btn`
+- **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-dock`, `.insert-dock__btn` (the fixed bottom dock; shape via `--editor-dock-height`/`--editor-dock-gap`)
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`

@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { hasTopLevelNode, toDocumentJSON, type DocumentJSON } from './document'
+import { hasTopLevelNode, isBlankDocument, toDocumentJSON, type DocumentJSON } from './document'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -12,7 +12,9 @@ export interface EditorStateView {
   /** Whether there is history to undo / redo (drives a real disabled state). */
   canUndo(): boolean
   canRedo(): boolean
-  /** Whether the document is effectively empty. */
+  /** Whether the document is still the BLANK initial document (one empty
+   *  paragraph). Structure with no text yet — an inserted table, a callout —
+   *  already counts as content. */
   isEmpty(): boolean
   /** Whether the selection is a caret (nothing selected) — lets a toolbar item
    *  declare `isDisabled: (s) => s.isSelectionEmpty()` for selection-dependent
@@ -45,7 +47,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     isActive: (name, attrs) => editor.isActive(name, attrs),
     canUndo: () => editor.can().undo?.() ?? false,
     canRedo: () => editor.can().redo?.() ?? false,
-    isEmpty: () => editor.isEmpty,
+    isEmpty: () => isBlankDocument(editor.state.doc),
     isSelectionEmpty: () => editor.state.selection.empty,
     hasNode: (name) => hasTopLevelNode(editor.state.doc, name),
     getJSON: () => toDocumentJSON(editor),

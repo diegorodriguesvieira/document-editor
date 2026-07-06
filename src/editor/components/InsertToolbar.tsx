@@ -15,16 +15,16 @@ export interface InsertToolbarProps {
   /** Override how each button renders, keeping the live state. */
   renderButton?: (button: ToolbarButton) => ReactNode
   className?: string
-  /** Domain insert actions appended below the built-ins (e.g. merge field). */
+  /** Domain insert actions appended after the built-ins (e.g. merge field). */
   children?: ReactNode
 }
 
 /**
- * Vertical "insert" rail to the left of the page — the same registry-driven,
- * headless skin as {@link EditorToolbar}, just vertical and reading the
- * `resolved.inserts` channel. A feature contributes inserts via
- * `FeatureDefinition.insert`, so the rail is pure opt-in. Renders `null` when
- * there's nothing to show.
+ * Insert dock — a fixed bar over the page footer with the items centered; the
+ * document scrolls behind it. Same registry-driven, headless skin as
+ * {@link EditorToolbar}, reading the `resolved.inserts` channel. A feature
+ * contributes inserts via `FeatureDefinition.insert`, so the dock is pure
+ * opt-in. Renders `null` when there's nothing to show.
  */
 export function InsertToolbar({
   editor,
@@ -43,10 +43,9 @@ export function InsertToolbar({
       buttons={buttons}
       filter={filter}
       renderButton={renderButton}
-      className={className ?? 'insert-rail'}
-      buttonClassName="insert-rail__btn"
+      className={className ?? 'insert-dock'}
+      buttonClassName="insert-dock__btn"
       ariaLabel="Insert"
-      orientation="vertical"
       iconFallback={(item) => item.label.charAt(0)}
       hideWhenEmpty
     >

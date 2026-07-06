@@ -12,9 +12,10 @@ const editorGapcursorBlink = keyframes`
 `
 
 export const documentEditorStyles = css`
-  /* 3-column grid: side rails live in the gutters pinned to the browser edges,
-     so the content column is centered in the VIEWPORT (a flex row would center
-     the rail+column+rail group instead, pushing the text off-center). */
+  /* 3-column grid: the side gutters keep the content column centered in the
+     VIEWPORT (a flex row would center the rail+column group instead, pushing
+     the text off-center). The right gutter hosts the consumer rail; inserts
+     live in the fixed bottom dock, so the left gutter is just breathing room. */
   .document-editor {
     display: grid;
     grid-template-columns:
@@ -24,18 +25,17 @@ export const documentEditorStyles = css`
     column-gap: 16px;
   }
 
-  /* Rails stretch with the row (so their inner sticky bars can stick) and pin
-     to the edges at --editor-rail-gutter. */
-  .document-editor__rail {
-    grid-column: 1;
-    justify-self: start;
-    margin-left: var(--editor-rail-gutter);
+  /* Reserve room for the fixed insert dock: the document scrolls BEHIND it,
+     but its last line (and the page footer) can still scroll clear of it. */
+  .document-editor:has(.insert-dock) {
+    padding-bottom: calc(var(--editor-dock-height) + 2 * var(--editor-dock-gap));
   }
 
-  .document-editor__rail--right {
+  /* The (right) rail stretches with the row — so its inner sticky bars can
+     stick — and pins to the edge at --editor-rail-gutter. */
+  .document-editor__rail {
     grid-column: 3;
     justify-self: end;
-    margin-left: 0;
     margin-right: var(--editor-rail-gutter);
   }
 

@@ -29,14 +29,15 @@ const quoteish = defineFeature({
 })
 
 describe('<InsertToolbar />', () => {
-  it('renders the opted-in inserts as a vertical toolbar — no real editor', () => {
+  it('renders the opted-in inserts as the bottom dock — no real editor', () => {
     const mock = createMockEditor()
     render(
       <InsertToolbar editor={null} api={mock.api} resolved={resolveFeatures([tableish, quoteish])} />,
     )
 
     const bar = screen.getByRole('toolbar', { name: 'Insert' })
-    expect(bar).toHaveAttribute('aria-orientation', 'vertical')
+    expect(bar.className).toBe('insert-dock')
+    expect(bar).not.toHaveAttribute('aria-orientation') // horizontal (the toolbar default)
     expect(screen.getByRole('button', { name: 'Table' })).toHaveTextContent('T')
     expect(screen.getByRole('button', { name: 'Quote' })).toBeInTheDocument()
   })

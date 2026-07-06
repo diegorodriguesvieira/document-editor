@@ -65,7 +65,7 @@ extensions — features are TipTap-native by design), and optional channels:
 | `commands` | `id → (editor, payload?) => boolean` | routed via `api.exec(id)` |
 | `keymap` | `'Mod-Shift-x' → commandId` | synthetic `registryKeymap` extension |
 | `toolbar` | `ToolbarItem[]` (data; optional `render` escape hatch) | `EditorToolbar` / `BubbleToolbar` |
-| `inserts` | `ToolbarItem[]` | `InsertToolbar` (left rail) + mirrored into the `/` slash menu |
+| `inserts` | `ToolbarItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
 | `contextMenu` | `ContextMenuSection[]` | `EditorContextMenu` (all matching sections compose) |
 | `pageRegions` | `PageRegion[]` (position, label, addCommandId, nodeName) | `PageAffordances` hover chrome; kernel derives `TrailingNode.notAfter` from `position: 'bottom'` entries |
 
@@ -111,7 +111,7 @@ The React entry point. Three things worth knowing:
   coalescing, rev/ETag) is the consumer's job — the recipe is in
   `EXTENDING.md` §7.
 - The `/` slash menu is created here only when some insert declares a
-  `commandId` — it mirrors the left rail, one source of truth.
+  `commandId` — it mirrors the insert dock, one source of truth.
 
 ## 4. The seam: `EditorApi` / `EditorStateView`
 

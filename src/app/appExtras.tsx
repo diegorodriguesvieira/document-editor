@@ -2,16 +2,15 @@ import { defineFeature } from '../editor'
 
 /**
  * APP-LEVEL feature — the living example of extending the editor without
- * touching the SDK: one `defineFeature` object contributes to three surfaces.
+ * touching the SDK: one `defineFeature` object contributes to both surfaces.
  * Note there is no `extensions()` payload at all: pure UI + commands.
  *
- * - `insert`  → a new item on the LEFT RAIL ("Insert date"), which also shows
- *               up in the `/` menu automatically.
- * - `toolbar` → a new TOP TOOLBAR action ("Clear formatting") with a real,
- *               declarative disabled state.
- * - `toolbar` + `group: 'selection'` → a BUBBLE-ONLY action ("Copy selection"):
- *               placement is decided by the consumer's `filter` — the top bar
- *               filters the 'selection' group out, the bubble keeps it.
+ * - `insert`  → a new item on the FOOTER DOCK ("Insert date"), which also
+ *               shows up in the `/` menu automatically.
+ * - `toolbar` → actions for the BUBBLE (the only toolbar surface): "Clear
+ *               formatting" with a real declarative disabled state, and "Copy
+ *               selection". Placement stays a consumer decision via `filter` —
+ *               the app keeps the 'history' group out of the bubble.
  */
 export const AppExtrasFeature = defineFeature({
   id: 'app-extras',
@@ -41,7 +40,7 @@ export const AppExtrasFeature = defineFeature({
     },
     {
       id: 'copy-selection',
-      group: 'selection', // ← the bubble-only group (see App's toolbar filters)
+      group: 'selection', // selection-scoped actions (they disable on a caret)
       label: 'Copy selection',
       icon: '⧉',
       commandId: 'appExtras.copySelection',

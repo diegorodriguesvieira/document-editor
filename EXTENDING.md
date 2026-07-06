@@ -35,8 +35,8 @@ defineFeature({
   extensions: () => [MyNode],   // TipTap extension(s); [] for UI-only features
   commands: { 'myFeature.run': (editor, payload) => boolean },
   keymap: { 'Mod-Shift-y': 'myFeature.run' },
-  toolbar: [/* ToolbarItem[] — top bar AND bubble menu */],
-  insert: [/* ToolbarItem[] — left rail; `/` menu mirrors runnable ones */],
+  toolbar: [/* ToolbarItem[] — the bubble menu (or any custom toolbar surface) */],
+  insert: [/* ToolbarItem[] — bottom insert dock; `/` menu mirrors runnable ones */],
   contextMenu: [/* ContextMenuSection[] — right-click */],
   pageRegions: [/* PageRegion[] — header/footer-style page chrome */],
 })
@@ -285,13 +285,15 @@ render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([My
 
 ## Swapping the whole toolbar (optional)
 
-`DocumentEditor` takes render props for full control while still driving off
-the same registry data:
+The default toolbar surface is the selection bubble (`BubbleToolbar`) — there
+is no static top bar. `DocumentEditor` takes render props for full control
+while still driving off the same registry data (e.g. to filter the bubble, or
+to bring a static `EditorToolbar` back):
 
 ```tsx
 <DocumentEditor
   features={…}
-  renderToolbar={(ctx) => <EditorToolbar {...ctx} filter={(i) => i.group !== 'history'} />}
+  renderToolbar={(ctx) => <BubbleToolbar {...ctx} filter={(i) => i.group !== 'history'} />}
   renderInsertBar={(ctx) => <InsertToolbar {...ctx} />}
 />
 ```

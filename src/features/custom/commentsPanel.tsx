@@ -70,34 +70,35 @@ export function useDocumentComments(editor: Editor | null): AnchoredComment[] {
 export function CommentsPanel({ editor }: { editor: Editor | null }) {
   const comments = useDocumentComments(editor)
 
+  // No comments → no panel at all (product rule, shared with any consumer
+  // rewrite). It (re)appears reactively with the first anchored comment and
+  // leaves again when the last one is deleted.
+  if (comments.length === 0) return null
+
   return (
     <aside className="comments-panel" aria-label="Comments">
       <div className="comments-panel__title">Comments ({comments.length})</div>
-      {comments.length === 0 ? (
-        <p className="comments-panel__empty">Select text and click 💬 to comment.</p>
-      ) : (
-        <ul className="comments-panel__list">
-          {comments.map((comment) => (
-            <li key={comment.id}>
-              <button
-                type="button"
-                className="comments-panel__item"
-                onClick={() =>
-                  editor
-                    ?.chain()
-                    .focus()
-                    .setTextSelection({ from: comment.from, to: comment.to })
-                    .scrollIntoView()
-                    .run()
-                }
-              >
-                <span className="comments-panel__quote">“{comment.quote}”</span>
-                {comment.text ? <span className="comments-panel__text">{comment.text}</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="comments-panel__list">
+        {comments.map((comment) => (
+          <li key={comment.id}>
+            <button
+              type="button"
+              className="comments-panel__item"
+              onClick={() =>
+                editor
+                  ?.chain()
+                  .focus()
+                  .setTextSelection({ from: comment.from, to: comment.to })
+                  .scrollIntoView()
+                  .run()
+              }
+            >
+              <span className="comments-panel__quote">“{comment.quote}”</span>
+              {comment.text ? <span className="comments-panel__text">{comment.text}</span> : null}
+            </button>
+          </li>
+        ))}
+      </ul>
     </aside>
   )
 }

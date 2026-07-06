@@ -5,8 +5,8 @@ import type { ResolvedFeatures } from '../core/registry'
 import type { ToolbarItem } from '../core/types'
 
 /**
- * The `/` menu: shows exactly the left insert-rail items (`resolved.inserts`)
- * that run a command, so it stays in sync with the rail. Built from the shared
+ * The `/` menu: shows exactly the insert-dock items (`resolved.inserts`)
+ * that run a command, so it stays in sync with the dock. Built from the shared
  * {@link createSuggestionPopup} primitive — only the filter and command differ.
  */
 export function createSlashCommands(resolved: ResolvedFeatures): Extension {

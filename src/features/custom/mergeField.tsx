@@ -190,7 +190,7 @@ function MergeFieldPanel({
       document.removeEventListener('drop', reset, true)
     }
   }, [dragging])
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<{ bottom: number; left: number } | null>(null)
 
   // The anchor (@ button) counts as "inside" so toggling it doesn't
   // close-then-instantly-reopen. Pinned: outside clicks stop closing
@@ -201,29 +201,31 @@ function MergeFieldPanel({
     isOutsideClick: pinned ? () => false : undefined,
   })
 
-  // Align with the rail: top = rail top, left = just past the rail. The rail
-  // is sticky, but its rect still moves before the sticky engages — track it.
+  // Opens ABOVE the fixed insert dock, left-aligned with the @ button. The
+  // dock is position:fixed, so its rect is viewport-stable — scroll never
+  // moves the panel; only a resize re-places it (bottom-anchored, so the
+  // panel grows upward and never covers the dock).
   useLayoutEffect(() => {
-    // Preferred anchor: the STICKY bar (.insert-rail), top-aligned. NOT the
-    // .document-editor__rail grid wrapper — that one stretches the full
-    // document height and its rect scrolls with the paper, which would drag
-    // this fixed panel along with the scroll. The sticky bar's rect is stable
-    // once stuck (and pre-stick it moves with the page, keeping alignment).
-    // Fallback: the button itself (item rendered outside a rail, or tests).
-    const target = anchor?.closest('.insert-rail') ?? anchor
+    // The @ button may live in the SDK's own dock OR in a consumer-composed
+    // bar (renderInsertBar) — anchor to the nearest toolbar container either
+    // way. Last resort: the bare button (item rendered loose, or tests).
+    const dock = anchor?.closest('.insert-dock') ?? anchor?.closest('[role="toolbar"]') ?? anchor
     const place = () => {
-      if (!target) {
-        setPosition({ top: 16, left: 16 })
+      if (!dock || !anchor) {
+        setPosition({ bottom: 16, left: 16 })
         return
       }
-      const rect = target.getBoundingClientRect()
-      setPosition({ top: rect.top, left: rect.right + 12 })
+      const dockRect = dock.getBoundingClientRect()
+      const buttonRect = anchor.getBoundingClientRect()
+      setPosition({
+        bottom: window.innerHeight - dockRect.top + 12,
+        // Clamp so the panel (min(340px, 80vw) wide) never leaves the viewport.
+        left: Math.max(8, Math.min(buttonRect.left, window.innerWidth - 348)),
+      })
     }
     place()
-    window.addEventListener('scroll', place, true)
     window.addEventListener('resize', place)
     return () => {
-      window.removeEventListener('scroll', place, true)
       window.removeEventListener('resize', place)
     }
   }, [anchor])
@@ -243,7 +245,7 @@ function MergeFieldPanel({
       className={`document-editor-popup mf-panel${dragging ? ' mf-panel--drag-through' : ''}`}
       role="dialog"
       aria-label="Variables"
-      style={{ top: position.top, left: position.left }}
+      style={{ bottom: position.bottom, left: position.left }}
     >
       <div className="mf-panel__header">
         <strong>Variables</strong>
@@ -355,7 +357,7 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
       <button
         ref={buttonRef}
         type="button"
-        className="insert-rail__btn"
+        className="insert-dock__btn"
         title="Variables"
         aria-label="Variables"
         aria-haspopup="dialog"
@@ -366,8 +368,8 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
         @
       </button>
       {open
-        ? // Portal to <body> so the fixed panel escapes the sticky insert-rail's
-          // stacking context (otherwise it paints behind the page).
+        ? // Portal to <body> so the fixed panel escapes the dock's stacking
+          // context (otherwise it paints behind the page).
           createPortal(
             <MergeFieldPanel
               anchor={buttonRef.current}
