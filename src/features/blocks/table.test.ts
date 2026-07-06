@@ -65,16 +65,75 @@ describe('table feature', () => {
     for (const id of ids) expect(commands[id]).toBeDefined()
   })
 
-  it('gates menu items by current applicability (via editor.can)', () => {
+  it('gates EVERY menu item by current applicability (via editor.can)', () => {
     const { editor } = withTable() // 3x3, caret in a plain cell
     const items = TableFeature.contextMenu![0].groups.flatMap((group) => group.items)
-    const byId = (id: string) => items.find((item) => item.id === id)!
 
-    // A plain cell isn't merged and there's no multi-cell selection.
-    expect(byId('split').isAvailable!(editor)).toBe(false)
-    expect(byId('merge').isAvailable!(editor)).toBe(false)
-    // Structural actions apply anywhere inside the table.
-    expect(byId('row-above').isAvailable!(editor)).toBe(true)
-    expect(byId('delete-table').isAvailable!(editor)).toBe(true)
+    // From a plain single cell: structure applies everywhere, merge needs a
+    // multi-cell selection, split needs a merged cell. The sweep runs every
+    // isAvailable lambda the feature declares — no dead gates.
+    const expected: Record<string, boolean> = {
+      'row-above': true,
+      'row-below': true,
+      'row-delete': true,
+      'col-left': true,
+      'col-right': true,
+      'col-delete': true,
+      merge: false,
+      split: false,
+      header: true,
+      'delete-table': true,
+    }
+    expect(items.length).toBe(Object.keys(expected).length)
+    for (const item of items) {
+      expect({ id: item.id, available: item.isAvailable!(editor) }).toEqual({
+        id: item.id,
+        available: expected[item.id],
+      })
+    }
+  })
+
+  it('inserts on the LEADING side too (row above / column left)', () => {
+    const { api } = withTable()
+    expect(api.exec('table.addRowBefore')).toBe(true)
+    expect(rows(api)).toBe(4)
+    expect(api.exec('table.addColumnBefore')).toBe(true)
+    expect(cols(api)).toBe(4)
+  })
+
+  it('merges a real multi-cell selection and splits it back', async () => {
+    const { CellSelection } = await import('@tiptap/pm/tables')
+    const created = withTable()
+    const { editor, api } = created
+
+    // Select the first two cells of the SECOND row (plain cells).
+    const cells: number[] = []
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableCell') cells.push(pos)
+    })
+    editor.view.dispatch(
+      editor.state.tr.setSelection(CellSelection.create(editor.state.doc, cells[0], cells[1])),
+    )
+
+    const secondRowCells = () =>
+      jsonFindNode(api.getJSON().doc, 'table')?.content?.[1]?.content?.length
+    expect(secondRowCells()).toBe(3)
+    expect(api.exec('table.mergeCells')).toBe(true)
+    expect(secondRowCells()).toBe(2) // two cells fused into one
+
+    expect(api.exec('table.splitCell')).toBe(true)
+    expect(secondRowCells()).toBe(3)
+  })
+
+  it('toggles the header row', () => {
+    const { api } = withTable()
+    const firstRowTypes = () =>
+      jsonFindNode(api.getJSON().doc, 'tableRow')?.content?.map((cell) => cell.type)
+
+    expect(firstRowTypes()).toEqual(['tableHeader', 'tableHeader', 'tableHeader'])
+    expect(api.exec('table.toggleHeaderRow')).toBe(true)
+    expect(firstRowTypes()).toEqual(['tableCell', 'tableCell', 'tableCell'])
+    expect(api.exec('table.toggleHeaderRow')).toBe(true)
+    expect(firstRowTypes()).toEqual(['tableHeader', 'tableHeader', 'tableHeader'])
   })
 })

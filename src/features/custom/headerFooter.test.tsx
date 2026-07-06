@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest'
-import type { CreatedEditor } from '../../editor'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type { Editor } from '@tiptap/core'
+import { DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
 import { ImageFeature } from '../../features'
-import { renderEditor } from '../../test/editorHarness'
+import { docWith, renderEditor } from '../../test/editorHarness'
 import { closeRegion, HeaderFooterFeature } from './headerFooter'
 
 const newEditor = () => renderEditor([HeaderFooterFeature])
 const content = (created: CreatedEditor) => created.api.getJSON().doc.content ?? []
+const gate = (editor: Editor) =>
+  (editor.storage as unknown as { headerFooterGuard: { editing: string | null } }).headerFooterGuard
 
 describe('header/footer feature', () => {
   it('adds a header as the first node', () => {
@@ -258,5 +262,213 @@ describe('header/footer feature', () => {
       ['top', 'documentHeader'],
       ['bottom', 'documentFooter'],
     ])
+  })
+})
+
+describe('header/footer guard — edge paths', () => {
+  it('Mod+A with no regions in the doc falls through to the native select-all', () => {
+    const created = renderEditor([HeaderFooterFeature], { content: docWith('corpo inteiro') })
+    created.editor.commands.focus()
+    created.editor.commands.setTextSelection(3)
+
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
+    )
+
+    // The whole document, node boundaries included (PM's AllSelection).
+    expect(created.editor.state.selection.from).toBe(0)
+    expect(created.editor.state.selection.to).toBe(created.editor.state.doc.content.size)
+  })
+
+  it('the body select-all survives a JSON round-trip (RangeSelection is serializable)', async () => {
+    const { Selection } = await import('@tiptap/pm/state')
+    const created = newEditor()
+    created.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+          { type: 'paragraph', content: [{ type: 'text', text: 'corpo' }] },
+          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
+        ],
+      },
+    })
+    created.editor.commands.focus()
+    created.editor.commands.setTextSelection(created.editor.state.doc.firstChild!.nodeSize + 2)
+    created.editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
+    )
+
+    const selection = created.editor.state.selection
+    const json = selection.toJSON() as { type: string }
+    // Collab/persistence serialize selections by type id — it must round-trip.
+    expect(json.type).toBe('regionRangeSelectAll')
+    const restored = Selection.fromJSON(created.editor.state.doc, json)
+    expect(restored.eq(selection)).toBe(true)
+  })
+
+  it('closeRegion is a no-op unless THAT region is the one editing', () => {
+    const created = newEditor()
+    created.api.exec('header.add')
+    expect(gate(created.editor).editing).toBe('documentHeader')
+
+    const dispatch = vi.spyOn(created.editor.view, 'dispatch')
+    closeRegion(created.editor, 'documentFooter') // not the open one
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(gate(created.editor).editing).toBe('documentHeader')
+  })
+
+  it('deleting the OPEN region clears the gate — no ghost gate for a future region', () => {
+    const created = newEditor()
+    created.api.exec('header.add')
+    expect(gate(created.editor).editing).toBe('documentHeader')
+
+    const headerSize = created.editor.state.doc.firstChild!.nodeSize
+    created.editor.commands.deleteRange({ from: 0, to: headerSize })
+
+    expect(content(created).some((node) => node.type === 'documentHeader')).toBe(false)
+    expect(gate(created.editor).editing).toBeNull()
+  })
+
+  it('an edit that strands the caret outside the OPEN header pulls it back in', async () => {
+    const { TextSelection } = await import('@tiptap/pm/state')
+    const created = newEditor()
+    created.api.exec('header.add') // gate open, caret inside the header
+    const view = created.editor.view
+    const bodyPos = view.state.doc.firstChild!.nodeSize + 1
+
+    // One transaction that BOTH changes the doc and parks the caret in the
+    // body — the shape PM produces when a delete refills the schema hole.
+    let tr = view.state.tr.insertText('corpo', bodyPos)
+    tr = tr.setSelection(TextSelection.create(tr.doc, bodyPos + 2))
+    view.dispatch(tr)
+
+    // The guard noticed the escape and pulled the caret back to the region's
+    // first text position — typing keeps refilling the OPEN region.
+    expect(created.editor.state.selection.from).toBe(2)
+    expect(gate(created.editor).editing).toBe('documentHeader')
+  })
+
+  it('an edit that strands the caret outside the OPEN footer pulls it back in (bottom variant)', async () => {
+    const { TextSelection } = await import('@tiptap/pm/state')
+    const created = newEditor()
+    created.api.exec('footer.add') // gate open, caret inside the footer
+    const view = created.editor.view
+
+    let tr = view.state.tr.insertText('corpo', 1) // the body paragraph comes first
+    tr = tr.setSelection(TextSelection.create(tr.doc, 2))
+    view.dispatch(tr)
+
+    const state = created.editor.state
+    const footerStart = state.doc.content.size - state.doc.lastChild!.nodeSize
+    expect(state.selection.from).toBe(footerStart + 2) // first text position inside the footer
+  })
+})
+
+describe('header/footer node view (the React chrome)', () => {
+  const REGION_DOC = {
+    doc: {
+      type: 'doc',
+      content: [
+        { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'corpo' }] },
+      ],
+    },
+  }
+
+  /** DocumentEditor host (node views need the React mount), plus a toolbar
+   *  stub so the exit rule has an editor CONTROL to spare. posAtCoords is
+   *  stubbed from the start: PM's own mouse handlers call it and jsdom has no
+   *  elementFromPoint. */
+  async function mountRegionEditor() {
+    let api: EditorApi | null = null
+    render(
+      <DocumentEditor
+        features={[HeaderFooterFeature]}
+        content={REGION_DOC}
+        renderToolbar={() => <button type="button">Toolbar control</button>}
+        onReady={(ready) => {
+          api = ready
+        }}
+      />,
+    )
+    await screen.findByText('Header')
+    const pm = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
+    const editor = pm.editor!
+    const posAtCoords = vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+    const region = () => document.querySelector('.doc-region--header') as HTMLElement
+    return { editor, api: api!, region, posAtCoords }
+  }
+
+  it('a single click does NOT drop the caret in (Google-Docs entry semantics)', async () => {
+    const { editor, region } = await mountRegionEditor()
+
+    const allowed = fireEvent.mouseDown(region())
+
+    expect(allowed).toBe(false) // preventDefault — the caret never lands
+    expect(gate(editor).editing).toBeNull()
+    expect(region().classList.contains('doc-region--editing')).toBe(false)
+  })
+
+  it('double-click opens the gate and places the caret at the CLICK POINT', async () => {
+    const { editor, region, posAtCoords } = await mountRegionEditor()
+    posAtCoords.mockReturnValue({ pos: 3, inside: 0 }) // middle of "head"
+
+    fireEvent.doubleClick(region(), { clientX: 15, clientY: 15 })
+
+    expect(gate(editor).editing).toBe('documentHeader')
+    expect(editor.state.selection.from).toBe(3)
+    await waitFor(() => expect(region().classList.contains('doc-region--editing')).toBe(true))
+    // Editing: single clicks behave normally again (move the caret inside).
+    expect(fireEvent.mouseDown(region())).toBe(true)
+  })
+
+  it('double-click falls back to the region start when the coords resolve nowhere', async () => {
+    const { editor, region } = await mountRegionEditor() // posAtCoords → null (label-bar double-click)
+
+    fireEvent.doubleClick(region())
+
+    expect(gate(editor).editing).toBe('documentHeader')
+    expect(editor.state.selection.from).toBe(2) // getPos() + 2 → the region's first text position
+  })
+
+  it('Remove deletes the region and never leaves the gate ajar', async () => {
+    const { editor, api, region } = await mountRegionEditor()
+    fireEvent.doubleClick(region()) // remove while OPEN — the worst case for the gate
+    expect(gate(editor).editing).toBe('documentHeader')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove header' }))
+
+    await waitFor(() => expect(api.hasNode('documentHeader')).toBe(false))
+    expect(gate(editor).editing).toBeNull()
+  })
+
+  it('exit rule: editor CONTROLS and portaled popovers keep the region open; anything else closes it', async () => {
+    const { editor, region } = await mountRegionEditor()
+    fireEvent.doubleClick(region())
+    expect(gate(editor).editing).toBe('documentHeader')
+
+    // A body-portaled popover (color picker, variables panel…) — stays open,
+    // so formatting applies inside the region.
+    const popover = document.createElement('div')
+    popover.className = 'document-editor-popup'
+    document.body.appendChild(popover)
+    fireEvent.mouseDown(popover)
+    expect(gate(editor).editing).toBe('documentHeader')
+    popover.remove()
+
+    // A toolbar button inside the editor shell — stays open.
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Toolbar control' }))
+    expect(gate(editor).editing).toBe('documentHeader')
+
+    // Clicking elsewhere IN the document — closes (and the caret is expelled).
+    fireEvent.mouseDown(screen.getByText('corpo'))
+    expect(gate(editor).editing).toBeNull()
+
+    // Reopen; clicking app chrome OUTSIDE the shell also closes.
+    fireEvent.doubleClick(region())
+    expect(gate(editor).editing).toBe('documentHeader')
+    fireEvent.mouseDown(document.body)
+    expect(gate(editor).editing).toBeNull()
   })
 })

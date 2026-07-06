@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DocumentEditor, InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
-import { jsonHasNode, renderEditor } from '../../test/editorHarness'
+import { docWith, jsonHasNode, renderEditor } from '../../test/editorHarness'
 import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
@@ -181,6 +181,33 @@ describe('mergeField', () => {
     expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
 
+  it('carries the DOCUMENT chip as the drag image, and the ghost leaves the DOM after snapshot', async () => {
+    const user = userEvent.setup()
+    renderRail(SAMPLE)
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    const chip = screen.getByRole('button', { name: 'Client name' })
+
+    // jsdom's DataTransfer has no setDragImage — the code guards on that. Hand
+    // it one to exercise the browser path.
+    const setDragImage = vi.fn()
+    fireEvent.dragStart(chip, {
+      dataTransfer: { setData: () => {}, effectAllowed: 'none', setDragImage },
+    })
+
+    expect(setDragImage).toHaveBeenCalledTimes(1)
+    const [ghost, offsetX, offsetY] = setDragImage.mock.calls[0] as [HTMLElement, number, number]
+    // You drag what you are about to drop: the {{label}} chip, not the button.
+    expect(ghost.className).toBe('mf-drag-ghost')
+    expect(ghost.textContent).toBe('{{Client name}}')
+    expect([offsetX, offsetY]).toEqual([12, 12])
+    // The browser snapshots the ghost at dragstart; it must be IN the document
+    // then, and free to leave on the next frame.
+    expect(document.body.contains(ghost)).toBe(true)
+    await waitFor(() => expect(document.body.contains(ghost)).toBe(false))
+
+    fireEvent.dragEnd(chip)
+  })
+
   it('the drag payload parses back into a mergeField chip (what PM does on drop)', () => {
     const created = renderEditor([MergeFieldFeature], {
       content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
@@ -312,5 +339,84 @@ describe('drop → caret to the right of the chip', () => {
 
     const richer = parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(richer)).toBeNull()
+  })
+
+  /** A mounted editor + the pieces a drop needs: a parsed payload slice and a
+   *  stubbed posAtCoords (jsdom has no layout to resolve pixel coordinates). */
+  async function dropRig(text = 'Hello') {
+    const { DOMParser } = await import('@tiptap/pm/model')
+    const created = renderEditor([MergeFieldFeature], { content: docWith(text) })
+    const view = created.editor.view
+    const parse = (html: string) => {
+      const el = document.createElement('div')
+      el.innerHTML = html
+      return DOMParser.fromSchema(created.editor.schema).parseSlice(el)
+    }
+    // Dispatch exactly like ProseMirror's own drop path does: through the
+    // handleDrop prop chain.
+    const drop = (slice: ReturnType<typeof parse>, moved = false) =>
+      view.someProp('handleDrop', (handler) =>
+        handler(view, new MouseEvent('drop', { clientX: 10, clientY: 10 }) as DragEvent, slice, moved),
+      )
+    return { created, view, parse, drop }
+  }
+
+  it('handleDrop inserts the chip + a space and lands the caret right after them', async () => {
+    const { created, view, parse, drop } = await dropRig('Hello')
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 }) // between "He" and "llo"
+    const focus = vi.spyOn(view, 'focus')
+
+    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])))).toBe(true)
+
+    const paragraph = created.api.getJSON().doc.content?.[0]
+    expect(paragraph?.content).toMatchObject([
+      { type: 'text', text: 'He' },
+      { type: 'mergeField', attrs: { id: 'client.name', label: 'Client name' } },
+      { type: 'text', text: ' llo' }, // the trailing space rides with the rest
+    ])
+    // Caret: insert(3) + chip(1) + space(1) → typing continues after the gap,
+    // never with the chip node-selected (PM's default drop behavior).
+    expect(created.editor.state.selection.empty).toBe(true)
+    expect(created.editor.state.selection.from).toBe(5)
+    expect(focus).toHaveBeenCalled()
+  })
+
+  it('pops the landing animation on the dropped chip and cleans the class up after it runs', async () => {
+    const { view, parse, drop } = await dropRig()
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 1, inside: 0 })
+    drop(parse(mergeFieldDragHTML(SAMPLE[0])))
+
+    // Scoped to THIS drop — a load/undo recreating node views must not animate.
+    const chip = view.dom.querySelector('.merge-field--dropped')
+    expect(chip).not.toBeNull()
+    fireEvent.animationEnd(chip!)
+    expect(view.dom.querySelector('.merge-field--dropped')).toBeNull()
+  })
+
+  it('an internal drag (moved) falls through to ProseMirror move semantics', async () => {
+    const { created, view, parse, drop } = await dropRig()
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
+    const before = created.editor.state
+
+    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])), true)).toBeFalsy()
+    expect(created.editor.state).toBe(before) // untouched — PM does the move
+  })
+
+  it('anything richer than one chip falls through to the default drop', async () => {
+    const { created, view, parse, drop } = await dropRig()
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
+    const before = created.editor.state
+
+    expect(drop(parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
+    expect(created.editor.state).toBe(before)
+  })
+
+  it('bails when the drop coordinates do not resolve to a document position', async () => {
+    const { created, view, parse, drop } = await dropRig()
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(null)
+    const before = created.editor.state
+
+    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])))).toBeFalsy()
+    expect(created.editor.state).toBe(before)
   })
 })

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { EditorToolbar, createMockEditor, resolveFeatures } from '../editor'
+import { renderEditor } from '../test/editorHarness'
 import { HistoryFeature } from './history'
 
 /**
@@ -22,5 +23,18 @@ describe('history toolbar disabled state', () => {
 
     expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled()
+  })
+
+  it('the commands rewind and replay real edits (round-trip on a real editor)', () => {
+    const created = renderEditor([HistoryFeature])
+    created.editor.commands.insertContent('primeira linha')
+    expect(created.editor.getText()).toContain('primeira linha')
+
+    expect(created.api.exec('history.undo')).toBe(true)
+    expect(created.editor.getText()).not.toContain('primeira linha')
+    expect(created.api.canRedo()).toBe(true)
+
+    expect(created.api.exec('history.redo')).toBe(true)
+    expect(created.editor.getText()).toContain('primeira linha')
   })
 })

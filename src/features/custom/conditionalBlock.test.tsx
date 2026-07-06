@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
@@ -464,6 +464,11 @@ describe('conditional block — the ＋ (add nested) button', () => {
     const nestBtn = await screen.findByRole('button', { name: 'Add nested condition' })
     expect(nestBtn).toBeEnabled()
     await user.click(nestBtn)
+    // The click chains .focus(), which TipTap defers a frame — drain it inside
+    // act so the follow-up node-view render isn't an orphan update.
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
 
     await waitFor(() => {
       const kids = api?.getJSON().doc.content?.[0]?.content ?? []
@@ -474,7 +479,9 @@ describe('conditional block — the ＋ (add nested) button', () => {
 
     // …and focus lands INSIDE the new nested block: typing fills its content.
     const pmEl = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
-    pmEl.editor?.commands.insertContent('X')
+    act(() => {
+      pmEl.editor?.commands.insertContent('X')
+    })
     const nested = api!.getJSON().doc.content?.[0]?.content?.[1]
     expect(nested?.content?.[0]?.content?.[0]?.text).toBe('X')
   })

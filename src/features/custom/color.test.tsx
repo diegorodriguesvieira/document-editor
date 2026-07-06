@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { EditorToolbar, createMockEditor, resolveFeatures } from '../../editor'
@@ -46,7 +46,11 @@ describe('color feature', () => {
       <EditorToolbar editor={created.editor} api={created.api} resolved={resolveFeatures([ColorFeature])} />,
     )
 
-    created.editor.chain().selectAll().setColor('#d93025').run()
+    // The command re-renders the mounted ColorControl — that's the point of
+    // the test — so it must run inside act.
+    act(() => {
+      created.editor.chain().selectAll().setColor('#d93025').run()
+    })
 
     await waitFor(() =>
       expect(document.querySelector('.color-swatch__dot')).toHaveStyle({
