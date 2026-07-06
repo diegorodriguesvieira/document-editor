@@ -78,7 +78,10 @@ export function createSuggestionPopup<I = unknown, S = I>(
                 place(props.clientRect)
               },
               onKeyDown: (props) => {
-                if (props.event.key === 'Escape') return true
+                // Escape must reach the plugin UNhandled: Suggestion owns the
+                // exit (onExit + state reset) and SKIPS it when the renderer
+                // claims the key — returning true here left the popup open.
+                if (props.event.key === 'Escape') return false
                 return component?.ref?.onKeyDown({ event: props.event }) ?? false
               },
               onExit: () => {
