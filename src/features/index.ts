@@ -2,7 +2,8 @@
 export { BoldFeature } from './marks/bold'
 export { ItalicFeature } from './marks/italic'
 export { LinkFeature } from './marks/link'
-export { ColorFeature } from './custom/color'
+export { ColorFeature, createColorFeature } from './custom/color'
+export type { ColorFeatureOptions } from './custom/color'
 
 // Blocks / nodes
 export { HeadingFeature } from './blocks/heading'

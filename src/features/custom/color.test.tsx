@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { EditorToolbar, createMockEditor, resolveFeatures } from '../../editor'
 import { docWith, renderEditor } from '../../test/editorHarness'
-import { ColorFeature } from './color'
+import { ColorFeature, createColorFeature } from './color'
 
 const HELLO = docWith('hello')
 
@@ -38,6 +38,26 @@ describe('color feature', () => {
     await user.click(screen.getByRole('button', { name: 'Text color' }))
     await user.click(screen.getByRole('button', { name: 'Default color' }))
     expect(mock.execCalls).toContainEqual({ commandId: 'color.unset', payload: undefined })
+  })
+
+  it('createColorFeature takes a custom palette — the picker shows YOUR brand, not the default', async () => {
+    const user = userEvent.setup()
+    const mock = createMockEditor()
+    const brand = createColorFeature({ palette: ['#ff0055', '#00c2a8'] })
+    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([brand])} />)
+
+    await user.click(screen.getByRole('button', { name: 'Text color' }))
+
+    // Your colors are in, the default palette is out…
+    expect(screen.getByRole('button', { name: '#ff0055' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '#00c2a8' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '#d93025' })).toBeNull()
+    // …and the Default reset + native "+" picker stay regardless.
+    expect(screen.getByRole('button', { name: 'Default color' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Custom color' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '#00c2a8' }))
+    expect(mock.execCalls).toContainEqual({ commandId: 'color.set', payload: '#00c2a8' })
   })
 
   it('clamps the popover to the viewport when the swatch sits near the right edge', async () => {

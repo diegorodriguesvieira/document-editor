@@ -26,6 +26,19 @@ import { BoldFeature, ItalicFeature, HeadingFeature } from '../features'
 and add to it: `features={[...base, MyFeature]}`). Editor identity tracks the
 feature *ids*, so an inline array is safe.
 
+Configurable features ship as factories with a zero-config default. The color
+picker's palette, for example:
+
+```tsx
+import { createColorFeature } from '../features'
+
+const BrandColor = createColorFeature({ palette: ['#0a2540', '#635bff', '#00d4ff'] })
+<DocumentEditor features={[…, BrandColor]} />
+```
+
+Options are composition-time config — pick them when you build the array
+(identity is keyed by feature ids, so a same-id swap at runtime is ignored).
+
 Zoom is a controlled prop — the SDK owns the scaling mechanics (CSS zoom,
 in-column scrolling past 100%, chrome staying put); you own the number. The
 `useZoom()` hook ships the state and policy (clamping, stepping, float-safe

@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
 import { defineFeature, useDismissable, useFeatureState, type FeatureRenderContext } from '../../editor'
 
-/** Preset palette (Google-Docs-ish). Just data — swap freely. */
-const PRESETS = [
+/** The default palette (Google-Docs-ish) — swap it via `createColorFeature`. */
+const DEFAULT_PALETTE = [
   '#000000',
   '#5f6368',
   '#d93025',
@@ -17,6 +17,12 @@ const PRESETS = [
   '#795548',
 ]
 
+export interface ColorFeatureOptions {
+  /** Preset swatches (any CSS color strings). The "Default" reset and the "+"
+   *  native custom picker are always present alongside them. */
+  palette?: string[]
+}
+
 /**
  * A color swatch that shows the current text color and opens a little popover of
  * preset colors + a "+" that fires the native color picker for a custom one.
@@ -24,7 +30,7 @@ const PRESETS = [
  * `onMouseDown` preventDefault so the editor keeps focus/selection (critical in
  * the bubble menu, so the selection the color applies to survives the click).
  */
-function ColorControl({ editor, api }: FeatureRenderContext) {
+function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette: string[] }) {
   const current = useFeatureState(
     editor,
     (ed) => (ed.getAttributes('textStyle').color as string | undefined) ?? null,
@@ -100,7 +106,7 @@ function ColorControl({ editor, api }: FeatureRenderContext) {
                 >
                   A
                 </button>
-                {PRESETS.map((color) => (
+                {palette.map((color) => (
                   <button
                     key={color}
                     type="button"
@@ -141,24 +147,34 @@ function ColorControl({ editor, api }: FeatureRenderContext) {
 }
 
 /**
- * Text color. TextStyle is the generic style-attribute mark; Color adds the
- * `setColor`/`unsetColor` commands on top of it (both ship in
- * `@tiptap/extension-text-style` in v3). The toolbar control is `group: 'marks'`
- * so it shows in the formatting toolbar AND the bubble menu.
+ * Text color, with a configurable preset palette. TextStyle is the generic
+ * style-attribute mark; Color adds the `setColor`/`unsetColor` commands on top
+ * of it (both ship in `@tiptap/extension-text-style` in v3). The toolbar
+ * control is `group: 'marks'` so it shows in the bubble menu.
+ *
+ * The palette is COMPOSITION-TIME config, like every feature option: pick it
+ * when you build the `features` array. (Editor identity is keyed by feature
+ * ids, so swapping to a same-id feature with a different palette at runtime is
+ * deliberately ignored — remount with `key` if you truly need that.)
  */
-export const ColorFeature = defineFeature({
-  id: 'color',
-  extensions: () => [TextStyle, Color],
-  commands: {
-    'color.set': (editor, payload) => editor.chain().focus().setColor(payload as string).run(),
-    'color.unset': (editor) => editor.chain().focus().unsetColor().run(),
-  },
-  toolbar: [
-    {
-      id: 'color',
-      group: 'marks',
-      label: 'Text color',
-      render: (ctx) => <ColorControl {...ctx} />,
+export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOptions = {}) {
+  return defineFeature({
+    id: 'color',
+    extensions: () => [TextStyle, Color],
+    commands: {
+      'color.set': (editor, payload) => editor.chain().focus().setColor(payload as string).run(),
+      'color.unset': (editor) => editor.chain().focus().unsetColor().run(),
     },
-  ],
-})
+    toolbar: [
+      {
+        id: 'color',
+        group: 'marks',
+        label: 'Text color',
+        render: (ctx) => <ColorControl {...ctx} palette={palette} />,
+      },
+    ],
+  })
+}
+
+/** Zero-config text color with the default (Docs-ish) palette. */
+export const ColorFeature = createColorFeature()
