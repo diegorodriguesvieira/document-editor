@@ -26,3 +26,6 @@ coverage
 
 # Local tooling state
 .omc/
+
+*storybook.log
+storybook-static

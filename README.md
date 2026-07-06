@@ -33,6 +33,7 @@ Docs: `EXTENDING.md` (consumers) · `THEMING.md` (skin/tokens) ·
 ```bash
 pnpm install
 pnpm dev          # run the playground
+pnpm storybook    # the customization catalog (one story per seam)
 pnpm test         # Vitest + Testing Library
 pnpm typecheck    # tsc --noEmit
 pnpm build        # production build
