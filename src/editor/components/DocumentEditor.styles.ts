@@ -9,12 +9,14 @@ const editorGapcursorBlink = keyframes`
 `
 
 export const documentEditorStyles = css`
-  /* 3-column grid: the side gutters keep the content column centered in the
-     VIEWPORT (a flex row would center the rail+column group instead, pushing
-     the text off-center). The right gutter hosts the consumer rail; inserts
-     live in the fixed bottom dock, so the left gutter is just breathing room. */
+  /* Header row + 3-column body: the side gutters keep the content column
+     centered in the VIEWPORT (a flex row would center the panel+column group
+     instead, pushing the text off-center). Both gutters host CONSUMER panels
+     (renderLeftPanel / renderRightPanel); the actions default to the fixed
+     footer bar. */
   .document-editor {
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-columns:
       minmax(min-content, 1fr)
       minmax(0, var(--editor-page-width))
@@ -22,15 +24,60 @@ export const documentEditorStyles = css`
     column-gap: 16px;
   }
 
-  /* Reserve room for the fixed insert dock: the document scrolls BEHIND it,
-     but its last line (and the page footer) can still scroll clear of it. */
-  .document-editor:has(.insert-dock) {
+  /* The editor header: a fixed-height sticky bar spanning the full width.
+     Content comes from the consumer (renderHeader); the shell is the SDK's. */
+  .document-editor__header {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    height: var(--editor-header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 24px;
+    background: var(--editor-surface);
+    border-bottom: 1px solid var(--editor-border);
+    z-index: var(--editor-z-header);
+  }
+
+  /* The editor footer: the fixed rounded bar over the page bottom — the
+     actions dock by default, any consumer content via renderFooter. */
+  .document-editor__footer {
+    position: fixed;
+    left: var(--editor-dock-gap);
+    right: var(--editor-dock-gap);
+    bottom: var(--editor-dock-gap);
+    height: var(--editor-dock-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    background: var(--editor-surface);
+    border: 1px solid var(--editor-border);
+    border-radius: 16px;
+    box-shadow: var(--editor-shadow-sm);
+    z-index: var(--editor-z-dock);
+  }
+
+  /* Reserve room for the fixed footer: the document scrolls BEHIND it, but
+     its last line (and the page footer) can still scroll clear of it. */
+  .document-editor:has(.document-editor__footer) {
     padding-bottom: calc(var(--editor-dock-height) + 2 * var(--editor-dock-gap));
   }
 
-  /* The (right) rail stretches with the row — so its inner sticky bars can
-     stick — and pins to the edge at --editor-rail-gutter. */
-  .document-editor__rail {
+  /* Consumer side panels: they stretch with the row — so their inner sticky
+     bars can stick — and pin to the edges at --editor-rail-gutter. */
+  .document-editor__panel--left {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: start;
+    margin-left: var(--editor-rail-gutter);
+  }
+
+  .document-editor__panel--right {
+    grid-row: 2;
     grid-column: 3;
     justify-self: end;
     margin-right: var(--editor-rail-gutter);
@@ -43,6 +90,7 @@ export const documentEditorStyles = css`
      sized and --editor-page-min-height is the fallback page height.
      'flex: 1 0 auto' = grow to fill, never shrink, content-sized otherwise. */
   .document-editor__column {
+    grid-row: 2;
     grid-column: 2;
     min-width: 0;
     display: flex;

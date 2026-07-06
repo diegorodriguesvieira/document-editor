@@ -212,9 +212,10 @@ function MergeFieldPanel({
   // moves the panel; only a resize re-places it (bottom-anchored, so the
   // panel grows upward and never covers the dock).
   useLayoutEffect(() => {
-    // The @ button may live in the SDK's own dock OR in a consumer-composed
-    // bar (renderInsertBar) — anchor to the nearest toolbar container either
-    // way. Last resort: the bare button (item rendered loose, or tests).
+    // The @ button may live in the SDK's own actions row OR in a
+    // consumer-composed bar (renderFooter / a side panel) — anchor to the
+    // nearest toolbar container either way. Last resort: the bare button
+    // (item rendered loose, or tests).
     const dock = anchor?.closest('.insert-dock') ?? anchor?.closest('[role="toolbar"]') ?? anchor
     const place = () => {
       if (!dock || !anchor) {

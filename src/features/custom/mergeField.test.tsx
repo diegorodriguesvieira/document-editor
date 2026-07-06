@@ -300,7 +300,7 @@ describe('mergeField', () => {
 
   it('falls back to the nearest toolbar container in a consumer-composed bar (no .insert-dock)', async () => {
     const user = userEvent.setup()
-    // A consumer bar: InsertToolbar with its OWN class (renderInsertBar
+    // A consumer bar: InsertToolbar with its OWN class (renderFooter/panel
     // composition) — the SDK dock class is nowhere in the tree.
     render(
       <DocumentVariablesProvider variables={SAMPLE}>

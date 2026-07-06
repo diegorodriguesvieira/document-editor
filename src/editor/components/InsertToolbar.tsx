@@ -20,11 +20,12 @@ export interface InsertToolbarProps {
 }
 
 /**
- * Insert dock — a fixed bar over the page footer with the items centered; the
- * document scrolls behind it. Same registry-driven, headless skin as
- * {@link EditorToolbar}, reading the `resolved.inserts` channel. A feature
- * contributes inserts via `FeatureDefinition.insert`, so the dock is pure
- * opt-in. Renders `null` when there's nothing to show.
+ * The insert ACTIONS row — the editor footer's default content (the fixed
+ * bar itself is the footer shell; this also drops into a side panel via
+ * `className`). Same registry-driven, headless skin as {@link EditorToolbar},
+ * reading the `resolved.inserts` channel. A feature contributes inserts via
+ * `FeatureDefinition.insert`, so the row is pure opt-in. Renders `null` when
+ * there's nothing to show.
  */
 export function InsertToolbar({
   editor,

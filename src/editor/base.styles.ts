@@ -56,18 +56,23 @@ export const baseStyles = css`
     --editor-page-min-height: calc(100vh - 160px);
     --editor-page-padding: 32px 0 96px;
 
-    /* Layout: how far from the viewport top the sticky toolbar/rail sit —
-       set this to your app header's height (the SDK assumes none). */
+    /* Layout: how far from the viewport top sticky surfaces sit — set this to
+       the chrome ABOVE them (e.g. the editor header's height, plus any app
+       chrome of your own). */
     --editor-sticky-offset: 0px;
-    /* Distance between the side rails and the browser edge. */
+    /* Distance between the side panels and the browser edge. */
     --editor-rail-gutter: 32px;
-    /* Bottom insert dock (the insert surface): shape + inset from the
+    /* The editor HEADER bar (shown by default; fill it via renderHeader).
+       Fixed height by design — content adapts to the bar, not the reverse. */
+    --editor-header-height: 72px;
+    /* The editor FOOTER bar (the actions dock): shape + inset from the
        viewport edges. The shell reserves matching clearance below the page. */
     --editor-dock-height: 66px;
     --editor-dock-gap: 8px;
 
     /* Stacking of floating surfaces (caret popups / colour picker vs menus).
-       The dock sits below them all — popups and menus must float above it. */
+       Header and footer sit below them all — popups must float above both. */
+    --editor-z-header: 900;
     --editor-z-dock: 900;
     --editor-z-popup: 1000;
     --editor-z-menu: 1100;

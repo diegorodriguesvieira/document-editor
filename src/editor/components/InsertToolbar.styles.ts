@@ -1,25 +1,15 @@
 import { css } from '@emotion/react'
 
-/* Insert dock — a fixed, full-width rounded bar over the page footer, items
-   centered. The document scrolls BEHIND it; the shell reserves clearance
-   (see DocumentEditor.styles) so content can still scroll into view above it. */
+/* The insert ACTIONS row — the footer bar's default content (the shell — the
+   fixed rounded bar — is .document-editor__footer). Full height so popovers
+   anchored to it (the variables panel) measure from the bar's top edge. */
 export const insertToolbarStyles = css`
   .insert-dock {
-    position: fixed;
-    left: var(--editor-dock-gap);
-    right: var(--editor-dock-gap);
-    bottom: var(--editor-dock-gap);
-    height: var(--editor-dock-height);
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
-    padding: 0 16px;
-    background: var(--editor-surface);
-    border: 1px solid var(--editor-border);
-    border-radius: 16px;
-    box-shadow: var(--editor-shadow-sm);
-    z-index: var(--editor-z-dock);
   }
 
   .insert-dock__btn {

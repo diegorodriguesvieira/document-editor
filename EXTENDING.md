@@ -134,7 +134,7 @@ Every matching section from every feature is shown (registration order) — two
 features can both own the clicked spot. `isAvailable` receives the raw editor
 (deliberately: `editor.can()` probes aren't expressible on the thin state view).
 
-## 6. Page regions & the right rail
+## 6. Page regions & the side panels
 
 ```tsx
 // Page-edge chrome with a hover "add" affordance (see HeaderFooterFeature):
@@ -164,8 +164,20 @@ distinction: `api.hasNode(name)` asks the current *document*;
 `ctx.editor.schema.nodes[name]` asks the enabled *feature set*. Reference
 consumer example: `src/app/contractTemplate.ts`.
 
-**The right rail is consumer-owned** — render anything in it via
-`renderRightBar`. Comments ship both a default panel and the data hook, so you
+**Both side gutters are consumer-owned** — render anything in them via
+`renderLeftPanel` / `renderRightPanel`. The insert items themselves can move
+into a panel: `InsertToolbar` is headless (a `className` replaces the fixed
+dock skin), so pair it with a suppressed dock —
+
+```tsx
+<DocumentEditor
+  features={…}
+  renderFooter={() => null}  // no footer (read-only mode does the same)
+  renderLeftPanel={(ctx) => <InsertToolbar {...ctx} className="my-side-inserts" />}
+/>
+```
+
+Comments ship both a default panel and the data hook, so you
 can drop the panel in as-is or rebuild the UI without losing behavior:
 
 ```tsx
@@ -173,7 +185,7 @@ import { CommentsPanel, useDocumentComments } from '../features'
 
 // Default UI:
 <DocumentEditor features={…}
-  renderRightBar={(ctx) => <CommentsPanel editor={ctx.editor} />} />
+  renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />} />
 
 // …or your own UI on the same reactive data (click-to-scroll included):
 function MyComments({ editor }) {
@@ -322,7 +334,7 @@ to bring a static `EditorToolbar` back):
 <DocumentEditor
   features={…}
   renderToolbar={(ctx) => <BubbleToolbar {...ctx} filter={(i) => i.group !== 'history'} />}
-  renderInsertBar={(ctx) => <InsertToolbar {...ctx} />}
+  renderFooter={(ctx) => <InsertToolbar {...ctx} />}   // keep the shell, swap the content
 />
 ```
 

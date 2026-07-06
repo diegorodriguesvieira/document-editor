@@ -7,12 +7,6 @@
   font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   color: #202124;
   line-height: 1.5;
-  /* The app chrome's dimensions, declared ONCE — everything that depends on
-     them derives via var(). (The bottom insert dock is the SDK's: shape and
-     document clearance ship with the skin, tunable via --editor-dock-*.) */
-  --app-header-h: 72px;
-  /* The editor's sticky surfaces sit right below the sticky header. */
-  --editor-sticky-offset: var(--app-header-h);
   /* The page height comes from the layout (flex chain below), not from math:
      the canvas is `flex: 1` of a 100vh column, so the editor fills "viewport
      minus the header" WHATEVER the header's height is. Neutralize the fallback. */
@@ -36,30 +30,12 @@ body {
   flex-direction: column;
 }
 
-.app__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: var(--app-header-h);
-  padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #e0e0e0;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
 
 .app__title {
   font-size: 18px;
   font-weight: 500;
 }
 
-.app__controls {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
 
 .app__hint {
   font-size: 12px;
@@ -72,14 +48,10 @@ body {
 
 .app__canvas {
   flex: 1;
-  /* No horizontal padding: the SDK's --editor-rail-gutter measures the rails'
-     32px from the browser edge itself. */
-  padding: 24px 0;
-  /* Bottom clearance for the footer dock. The app REPLACES the SDK's insert
-     dock (renderInsertBar), so the SDK's own clearance (keyed to its
-     .insert-dock) never fires — the footprint is ours to reserve, using the
-     same shape tokens the dock is drawn with. */
-  padding-bottom: calc(var(--editor-dock-height) + 2 * var(--editor-dock-gap));
+  /* No padding: the editor brings its own header bar (flush at the top)
+     and reserves the footer clearance itself; --editor-rail-gutter measures
+     the panels' 32px from the browser edge. */
+  padding: 0;
   /* Hand the canvas height to the editor (SDK's internal chain carries it down
      to the page — footer lands at the bottom for ANY header height). */
   display: flex;
@@ -219,27 +191,16 @@ body {
   color: #9aa0a6;
 }
 
-/* Footer dock (APP-composed via renderInsertBar): zoom left, the SDK's insert
-   items centered, Send right. The shape reuses the SDK's dock tokens so both
-   docks stay in sync — but the class is the app's own (no piggybacking on SDK
-   class names; that coupling bit us once with the old zoom rail). */
+/* Footer content (the fixed shell is the SDK's .document-editor__footer):
+   zoom left, the insert actions centered, Send right. */
 .app-dock {
-  position: fixed;
-  left: var(--editor-dock-gap);
-  right: var(--editor-dock-gap);
-  bottom: var(--editor-dock-gap);
-  height: var(--editor-dock-height);
+  width: 100%;
+  height: 100%;
   display: grid;
   /* 1fr | auto | 1fr keeps the middle GEOMETRICALLY centered regardless of
      how wide the zoom/send zones are. */
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 0 16px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.15);
-  z-index: 20;
 }
 
 /* Middle zone: the headless InsertToolbar row. Full dock height so popovers

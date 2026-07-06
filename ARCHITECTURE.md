@@ -144,8 +144,12 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
   lands at the bottom for any app-header height. `--editor-page-min-height` is
   only the fallback for unsized parents. Breaking ONE link strands the page
   height — the chain is grouped under a single CSS selector on purpose.
-- **Render-prop ladder**: `renderToolbar`, `renderInsertBar`, `renderRightBar`
-  (consumer-owned, renders anything), `renderEmptyState` (screen-centered
+- **Render-prop ladder**: `renderToolbar`, `renderHeader` / `renderFooter`
+  (fixed-height SDK shells, consumer content; returning null HIDES the bar —
+  the footer defaults to the insert actions), `renderLeftPanel` /
+  `renderRightPanel` (consumer-owned gutters, render anything — including the
+  headless `InsertToolbar` if the inserts should live in a panel instead of
+  the dock), `renderEmptyState` (screen-centered
   `position: fixed` overlay, `pointer-events: none` with clickable children,
   shown only while the document is BLANK — `api.isEmpty`, one empty
   paragraph; deliberately NOT TipTap's "no text" semantics). Each receives the same

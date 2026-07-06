@@ -74,9 +74,11 @@ so importing the file changes nothing until you override.
 | `--editor-page-padding` | `32px 0 96px` | Vertical breathing room around the content (no paper card — the canvas is the page) |
 | `--editor-sticky-offset` | `0px` | Top offset of sticky surfaces (an opt-in static `EditorToolbar`, the right rail's bars) — set it to your app header's height |
 | `--editor-rail-gutter` | `32px` | Distance between the right rail and the browser edge |
-| `--editor-dock-height` | `66px` | The fixed insert dock's height (the shell reserves matching clearance under the page) |
+| `--editor-header-height` | `72px` | The editor header bar (fill it via `renderHeader`) |
+| `--editor-dock-height` | `66px` | The fixed footer bar's height (the shell reserves matching clearance under the page) |
 | `--editor-dock-gap` | `8px` | The dock's inset from the viewport edges |
-| `--editor-z-dock` | `900` | The insert dock — below every popup/menu |
+| `--editor-z-header` | `900` | The editor header bar |
+| `--editor-z-dock` | `900` | The footer bar — below every popup/menu |
 | `--editor-z-popup` | `1000` | Caret popups (`/`, `@`), colour picker, variables panel, bubble toolbar |
 | `--editor-z-menu` | `1100` | Right-click context menu |
 | `--editor-shadow-sm` | `0 1px 3px …` | Insert-dock shadow |
@@ -109,8 +111,8 @@ protecting) is styled under `.document-editor` — custom shells that skip
 `DocumentEditor` should keep that class on their wrapper to retain
 shell-scoped chrome. Feature CSS should follow the same convention.
 
-- **Shell:** `.document-editor`, `.document-editor__rail` (the right gutter aside, also tagged `--right`), `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
-- **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-dock`, `.insert-dock__btn` (the fixed bottom dock; shape via `--editor-dock-height`/`--editor-dock-gap`)
+- **Shell:** `.document-editor`, `.document-editor__panel--left` / `--right` (the consumer gutter asides), `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
+- **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.document-editor__header` (the fixed header bar), `.document-editor__footer` (the fixed footer bar; shape via `--editor-dock-height`/`--editor-dock-gap`), `.insert-dock`, `.insert-dock__btn` (the actions row inside it)
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`

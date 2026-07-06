@@ -31,15 +31,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app__bar">
-        <span className="app__title">Untitled document</span>
-        <div className="app__controls">
-          <span className="app__hint">
-            @ variables: {mergeVariables.length ? `${mergeVariables.length} loaded` : 'loading…'}
-          </span>
-        </div>
-      </header>
-
       <main className="app__canvas">
         {/* Document variables come from here (consumer), via context — shared by
             merge fields and conditional blocks. */}
@@ -48,6 +39,16 @@ export default function App() {
           <DocumentEditor
             features={fullFeatures}
             zoom={zoom}
+            // The editor's own HEADER bar (fixed height, SDK shell) — the app
+            // only brings its content.
+            renderHeader={() => (
+              <>
+                <span className="app__title">Untitled document</span>
+                <span className="app__hint">
+                  @ variables: {mergeVariables.length ? `${mergeVariables.length} loaded` : 'loading…'}
+                </span>
+              </>
+            )}
             // `onChange` is debounced (~250ms after edits stop) — i.e. the exact
             // moment an autosave would fire. Here we just log the generated JSON.
             onChange={(doc) => {
@@ -78,16 +79,15 @@ export default function App() {
             // ships its OWN comments UI (CommentCards, built on the SDK's
             // useDocumentComments hook) — swap back to the SDK's CommentsPanel
             // any time, same data, same click-to-scroll.
-            renderRightBar={(ctx) => (
+            renderRightPanel={(ctx) => (
               <div className="right-rail">
                 <CommentCards editor={ctx.editor} />
               </div>
             )}
-            // The footer dock is APP-composed (Level 4): zoom on the left, the
-            // SDK's insert items centered (headless InsertToolbar) and the Send
-            // action on the right. Replacing the SDK dock means the app owns
-            // its bottom clearance too (see .app__canvas).
-            renderInsertBar={(ctx) => (
+            // FOOTER content (the fixed shell is the SDK's): zoom on the
+            // left, the insert actions centered (headless InsertToolbar) and
+            // the Send action on the right.
+            renderFooter={(ctx) => (
               <div className="app-dock">
                 <ZoomControls
                   zoom={zoom}

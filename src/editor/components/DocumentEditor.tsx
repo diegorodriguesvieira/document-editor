@@ -24,16 +24,26 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
    *  top bar: the default is {@link BubbleToolbar} — a floating formatting
    *  bar over the text selection. */
   renderToolbar?: (ctx: DocumentEditorRenderContext) => ReactNode
-  /** Replace the bottom insert dock. Defaults to {@link InsertToolbar} — a
-   *  fixed bar over the page footer, shown automatically whenever an opted-in
-   *  feature contributes inserts. Replacing it means owning its FOOTPRINT
-   *  too: the SDK reserves bottom clearance under the page only for its own
-   *  `.insert-dock`. */
-  renderInsertBar?: (ctx: DocumentEditorRenderContext) => ReactNode
-  /** The right rail is CONSUMER-owned: render anything here (zoom controls,
-   *  a comments panel via `<CommentsPanel editor={ctx.editor}/>`, your own
-   *  UI built on hooks like `useDocumentComments`). Omit for no rail. */
-  renderRightBar?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Content for the editor HEADER — a fixed-height sticky bar the SDK ships
+   *  by default (fill it with your title/actions; the shell's height and look
+   *  come from the skin: `--editor-header-height`). Return `null` to hide the
+   *  header entirely. Omit for the default (an empty bar). */
+  renderHeader?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Content for the editor FOOTER — the fixed rounded bar over the page
+   *  bottom. Defaults to the insert ACTIONS ({@link InsertToolbar}); pass your
+   *  own composition to keep the shell and swap the content. Return `null` to
+   *  hide the footer entirely (e.g. read-only mode) — the page's bottom
+   *  clearance goes with it. */
+  renderFooter?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** CONSUMER-owned side panel in the LEFT gutter: render anything —
+   *  including the insert actions themselves (`<InsertToolbar {...ctx}
+   *  className="…"/>` is headless; pair it with `renderFooter={() => null}`
+   *  to drop the footer). Omit for no panel. */
+  renderLeftPanel?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** CONSUMER-owned side panel in the RIGHT gutter (zoom controls, a comments
+   *  panel via `<CommentsPanel editor={ctx.editor}/>`, your own UI built on
+   *  hooks like `useDocumentComments`). Omit for no panel. */
+  renderRightPanel?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Shown centered on the SCREEN while the document is empty; disappears as
    *  soon as there is content. The overlay never steals clicks from the editor
    *  (`pointer-events: none`; its children are clickable again). It spans the
@@ -60,14 +70,17 @@ function EmptyStateOverlay({
 }
 
 /**
- * Drop-in editor: resolves the opt-in features, renders the toolbar, optional
- * insert dock, the right rail and the editable surface. Bars are swappable; the app never
- * touches `@tiptap/*` itself.
+ * Drop-in editor: resolves the opt-in features and renders the chrome —
+ * header and footer bars (both default-on, both hideable), the bubble
+ * toolbar, consumer side panels — around the editable surface. Every surface
+ * is swappable; the app never touches `@tiptap/*` itself.
  */
 export function DocumentEditor({
   renderToolbar,
-  renderInsertBar,
-  renderRightBar,
+  renderHeader,
+  renderFooter,
+  renderLeftPanel,
+  renderRightPanel,
   renderEmptyState,
   zoom = 1,
   ...options
@@ -81,24 +94,35 @@ export function DocumentEditor({
       : <BubbleToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
     : null
 
-  const insertBar = ctx
-    ? renderInsertBar
-      ? renderInsertBar(ctx)
+  // Header/footer semantics: the SHELLS are the SDK's (fixed heights, skin);
+  // the render props fill them. Omitted → defaults (empty header, the insert
+  // actions in the footer); returning null hides the bar entirely.
+  const header = ctx && renderHeader ? renderHeader(ctx) : null
+  const showHeader = ctx !== null && (!renderHeader || header !== null)
+
+  const footer = ctx
+    ? renderFooter
+      ? renderFooter(ctx)
       : resolved.inserts.length > 0
         ? <InsertToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
         : null
     : null
 
-  const rightBar = ctx && renderRightBar ? renderRightBar(ctx) : null
+  const leftPanel = ctx && renderLeftPanel ? renderLeftPanel(ctx) : null
+  const rightPanel = ctx && renderRightPanel ? renderRightPanel(ctx) : null
 
   return (
     <div className="document-editor">
       {/* The skin travels with the component now (Emotion Global) — there is
           no editor.css to import. Duplicate mounts are harmless. */}
       <EditorSkin />
-      {/* Fixed over the page footer (out of flow) — the document scrolls
+      {showHeader ? <header className="document-editor__header">{header}</header> : null}
+      {/* Fixed over the page bottom (out of flow) — the document scrolls
           behind it and the shell reserves clearance below the page. */}
-      {insertBar}
+      {footer != null ? <div className="document-editor__footer">{footer}</div> : null}
+      {leftPanel ? (
+        <aside className="document-editor__panel document-editor__panel--left">{leftPanel}</aside>
+      ) : null}
       <div className="document-editor__column">
         {toolbar}
         {/* The page scrolls inside its column when zoomed — the rails stay put. */}
@@ -116,8 +140,8 @@ export function DocumentEditor({
           </div>
         </div>
       </div>
-      {rightBar ? (
-        <aside className="document-editor__rail document-editor__rail--right">{rightBar}</aside>
+      {rightPanel ? (
+        <aside className="document-editor__panel document-editor__panel--right">{rightPanel}</aside>
       ) : null}
       {ctx && renderEmptyState ? <EmptyStateOverlay ctx={ctx} render={renderEmptyState} /> : null}
       {ctx && resolved.contextMenu.length > 0 ? (
