@@ -83,7 +83,7 @@ export function useToolbar(
   return useToolbarButtons(editor, api, resolved.toolbar)
 }
 
-/** Headless state for the left insert rail (the `resolved.inserts` channel). */
+/** Headless state for the insert dock (the `resolved.inserts` channel). */
 export function useInsertBar(
   editor: Editor | null,
   api: EditorApi,

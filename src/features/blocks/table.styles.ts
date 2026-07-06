@@ -1,8 +1,7 @@
 import { css } from '@emotion/react'
 
 /* TableFeature — table, cells, column resizing + cell selection. Aligned with
-   prosemirror-tables' own style/tables.css, scoped to our surface.
-   Migrated from table.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+   prosemirror-tables' own style/tables.css, scoped to our surface. */
 export const tableStyles = css`
   .document-editor__surface table {
     border-collapse: collapse;

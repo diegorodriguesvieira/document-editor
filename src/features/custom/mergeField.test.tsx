@@ -322,6 +322,16 @@ describe('mergeField', () => {
     // Anchored above the [role="toolbar"] container, not stranded at the
     // bare-button fallback.
     expect(dialog.style.bottom).toBe(`${window.innerHeight - 700 + 12}px`)
+
+    // Unlike the SDK's fixed dock, a consumer bar can sit in normal flow —
+    // scrolling moves its rect and the panel must follow (capture-phase
+    // listener, so inner scrollers count too).
+    bar.getBoundingClientRect = () =>
+      ({ top: 620, bottom: 680, left: 400, right: 900, width: 500, height: 60, x: 400, y: 620, toJSON: () => ({}) }) as DOMRect
+    fireEvent.scroll(window)
+    await waitFor(() =>
+      expect(dialog.style.bottom).toBe(`${window.innerHeight - 620 + 12}px`),
+    )
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
@@ -433,6 +443,18 @@ describe('drop → caret to the right of the chip', () => {
 
     expect(drop(parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
     expect(created.editor.state).toBe(before)
+  })
+
+  it('falls through to PM default at a BLOCK-level gap — the chip+space math only holds in inline content', async () => {
+    const { created, view, parse, drop } = await dropRig('Hello')
+    // pos 0 = the gap before the first paragraph: dropPoint resolves to a
+    // depth-0 position where tr.insert would wrap the chip in a NEW paragraph,
+    // landing it at insert+1 and inverting the chip/space order.
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 0, inside: -1 })
+    const before = created.editor.state
+
+    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])), false)).toBeFalsy()
+    expect(created.editor.state).toBe(before) // PM's default drop takes over
   })
 
   it('bails when the drop coordinates do not resolve to a document position', async () => {

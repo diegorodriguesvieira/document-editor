@@ -22,7 +22,7 @@ function press(view: { dom: HTMLElement }, key: string, shift = true) {
   )
 }
 
-describe('insert shortcuts (the left-rail features)', () => {
+describe('insert shortcuts (the insert-dock features)', () => {
   it('declares the product shortcut map, conflict-free', () => {
     const resolved = resolveFeatures([
       TableFeature,

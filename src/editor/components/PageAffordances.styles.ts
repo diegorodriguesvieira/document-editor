@@ -1,5 +1,4 @@
-/* Header/footer hover affordance — "Add header +".
-   Migrated from PageAffordances.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* Header/footer hover affordance — "Add header +". */
 import { css } from '@emotion/react'
 
 export const pageAffordancesStyles = css`

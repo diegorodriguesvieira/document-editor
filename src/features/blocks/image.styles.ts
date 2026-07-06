@@ -1,7 +1,6 @@
 import { css } from '@emotion/react'
 
-/* ImageFeature — images inside the page + the 8 resize handles.
-   Migrated from image.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* ImageFeature — images inside the page + the 8 resize handles. */
 export const imageStyles = css`
   .document-editor__surface img {
     max-width: 100%;

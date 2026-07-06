@@ -1,14 +1,8 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import type { Editor } from '../editor'
+import { editorFromDOM as editor } from '../test/editorHarness'
 import App from './App'
-
-/** The app's editor instance (ProseMirror exposes it on its root element). */
-function editor(): Editor {
-  const pm = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
-  return pm.editor!
-}
 
 /** Select real text so the bubble (the only toolbar) has a reason to show. */
 async function selectSomeText() {
@@ -103,11 +97,15 @@ describe('<App /> toolbar', () => {
 
     const zoomRail = await screen.findByRole('toolbar', { name: 'Zoom' })
     expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
+    // The number must actually reach the page scaler, not just the readout.
+    const scale = () => (document.querySelector('.document-editor__scale') as HTMLElement).style.zoom
 
     await user.click(within(zoomRail).getByRole('button', { name: 'Zoom in' }))
     expect(within(zoomRail).getByText('110%')).toBeInTheDocument()
+    expect(scale()).toBe('1.1')
 
     await user.click(within(zoomRail).getByRole('button', { name: 'Zoom out' }))
     expect(within(zoomRail).getByText('100%')).toBeInTheDocument()
+    expect(scale()).toBe('1')
   })
 })

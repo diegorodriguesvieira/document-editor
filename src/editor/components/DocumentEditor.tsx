@@ -61,7 +61,7 @@ function EmptyStateOverlay({
 
 /**
  * Drop-in editor: resolves the opt-in features, renders the toolbar, optional
- * left/right rails and the editable surface. Bars are swappable; the app never
+ * insert dock, the right rail and the editable surface. Bars are swappable; the app never
  * touches `@tiptap/*` itself.
  */
 export function DocumentEditor({

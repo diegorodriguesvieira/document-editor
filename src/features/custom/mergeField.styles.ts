@@ -1,7 +1,5 @@
-/* MergeFieldFeature — pure-DOM chip + the variables side panel (portals to
-   <body>, anchored to the right of the insert rail, top-aligned with it).
-   Migrated from mergeField.css into the Emotion Global skin (aggregated by
-   src/editor/skin.tsx). */
+/* MergeFieldFeature — pure-DOM chip + the variables panel (portals to <body>,
+   bottom-anchored above the insert dock, aligned with the @ button). */
 import { css, keyframes } from '@emotion/react'
 
 const editorChipLand = keyframes`
@@ -44,6 +42,7 @@ export const mergeFieldStyles = css`
     box-shadow: var(--editor-shadow-pop);
     padding: 14px;
     z-index: var(--editor-z-popup);
+    transition: opacity 0.15s ease; /* the drag step-aside fade below */
   }
 
   .document-editor-popup .mf-panel__search {
@@ -143,11 +142,8 @@ export const mergeFieldStyles = css`
 
   /* While a chip drag is in flight the panel steps aside: see-through, and
      click-through (pointer-events: none) so the paper underneath stays a
-     valid drop target — native drag hit-testing skips the panel entirely. */
-  .document-editor-popup.mf-panel {
-    transition: opacity 0.15s ease;
-  }
-
+     valid drop target — native drag hit-testing skips the panel entirely.
+     (The panel's opacity transition lives in its main block above.) */
   .document-editor-popup.mf-panel--drag-through {
     opacity: 0.25;
     pointer-events: none;

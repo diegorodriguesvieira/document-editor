@@ -1,9 +1,6 @@
 import { css, keyframes } from '@emotion/react'
 
-/* Editor shell + the flat page surface.
-   Migrated from DocumentEditor.css into the Emotion Global skin (aggregated by
-   src/editor/skin.tsx). The Emotion skin is unlayered; token overrides still
-   work, specificity is standard. */
+/* Editor shell + the flat page surface. */
 
 const editorGapcursorBlink = keyframes`
   to {
@@ -111,11 +108,11 @@ export const documentEditorStyles = css`
   }
 
   /* Gap cursor: a blinking caret in the gaps around isolating/atom blocks (a
-     nested conditional, a table…) so you can type before/after them.
-     DELIBERATELY OUTSIDE @layer editor: TipTap injects its own gap-cursor CSS at
-     runtime as an UNLAYERED <style>, and unlayered rules beat any layer — so
-     these overrides must be unlayered too, or the injected 'top: -2px' etc. win.
-     They compete with the ENGINE's injected styles, not with consumer CSS. */
+     nested conditional, a table…) so you can type before/after them. TipTap
+     injects its own gap-cursor CSS at runtime in a late <style> tag — these
+     selectors carry HIGHER SPECIFICITY (the .document-editor__surface prefix)
+     so ours win regardless of injection order. They compete with the ENGINE's
+     injected styles, not with consumer CSS. */
   .document-editor__surface .ProseMirror-gapcursor {
     display: none;
     pointer-events: none;

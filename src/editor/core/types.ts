@@ -105,8 +105,8 @@ export interface FeatureDefinition {
   keymap?: Record<string, string>
   toolbar?: ToolbarItem[]
   /**
-   * Contributions to the left insert rail (same shape as toolbar items). The
-   * `/` slash menu mirrors the runnable ones (those with a `commandId`).
+   * Contributions to the bottom insert dock (same shape as toolbar items).
+   * The `/` slash menu mirrors the runnable ones (those with a `commandId`).
    */
   insert?: ToolbarItem[]
   /** Right-click menu shown when its `when` predicate matches the click. */

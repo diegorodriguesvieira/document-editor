@@ -1,8 +1,13 @@
 import { css } from '@emotion/react'
 
-/* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>.
-   Migrated from SlashMenu.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>. */
 export const slashMenuStyles = css`
+  /* The caret-popup wrapper createSuggestionPopup mounts on <body>: it must
+     stack above the fixed insert dock (z 900) when the caret sits near it. */
+  .suggestion-popup {
+    z-index: var(--editor-z-popup);
+  }
+
   .document-editor-popup .slash-menu {
     display: flex;
     flex-direction: column;

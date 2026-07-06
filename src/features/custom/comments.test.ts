@@ -19,7 +19,7 @@ describe('comments feature', () => {
     // …and the thread (the "what") lands in the mark storage for the panel.
     const threads = getCommentThreads(created.editor)
     expect(threads?.size).toBe(1)
-    expect([...threads!.values()][0]).toMatchObject({ text: 'fix this', quote: 'hello' })
+    expect([...threads!.values()][0]).toMatchObject({ text: 'fix this' })
   })
 
   it('does nothing without a selection', () => {

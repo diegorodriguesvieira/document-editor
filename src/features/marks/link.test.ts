@@ -42,14 +42,24 @@ describe('link commands', () => {
     expect(html).not.toContain('https://old.example')
   })
 
-  it('link.set with an EMPTY prompt clears the link instead of linking to ""', () => {
+  it('link.set: CANCELLING the prompt preserves the existing link (never an implicit unset)', () => {
     const created = linked()
-    const prompt = stubPrompt(null) // user cancelled the dialog
+    const prompt = stubPrompt(null) // Escape on the dialog
+    created.editor.commands.setTextSelection({ from: 1, to: 6 })
+
+    expect(created.api.exec('link.set')).toBe(false) // aborted
+
+    expect(prompt).toHaveBeenCalledTimes(1)
+    expect(created.api.getHTML()).toContain('href="https://old.example"') // intact
+  })
+
+  it('link.set with a deliberately EMPTIED prompt clears the link instead of linking to ""', () => {
+    const created = linked()
+    stubPrompt('') // user erased the URL and hit OK
     created.editor.commands.setTextSelection({ from: 1, to: 6 })
 
     expect(created.api.exec('link.set')).toBe(true) // ran as an unset
 
-    expect(prompt).toHaveBeenCalledTimes(1)
     expect(created.api.getHTML()).not.toContain('<a ')
   })
 
@@ -58,6 +68,19 @@ describe('link commands', () => {
     created.editor.commands.setTextSelection({ from: 1, to: 6 })
     expect(created.api.exec('link.unset')).toBe(true)
     expect(created.api.getHTML()).not.toContain('<a ')
+  })
+
+  it('link.insert enforces the SAME href validation as link.set — script URLs never persist', () => {
+    const created = renderEditor([LinkFeature], { content: docWith('base') })
+    const before = created.api.getHTML()
+
+    // link.set already rejects these via the extension's isAllowedUri; the
+    // raw-JSON insert path must not be a bypass into the document JSON.
+    expect(created.api.exec('link.insert', { text: 'x', href: 'javascript:alert(1)' })).toBe(false)
+    expect(created.api.exec('link.insert', { text: 'x', href: 'vbscript:msgbox' })).toBe(false)
+
+    expect(created.api.getHTML()).toBe(before)
+    expect(JSON.stringify(created.api.getJSON())).not.toContain('javascript:')
   })
 
   it('link.insert prompts for text AND url — cancelling either aborts cleanly', () => {

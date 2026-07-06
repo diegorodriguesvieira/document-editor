@@ -21,8 +21,11 @@ const MIN_WIDTH = 60
 const MIN_HEIGHT = 40
 
 function parseDimension(raw: string | null): number | null {
-  const value = raw ? Number.parseInt(String(raw), 10) : NaN
-  return Number.isFinite(value) && value > 0 ? value : null
+  // Pixels only (bare number or "300px"). parseInt would happily read "80%"
+  // or "12em" as 80/12 PIXELS — silently shrinking pasted images.
+  const match = raw ? /^\s*(\d+(?:\.\d+)?)(?:px)?\s*$/.exec(String(raw)) : null
+  const value = match ? Number.parseFloat(match[1]) : NaN
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : null
 }
 
 /**
@@ -80,8 +83,12 @@ const ResizableImage = Image.extend({
 
       const sync = (n: typeof node) => {
         if (img.getAttribute('src') !== n.attrs.src) img.setAttribute('src', n.attrs.src as string)
+        // Clear removed attrs too — sync runs on every update and must not
+        // leave the previous node's alt/title behind.
         if (n.attrs.alt) img.alt = n.attrs.alt as string
+        else img.removeAttribute('alt')
         if (n.attrs.title) img.title = n.attrs.title as string
+        else img.removeAttribute('title')
         img.style.width = n.attrs.width ? `${n.attrs.width}px` : ''
         img.style.height = n.attrs.height ? `${n.attrs.height}px` : ''
       }
@@ -152,15 +159,19 @@ const ResizableImage = Image.extend({
         handle.addEventListener('mousedown', (event) => {
           event.preventDefault()
           event.stopPropagation()
+          const startW = img.offsetWidth || (current.attrs.width as number) || MIN_WIDTH
+          const startH = img.offsetHeight || (current.attrs.height as number) || MIN_HEIGHT
           drag = {
             startX: event.clientX,
             startY: event.clientY,
-            startW: img.offsetWidth || (current.attrs.width as number) || MIN_WIDTH,
-            startH: img.offsetHeight || (current.attrs.height as number) || MIN_HEIGHT,
+            startW,
+            startH,
             dx,
             dy,
-            width: img.offsetWidth,
-            height: img.offsetHeight,
+            // Seed with the same fallbacks: a not-yet-loaded image has zero
+            // offsets, and an edge drag writes the untouched axis as-is.
+            width: startW,
+            height: startH,
             moved: false,
           }
           document.addEventListener('mousemove', onMove)

@@ -61,4 +61,72 @@ describe('useDocumentEditor', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(onChange.mock.calls[0][0].doc)).toContain('last words')
   })
+
+  it('recreation (feature-set change): onReady never fires with a dead api, and fires with the new one', async () => {
+    const ready = vi.fn()
+    const { result, rerender } = renderHook((props) => useDocumentEditor(props), {
+      initialProps: { features: [BoldFeature], onReady: ready },
+    })
+    await waitFor(() => expect(ready).toHaveBeenCalledTimes(1))
+    const firstEditor = result.current.editor
+
+    // Change the feature SET → the editor is recreated. The transient render
+    // pairs the new `resolved` with the soon-destroyed old editor — onReady
+    // must skip that pass (its command methods would throw) and fire once the
+    // live editor exists.
+    rerender({ features: [BoldFeature, ItalicFeature], onReady: ready })
+    await waitFor(() => expect(result.current.editor).not.toBe(firstEditor))
+    await waitFor(() => expect(ready).toHaveBeenCalledTimes(2))
+
+    // Every api the consumer ever saw was alive at call time — loading a doc
+    // from onReady (the documented pattern) must never hit a dead editor.
+    const lastApi = ready.mock.calls.at(-1)![0]
+    expect(() => lastApi.setJSON({ doc: { type: 'doc', content: [{ type: 'paragraph' }] } }))
+      .not.toThrow()
+    expect(result.current.editor!.isDestroyed).toBe(false)
+  })
+
+  it('recreation flushes the pending onChange from the OLD editor (edits are not lost)', async () => {
+    const onChange = vi.fn()
+    const { result, rerender } = renderHook((props) => useDocumentEditor(props), {
+      initialProps: { features: [BoldFeature], onChange },
+    })
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+
+    act(() => {
+      result.current.editor!.commands.insertContent('quase perdido')
+    })
+    expect(onChange).not.toHaveBeenCalled() // inside the debounce window
+
+    // Feature-set change destroys the old editor BEFORE our cleanup runs —
+    // the flush must still deliver the snapshot taken at schedule time.
+    rerender({ features: [BoldFeature, ItalicFeature], onChange })
+    await waitFor(() =>
+      expect(onChange.mock.calls.some((call) => JSON.stringify(call[0].doc).includes('quase perdido'))).toBe(true),
+    )
+  })
+
+  it('honors the LATEST onContentError prop (not the one frozen at creation)', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const { result, rerender } = renderHook((props) => useDocumentEditor(props), {
+      initialProps: { features: [BoldFeature], onContentError: first },
+    })
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+    const editor = result.current.editor!
+
+    // Same editor instance, new handler prop. TipTap binds the handler ONCE
+    // at creation and never re-applies options (deps are non-empty), so the
+    // event must be ref-routed to reach the CURRENT prop — contentError also
+    // fires long after creation (e.g. from paste with content check on).
+    rerender({ features: [BoldFeature], onContentError: second })
+    const error = new Error('conteúdo inválido')
+    act(() => {
+      editor.emit('contentError', { editor, error, disableCollaboration: () => {} })
+    })
+
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledWith(error)
+  })
 })

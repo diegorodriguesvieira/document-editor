@@ -67,6 +67,44 @@ describe('<CommentsPanel />', () => {
     expect(created.editor.state.selection.to).toBe(12)
   })
 
+  it('OVERLAPPING comments each get their own entry (a text node carries several marks)', () => {
+    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    created.editor.commands.setTextSelection({ from: 1, to: 12 })
+    created.api.exec('comment.add', { text: 'sobre tudo' })
+    // excludes: '' allows overlap — the second comment shares text nodes with
+    // the first; reading only the FIRST mark per node used to drop it.
+    created.editor.commands.setTextSelection({ from: 1, to: 6 })
+    created.api.exec('comment.add', { text: 'sobre hello' })
+
+    render(<CommentsPanel editor={created.editor} />)
+    const panel = screen.getByRole('complementary', { name: 'Comments' })
+    expect(within(panel).getByText('sobre tudo')).toBeInTheDocument()
+    expect(within(panel).getByText('sobre hello')).toBeInTheDocument()
+  })
+
+  it('a DISCONTIGUOUS reuse of one id (copy/paste) stays two entries — no swallowed text between them', async () => {
+    const user = userEvent.setup()
+    const created = renderEditor([CommentsFeature])
+    created.editor.commands.insertContent(
+      '<p><span data-comment-id="c1">alvo</span> texto livre no meio <span data-comment-id="c1">alvo de novo</span></p>',
+    )
+
+    render(<CommentsPanel editor={created.editor} />)
+    const panel = screen.getByRole('complementary', { name: 'Comments' })
+    const entries = within(panel).getAllByRole('button')
+    expect(entries).toHaveLength(2)
+    // Neither quote swallows the uncommented middle…
+    expect(within(panel).getByText('“alvo”')).toBeInTheDocument()
+    expect(within(panel).getByText('“alvo de novo”')).toBeInTheDocument()
+    expect(within(panel).queryByText(/texto livre/)).toBeNull()
+    // …and clicking the first selects ONLY its own run.
+    await user.click(entries[0])
+    expect(created.editor.state.doc.textBetween(
+      created.editor.state.selection.from,
+      created.editor.state.selection.to,
+    )).toBe('alvo')
+  })
+
   it('an anchor without a stored thread (pasted from elsewhere) lists with its quote only', () => {
     const created = renderEditor([CommentsFeature])
     created.editor.commands.insertContent('<p><span data-comment-id="x1">alvo</span></p>')

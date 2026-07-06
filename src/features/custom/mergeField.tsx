@@ -5,7 +5,7 @@ import type { Node as PMNode, Slice } from '@tiptap/pm/model'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { dropPoint } from '@tiptap/pm/transform'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
-import { createMergeFieldSuggestion } from './mergeFieldSuggestion'
+import { createMergeFieldSuggestion, mergeFieldInsertContent } from './mergeFieldSuggestion'
 
 /**
  * Inline atomic node — the "chip". Pure-DOM node view (lighter than React for
@@ -70,7 +70,13 @@ const MergeField = Node.create({
             if (!chip) return false
             const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
             if (!coords) return false
-            const insert = dropPoint(view.state.doc, coords.pos, slice) ?? coords.pos
+            const insert = dropPoint(view.state.doc, coords.pos, slice)
+            // Only claim drops landing IN inline content. At a block-level gap
+            // dropPoint returns a depth-0 position where tr.insert would wrap
+            // the chip in a fresh paragraph — landing it at insert+1 and
+            // breaking the caret/space math below. PM's default drop handles
+            // that case correctly (it just leaves the chip node-selected).
+            if (insert == null || !view.state.doc.resolve(insert).parent.inlineContent) return false
             const tr = view.state.tr.insert(insert, chip.type.create(chip.attrs))
             // Trailing space + caret after it — same feel as click-insert
             // (typing isn't glued to the chip).
@@ -142,10 +148,10 @@ function groupVariables(variables: DocumentVariable[]): Array<[string, DocumentV
 }
 
 /**
- * Side panel anchored to the RIGHT of the insert rail (top-aligned with it).
- * Clicking outside closes it — unless PINNED (the P button), which turns it
- * into a persistent surface: move the caret around and keep inserting.
- * Escape and the x always close.
+ * Variables panel — opens ABOVE the insert dock, left-aligned with the `@`
+ * button that toggled it. Clicking outside closes it — unless PINNED (the P
+ * button), which turns it into a persistent surface: move the caret around
+ * and keep inserting. Escape and the x always close.
  */
 function MergeFieldPanel({
   anchor,
@@ -217,15 +223,23 @@ function MergeFieldPanel({
       }
       const dockRect = dock.getBoundingClientRect()
       const buttonRect = anchor.getBoundingClientRect()
-      setPosition({
-        bottom: window.innerHeight - dockRect.top + 12,
-        // Clamp so the panel (min(340px, 80vw) wide) never leaves the viewport.
-        left: Math.max(8, Math.min(buttonRect.left, window.innerWidth - 348)),
-      })
+      const bottom = window.innerHeight - dockRect.top + 12
+      // Clamp so the panel (min(340px, 80vw) wide) never leaves the viewport.
+      const left = Math.max(8, Math.min(buttonRect.left, window.innerWidth - 348))
+      // Equality-skip: the capture-phase scroll listener below fires for EVERY
+      // scroller on the page, and with the fixed dock nothing actually moves.
+      setPosition((prev) =>
+        prev && prev.bottom === bottom && prev.left === left ? prev : { bottom, left },
+      )
     }
     place()
+    // The SDK dock is fixed (scroll never moves it), but the documented
+    // [role="toolbar"] fallback can sit in normal flow — track scroll too
+    // (capture phase catches inner scrollers), plus resize for both.
+    window.addEventListener('scroll', place, true)
     window.addEventListener('resize', place)
     return () => {
+      window.removeEventListener('scroll', place, true)
       window.removeEventListener('resize', place)
     }
   }, [anchor])
@@ -404,11 +418,7 @@ export const MergeFieldFeature = defineFeature({
       return editor
         .chain()
         .focus()
-        .insertContent([
-          { type: 'mergeField', attrs: { id: field.id, label: field.label ?? field.id } },
-          // Always a trailing space so the cursor isn't glued to the chip.
-          { type: 'text', text: ' ' },
-        ])
+        .insertContent(mergeFieldInsertContent({ id: field.id, label: field.label }))
         .run()
     },
   },

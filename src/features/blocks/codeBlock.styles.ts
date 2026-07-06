@@ -1,5 +1,5 @@
 /* CodeBlockFeature — <pre> inside the page. */
-/* Migrated from codeBlock.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* */
 import { css } from '@emotion/react'
 
 export const codeBlockStyles = css`

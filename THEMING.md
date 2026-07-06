@@ -72,11 +72,14 @@ so importing the file changes nothing until you override.
 | `--editor-page-width` | `800px` | Content column width (the text measure), centered in the viewport |
 | `--editor-page-min-height` | `calc(100vh - 160px)` | FALLBACK page height. Preferred: set it to `auto` and give `.document-editor` a sized parent (flex column, editor as `flex: 1`) — the SDK's internal chain carries the height to the page, so the footer lands at the bottom for ANY app-header height, no math |
 | `--editor-page-padding` | `32px 0 96px` | Vertical breathing room around the content (no paper card — the canvas is the page) |
-| `--editor-sticky-offset` | `0px` | Top offset of the sticky toolbar/insert rail — set it to your app header's height |
-| `--editor-rail-gutter` | `32px` | Distance between the side rails and the browser edge |
-| `--editor-z-popup` | `1000` | Caret popups (`/`, `@`), colour picker, merge-field modal |
+| `--editor-sticky-offset` | `0px` | Top offset of sticky surfaces (an opt-in static `EditorToolbar`, the right rail's bars) — set it to your app header's height |
+| `--editor-rail-gutter` | `32px` | Distance between the right rail and the browser edge |
+| `--editor-dock-height` | `66px` | The fixed insert dock's height (the shell reserves matching clearance under the page) |
+| `--editor-dock-gap` | `8px` | The dock's inset from the viewport edges |
+| `--editor-z-dock` | `900` | The insert dock — below every popup/menu |
+| `--editor-z-popup` | `1000` | Caret popups (`/`, `@`), colour picker, variables panel, bubble toolbar |
 | `--editor-z-menu` | `1100` | Right-click context menu |
-| `--editor-shadow-sm` | `0 1px 3px …` | Insert-rail shadow |
+| `--editor-shadow-sm` | `0 1px 3px …` | Insert-dock shadow |
 | `--editor-shadow-pop` | `0 6px 24px …` | Context menu + colour picker shadow |
 | `--editor-callout-*` | amber set | Callout block |
 | `--editor-mergefield-*` | blue set | Merge-field chip + modal chips |
@@ -106,7 +109,7 @@ protecting) is styled under `.document-editor` — custom shells that skip
 `DocumentEditor` should keep that class on their wrapper to retain
 shell-scoped chrome. Feature CSS should follow the same convention.
 
-- **Shell:** `.document-editor`, `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
+- **Shell:** `.document-editor`, `.document-editor__rail` (the right gutter aside, also tagged `--right`), `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
 - **Toolbars:** `.editor-toolbar`, `.editor-toolbar__btn` (`[aria-pressed]`, `:disabled`), `.bubble-toolbar__inner`, `.insert-dock`, `.insert-dock__btn` (the fixed bottom dock; shape via `--editor-dock-height`/`--editor-dock-gap`)
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[data-active]`), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`)

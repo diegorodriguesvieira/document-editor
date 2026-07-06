@@ -44,7 +44,14 @@ function ColorControl({ editor, api }: FeatureRenderContext) {
 
   const toggle = () => {
     const rect = swatchRef.current?.getBoundingClientRect()
-    if (rect) setPos({ left: rect.left, top: rect.bottom + 6 })
+    // The swatch lives in the BUBBLE, which follows the selection anywhere —
+    // clamp so the ~190px grid never overflows the right edge of the viewport.
+    if (rect) {
+      setPos({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 198)),
+        top: rect.bottom + 6,
+      })
+    }
     setOpen((value) => !value)
   }
 

@@ -21,7 +21,7 @@ import type { ResolvedFeatures } from './registry'
  * handling (dragged text, images, variable chips from the panel) — drops work
  * without it, but land "blind".
  */
-export function kernelExtensions(resolved?: ResolvedFeatures): AnyExtension[] {
+function kernelExtensions(resolved?: ResolvedFeatures): AnyExtension[] {
   const bottomRegions = (resolved?.pageRegions ?? [])
     .filter((region) => region.position === 'bottom')
     .map((region) => region.nodeName)

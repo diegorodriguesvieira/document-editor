@@ -28,29 +28,42 @@ export function getCommentThreads(editor: Editor): Map<string, CommentThread> | 
  * text moves (and orphaned threads, whose marks were deleted, drop off the list).
  */
 function buildComments(editor: Editor): AnchoredComment[] {
-  const ranges = new Map<string, { from: number; to: number }>()
-  editor.state.doc.descendants((node, pos) => {
+  // Per id, a LIST of segments: a run split by other marks (bold inside a
+  // comment) merges back into one segment, but a genuinely discontiguous
+  // reuse of the id (copy/paste of commented text) stays a separate entry —
+  // min/max there would swallow the uncommented text in between.
+  const segments = new Map<string, Array<{ from: number; to: number }>>()
+  const doc = editor.state.doc
+  doc.descendants((node, pos) => {
     if (!node.isText) return
-    const mark = node.marks.find((m) => m.type.name === 'comment')
-    if (!mark) return
-    const id = mark.attrs.commentId as string
-    const range = ranges.get(id)
-    if (range) {
-      range.from = Math.min(range.from, pos)
-      range.to = Math.max(range.to, pos + node.nodeSize)
-    } else {
-      ranges.set(id, { from: pos, to: pos + node.nodeSize })
+    // `excludes: ''` allows overlapping comments — a text node can carry
+    // SEVERAL comment marks; reading only the first would drop the others.
+    for (const mark of node.marks) {
+      if (mark.type.name !== 'comment') continue
+      const id = mark.attrs.commentId as string
+      const list = segments.get(id) ?? []
+      const last = list[list.length - 1]
+      // Contiguous = no TEXT in the gap (block boundaries produce empty
+      // textBetween, so a comment spanning paragraphs stays one entry).
+      if (last && (pos <= last.to || doc.textBetween(last.to, pos) === '')) {
+        last.to = Math.max(last.to, pos + node.nodeSize)
+      } else {
+        list.push({ from: pos, to: pos + node.nodeSize })
+        segments.set(id, list)
+      }
     }
   })
 
   const threads = getCommentThreads(editor)
-  return [...ranges.entries()].map(([id, range]) => ({
-    id,
-    from: range.from,
-    to: range.to,
-    quote: editor.state.doc.textBetween(range.from, range.to, ' '),
-    text: threads?.get(id)?.text ?? '',
-  }))
+  return [...segments.entries()].flatMap(([id, list]) =>
+    list.map((range) => ({
+      id,
+      from: range.from,
+      to: range.to,
+      quote: doc.textBetween(range.from, range.to, ' '),
+      text: threads?.get(id)?.text ?? '',
+    })),
+  )
 }
 
 /** The comments currently anchored in the document, reactive to edits. */
@@ -80,7 +93,8 @@ export function CommentsPanel({ editor }: { editor: Editor | null }) {
       <div className="comments-panel__title">Comments ({comments.length})</div>
       <ul className="comments-panel__list">
         {comments.map((comment) => (
-          <li key={comment.id}>
+          // Discontiguous reuses of one id are separate entries — key by range.
+          <li key={`${comment.id}:${comment.from}`}>
             <button
               type="button"
               className="comments-panel__item"

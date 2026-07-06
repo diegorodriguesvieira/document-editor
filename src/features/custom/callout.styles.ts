@@ -1,7 +1,7 @@
 import { css } from '@emotion/react'
 
 /* CalloutFeature — pure-DOM node view. */
-/* Migrated from callout.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* */
 export const calloutStyles = css`
   .document-editor__surface .callout {
     display: flex;

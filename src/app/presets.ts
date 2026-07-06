@@ -46,6 +46,6 @@ export const fullFeatures: FeatureDefinition[] = [
   HeaderFooterFeature,
   CommentsFeature,
   // APP-level feature (defined in ./appExtras, not in the SDK): new items
-  // on the left rail and in the bubble — zero SDK edits.
+  // on the footer dock and in the bubble — zero SDK edits.
   AppExtrasFeature,
 ]

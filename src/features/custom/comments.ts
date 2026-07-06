@@ -5,7 +5,6 @@ import { promptOr } from '../promptFallback'
 export interface CommentThread {
   id: string
   text: string
-  quote: string
 }
 
 /** A unique-ish comment id (browser-side; fine for this demo). */
@@ -63,16 +62,17 @@ export const CommentsFeature = defineFeature({
     // prompt (used in tests). The thread is stored (keyed by id) and shows up
     // in the comments panel.
     'comment.add': (editor, payload) => {
-      const { from, to, empty } = editor.state.selection
+      const { empty } = editor.state.selection
       if (empty) return false
       const fields = (payload ?? {}) as { text?: string }
       const text = promptOr(fields.text, 'Comment:')
       if (!text) return false
       const id = newCommentId()
-      const quote = editor.state.doc.textBetween(from, to, ' ')
       const applied = editor.chain().focus().setMark('comment', { commentId: id }).run()
       if (applied) {
-        getCommentThreads(editor)?.set(id, { id, text, quote })
+        // The thread stores only the WHAT (the body); the quote is derived
+        // live from the anchored range, so it survives edits to the text.
+        getCommentThreads(editor)?.set(id, { id, text })
       }
       return applied
     },

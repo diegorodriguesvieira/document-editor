@@ -128,9 +128,12 @@ function isConditionShape(value: unknown, depth = 0, state = { leaves: 0 }): val
   return (
     Array.isArray(node.params) &&
     node.params.every(isOperandShape) &&
-    // With an operator set, params must match its arity — a wrong-arity leaf
-    // is uneditable by the form (writes past params.length are dropped).
-    (node.op == null || node.params.length === CONDITION_SIGNATURES[node.op as ConditionId])
+    // Params must match the arity — a wrong-length leaf is uneditable by the
+    // form (writes past params.length are dropped, so an empty-params draft
+    // would silently swallow the variable pick). Drafts hold 1–2 slots.
+    (node.op == null
+      ? node.params.length >= 1 && node.params.length <= 2
+      : node.params.length === CONDITION_SIGNATURES[node.op as ConditionId])
   )
 }
 

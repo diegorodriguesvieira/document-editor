@@ -1,5 +1,5 @@
 import { onTestFinished } from 'vitest'
-import type { JSONContent } from '@tiptap/core'
+import type { Editor, JSONContent } from '@tiptap/core'
 import {
   createEditor,
   type CreateEditorOptions,
@@ -33,6 +33,18 @@ export function renderEditor(
   })
   created = createEditor({ features, element, ...options })
   return created
+}
+
+/**
+ * The live Editor a REACT-mounted `<DocumentEditor>` exposes on its
+ * ProseMirror root — the supported way for component tests to reach the
+ * engine (headless tests get it from {@link renderEditor} directly). Wrap the
+ * first call in `waitFor` if the editor mounts asynchronously.
+ */
+export function editorFromDOM(): Editor {
+  const el = document.querySelector('.ProseMirror') as (HTMLElement & { editor?: Editor }) | null
+  if (!el?.editor) throw new Error('editorFromDOM: no mounted .ProseMirror editor found')
+  return el.editor
 }
 
 /** A one-paragraph document — the most common test fixture. */

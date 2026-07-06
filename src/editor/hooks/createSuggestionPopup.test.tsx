@@ -1,7 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { describe, expect, it } from 'vitest'
-import type { Editor } from '@tiptap/core'
 import { DocumentEditor } from '../../editor'
 import {
   DocumentVariablesProvider,
@@ -9,7 +8,7 @@ import {
   MergeFieldFeature,
   TableFeature,
 } from '../../features'
-import { jsonHasNode } from '../../test/editorHarness'
+import { editorFromDOM, jsonHasNode } from '../../test/editorHarness'
 import { SlashMenu } from '../components/SlashMenu'
 import type { SuggestionPopupRef } from './createSuggestionPopup'
 
@@ -22,12 +21,8 @@ import type { SuggestionPopupRef } from './createSuggestionPopup'
  */
 async function mountEditor(ui: React.ReactElement) {
   render(ui)
-  const pm = await waitFor(() => {
-    const el = document.querySelector('.ProseMirror') as (HTMLElement & { editor?: Editor }) | null
-    expect(el?.editor).toBeTruthy()
-    return el!
-  })
-  const editor = pm.editor!
+  const editor = await waitFor(() => editorFromDOM())
+  const pm = editor.view.dom as HTMLElement
   // Every interaction re-renders React (the popup renders through the
   // EditorContent portals), so each runs inside act — and drains one frame,
   // because TipTap defers the DOM focus with requestAnimationFrame.
@@ -61,7 +56,7 @@ describe('createSuggestionPopup (the / menu, end to end)', () => {
     expect(el.className).toBe('document-editor-popup suggestion-popup')
     expect(el.style.position).toBe('fixed')
     expect(el.style.top).toBe('6px')
-    // It mirrors the left insert rail: the table insert shows up.
+    // It mirrors the insert dock: the table insert shows up.
     expect(await screen.findByRole('option', { name: /Table/ })).toBeInTheDocument()
   })
 

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
 import {
   DocumentVariablesProvider,
-  useDocumentVariable,
   useDocumentVariables,
   type DocumentVariable,
 } from './documentVariables'
@@ -18,23 +17,13 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 )
 
 describe('document variables (the consumer-owned context)', () => {
-  it('useDocumentVariable looks a variable up by id — unknown and null resolve to undefined', () => {
-    const known = renderHook(() => useDocumentVariable('client.name'), { wrapper })
-    expect(known.result.current).toEqual({ id: 'client.name', label: 'Client name' })
-
-    const unknown = renderHook(() => useDocumentVariable('nope'), { wrapper })
-    expect(unknown.result.current).toBeUndefined()
-
-    // Node attrs can carry null (a draft condition) — the hook absorbs it.
-    const empty = renderHook(() => useDocumentVariable(null), { wrapper })
-    expect(empty.result.current).toBeUndefined()
+  it('exposes exactly the provided list', () => {
+    const { result } = renderHook(() => useDocumentVariables(), { wrapper })
+    expect(result.current).toBe(VARS)
   })
 
   it('without a provider the context degrades to empty, never throws', () => {
-    const list = renderHook(() => useDocumentVariables())
-    expect(list.result.current).toEqual([])
-
-    const lookup = renderHook(() => useDocumentVariable('client.name'))
-    expect(lookup.result.current).toBeUndefined()
+    const { result } = renderHook(() => useDocumentVariables())
+    expect(result.current).toEqual([])
   })
 })

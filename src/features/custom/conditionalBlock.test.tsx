@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { DocumentEditor, type EditorApi } from '../../editor'
-import { docWith, jsonHasNode, renderEditor } from '../../test/editorHarness'
+import { docWith, editorFromDOM, jsonHasNode, renderEditor } from '../../test/editorHarness'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 import {
   ConditionalBlockFeature,
@@ -153,6 +153,25 @@ describe('conditional block', () => {
       .doc.content?.find((n) => n.type === 'conditionalBlock')
     expect(block).toBeDefined()
     expect(block?.attrs?.condition).toEqual(DRAFT)
+  })
+
+  it('degrades an op:null leaf with WRONG params length to a draft (empty params would swallow the variable pick)', () => {
+    const paste = (condition: string) => {
+      const created = renderEditor([ConditionalBlockFeature])
+      created.editor.commands.insertContent(
+        `<div data-conditional-block data-condition='${condition}'><p>x</p></div>`,
+      )
+      return created.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
+        ?.attrs?.condition
+    }
+    // The form writes via params.map — an empty array drops every write, so
+    // the shape guard must refuse drafts outside the 1–2 slot range.
+    expect(paste('{"all":[{"op":null,"params":[]}]}')).toEqual(DRAFT)
+    expect(paste(`{"all":[{"op":null,"params":${JSON.stringify(Array(50).fill(null))}}]}`)).toEqual(DRAFT)
+    // A normal two-hole draft still round-trips untouched.
+    expect(paste('{"all":[{"op":null,"params":[null,null]}]}')).toEqual({
+      all: [{ op: null, params: [null, null] }],
+    })
   })
 
   it('degrades prototype-chain and wrong-arity ops to a draft (never a fake operator)', () => {
@@ -478,9 +497,8 @@ describe('conditional block — the ＋ (add nested) button', () => {
     })
 
     // …and focus lands INSIDE the new nested block: typing fills its content.
-    const pmEl = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
     act(() => {
-      pmEl.editor?.commands.insertContent('X')
+      editorFromDOM().commands.insertContent('X')
     })
     const nested = api!.getJSON().doc.content?.[0]?.content?.[1]
     expect(nested?.content?.[0]?.content?.[0]?.text).toBe('X')

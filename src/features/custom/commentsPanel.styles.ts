@@ -1,6 +1,6 @@
 import { css } from '@emotion/react'
 
-/* Right-side comments panel. Migrated from commentsPanel.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* Right-side comments panel. */
 export const commentsPanelStyles = css`
   .comments-panel {
     width: 260px;

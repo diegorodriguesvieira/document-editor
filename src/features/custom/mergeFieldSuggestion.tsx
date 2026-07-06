@@ -57,6 +57,18 @@ export const MergeFieldMenu = forwardRef<
 })
 
 /**
+ * The chip + trailing-space payload BOTH insertion paths share (the `@`
+ * suggestion here and the `mergeField.insert` command) — one shape, so the
+ * "cursor isn't glued to the chip" rule can't drift between them.
+ */
+export function mergeFieldInsertContent(field: { id: string; label?: string }) {
+  return [
+    { type: 'mergeField', attrs: { id: field.id, label: field.label ?? field.id } },
+    { type: 'text', text: ' ' },
+  ]
+}
+
+/**
  * React-coupled `@` trigger: typing `@` opens {@link MergeFieldMenu}; picking a
  * variable replaces the `@query` with an inline merge-field chip (+ a trailing
  * space). Built from the shared {@link createSuggestionPopup} primitive.
@@ -70,16 +82,7 @@ export function createMergeFieldSuggestion(): Extension {
     // plugin's own item list is unused.
     items: () => [],
     command: ({ editor, range, props }) => {
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .insertContent([
-          { type: 'mergeField', attrs: { id: props.id, label: props.label } },
-          // Trailing space so the cursor isn't glued to the chip.
-          { type: 'text', text: ' ' },
-        ])
-        .run()
+      editor.chain().focus().deleteRange(range).insertContent(mergeFieldInsertContent(props)).run()
     },
   })
 }

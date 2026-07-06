@@ -14,7 +14,7 @@ import {
 import { Extension, type Editor } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { Fragment, type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state'
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state'
 import type { Mappable } from '@tiptap/pm/transform'
 
 /** The two region node names — single source for every rule in this file. */
@@ -264,6 +264,10 @@ function normalizedRegions(doc: PMNode): PMNode[] | null {
  */
 const HeaderFooterGuard = Extension.create({
   name: 'headerFooterGuard',
+  // Plugin precedence follows extension priority, not consumer feature order —
+  // the guard's handleDrop must run BEFORE any feature's own drop handler
+  // (e.g. the merge-field chip drop), or content lands in closed regions.
+  priority: 1000,
 
   addStorage() {
     // Which region is currently open for editing (set by double-click in the
@@ -312,6 +316,17 @@ const HeaderFooterGuard = Extension.create({
     return [
       new Plugin({
         key: new PluginKey('headerFooterGuard'),
+        props: {
+          // Drops write CONTENT, and the selection gate below only clamps the
+          // caret afterwards — the payload would stay inside a closed region.
+          // Regions are entered by double-click; an OPEN region accepts drops.
+          handleDrop: (view, event) => {
+            const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+            if (!coords) return false
+            const region = regionNameAt(view.state.doc.resolve(coords.pos))
+            return region !== null && region !== storage.editing
+          },
+        },
         // No gap cursor ABOVE the header / BELOW the footer: typing there would
         // put content the normalizer immediately reorders (a cursor that lies).
         // Google-Docs behavior: clicking/arrowing into those gaps does nothing.
@@ -385,14 +400,41 @@ const HeaderFooterGuard = Extension.create({
           const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
           if (!headerSize && !footerSize) return null
 
-          const touched = regionNameAt(selection.$from) ?? regionNameAt(selection.$to)
-          if (!touched || touched === storage.editing) return null
+          // An endpoint offends when it sits in a region that is not the open
+          // one — check BOTH endpoints: short-circuiting on the first (`??`)
+          // would let a selection anchored in the OPEN header reach into (and
+          // delete) the closed footer.
+          const offends = (region: string | null) => region !== null && region !== storage.editing
+          if (!offends(regionNameAt(selection.$from)) && !offends(regionNameAt(selection.$to))) {
+            return null
+          }
 
           const clamp = (pos: number) => Math.min(Math.max(pos, bodyFrom), bodyTo)
           const next = TextSelection.between(
             doc.resolve(clamp(selection.from)),
             doc.resolve(clamp(selection.to)),
           )
+          // The clamp can still land in a region: at a block boundary
+          // TextSelection.between may walk BACKWARD into the header (e.g. a
+          // template load whose mapped selection offends), and a body with no
+          // text position at all (only leaf blocks — a divider) INVERTS the
+          // clamp. Verify the result; prefer the body's first TEXT position
+          // (a template load must read like "caret at the top", not like a
+          // node-selected leading image), and only a truly text-less body
+          // falls back to selecting its first node / a gap cursor (valid
+          // there — the filter above only bans the doc's outer edges).
+          if (regionNameAt(next.$from) ?? regionNameAt(next.$to)) {
+            let fallback = Selection.findFrom(doc.resolve(headerSize), 1, true)
+            if (!fallback || regionNameAt(fallback.$from)) {
+              const child = doc.nodeAt(headerSize)
+              fallback =
+                child && NodeSelection.isSelectable(child)
+                  ? NodeSelection.create(doc, headerSize)
+                  : new GapCursor(doc.resolve(headerSize))
+            }
+            if (fallback.eq(selection)) return null
+            return newState.tr.setSelection(fallback)
+          }
           if (next.eq(selection)) return null
           return newState.tr.setSelection(next)
         },

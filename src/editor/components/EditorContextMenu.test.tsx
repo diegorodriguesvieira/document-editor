@@ -43,6 +43,20 @@ describe('<ContextMenuView />', () => {
     )
   })
 
+  it('activates on plain click without the mousedown collapsing anything (keyboard-compatible)', () => {
+    const onRun = vi.fn()
+    render(<ContextMenuView x={0} y={0} groups={GROUPS} onRun={onRun} onClose={() => {}} />)
+    const item = screen.getByRole('menuitem', { name: /Insert row above/ })
+
+    // mousedown alone must NOT run the command (it only preserves the
+    // selection); the CLICK — which Enter/Space also produce on a <button> —
+    // is the activation.
+    expect(fireEvent.mouseDown(item)).toBe(false) // preventDefault'ed
+    expect(onRun).not.toHaveBeenCalled()
+    fireEvent.click(item)
+    expect(onRun).toHaveBeenCalledWith('table.addRowBefore')
+  })
+
   it('closes on Escape and on outside click', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
@@ -100,7 +114,9 @@ describe('<EditorContextMenu /> (the controller wired to a real editor)', () => 
     // The caret moved to the clicked cell, so the action applies THERE.
     expect(created.editor.state.selection.from).toBe(target)
 
-    fireEvent.mouseDown(await screen.findByRole('menuitem', { name: /Insert row below/ }))
+    // Activation is on CLICK (what Enter/Space produce on a <button>) — the
+    // mousedown only guards the selection.
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Insert row below/ }))
 
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull()) // runs once, then closes
     const table = jsonFindNode(created.api.getJSON().doc, 'table')

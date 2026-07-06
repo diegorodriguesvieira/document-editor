@@ -1,5 +1,5 @@
 /* Right-click context menu (e.g. table actions). Portals to <body>. */
-/* Migrated from EditorContextMenu.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* */
 import { css } from '@emotion/react'
 
 export const editorContextMenuStyles = css`

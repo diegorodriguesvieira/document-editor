@@ -1,5 +1,5 @@
 /* QuoteFeature — blockquote inside the page. */
-/* Migrated from blockquote.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* */
 import { css } from '@emotion/react'
 
 export const blockquoteStyles = css`

@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/core'
 import { DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
-import { ImageFeature } from '../../features'
-import { docWith, renderEditor } from '../../test/editorHarness'
+import { DividerFeature, ImageFeature } from '../../features'
+import { docWith, editorFromDOM, renderEditor } from '../../test/editorHarness'
 import { closeRegion, HeaderFooterFeature } from './headerFooter'
 
 const newEditor = () => renderEditor([HeaderFooterFeature])
@@ -365,6 +365,134 @@ describe('header/footer guard — edge paths', () => {
   })
 })
 
+describe('header/footer guard — closed regions are sealed on EVERY path', () => {
+  const REGIONS_DOC = {
+    doc: {
+      type: 'doc',
+      content: [
+        { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
+        { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
+      ],
+    },
+  }
+
+  it('a selection anchored in the OPEN header cannot reach into the closed footer', async () => {
+    const { TextSelection } = await import('@tiptap/pm/state')
+    const created = newEditor()
+    created.api.setJSON(REGIONS_DOC)
+    gate(created.editor).editing = 'documentHeader' // header open, footer closed
+    const view = created.editor.view
+    const doc = view.state.doc
+    const footerFrom = doc.content.size - doc.lastChild!.nodeSize
+
+    // Shift-End style extension: anchor inside the open header, head inside
+    // the closed footer — the second endpoint used to go unchecked, letting
+    // Delete erase closed-footer content in one gesture.
+    view.dispatch(
+      view.state.tr.setSelection(
+        TextSelection.create(doc, 2, doc.content.size - 2),
+      ),
+    )
+    const { from, to } = created.editor.state.selection
+    expect(from).toBeGreaterThanOrEqual(doc.firstChild!.nodeSize)
+    expect(to).toBeLessThanOrEqual(footerFrom)
+  })
+
+  it('clamping prefers the body\'s first TEXT — a leading image must not end up node-selected', async () => {
+    const { TextSelection, NodeSelection } = await import('@tiptap/pm/state')
+    const created = renderEditor([HeaderFooterFeature, ImageFeature])
+    created.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+          { type: 'image', attrs: { src: 'data:,logo' } }, // template-style leading logo
+          { type: 'paragraph', content: [{ type: 'text', text: 'Contrato' }] },
+          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
+        ],
+      },
+    })
+    const view = created.editor.view
+
+    // A selection landing in the closed header (what a load's mapped
+    // selection produces): the clamp resolves at the image's block boundary —
+    // it must settle on the first body TEXT, not node-select the image.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
+
+    const selection = created.editor.state.selection
+    expect(selection instanceof NodeSelection).toBe(false)
+    expect(selection.empty).toBe(true)
+    expect(view.state.doc.resolve(selection.from).parent.textContent).toBe('Contrato')
+    expect(view.dom.querySelector('.image-resizer--selected')).toBeNull()
+  })
+
+  it('clamping never lands INSIDE a closed region when the body has no text position', async () => {
+    const { TextSelection, NodeSelection } = await import('@tiptap/pm/state')
+    const created = renderEditor([HeaderFooterFeature, DividerFeature])
+    created.api.setJSON({
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
+          { type: 'horizontalRule' }, // leaf-only body: no text position at all
+          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
+        ],
+      },
+    })
+    const view = created.editor.view
+    const headerSize = view.state.doc.firstChild!.nodeSize
+
+    // A selection aimed into the closed footer: the naive body clamp inverts
+    // (bodyTo < bodyFrom over a leaf-only body) and used to walk the caret
+    // INTO the footer. It must land on the body's node instead.
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 2)),
+    )
+    const selection = created.editor.state.selection
+    expect(selection instanceof NodeSelection).toBe(true)
+    expect(selection.from).toBe(headerSize)
+    expect(view.state.doc.nodeAt(headerSize)?.type.name).toBe('horizontalRule')
+  })
+
+  it('drops into a CLOSED region are swallowed; an OPEN region accepts them', async () => {
+    const created = newEditor()
+    created.api.setJSON(REGIONS_DOC)
+    const view = created.editor.view
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 2, inside: 0 }) // inside the header
+    const drop = () =>
+      view.someProp('handleDrop', (handler) =>
+        handler(view, new MouseEvent('drop', { clientX: 5, clientY: 5 }) as DragEvent, null as never, false),
+      )
+
+    expect(drop()).toBe(true) // closed → swallowed, nothing written
+    gate(created.editor).editing = 'documentHeader'
+    expect(drop()).toBeFalsy() // open → falls through to the default insert
+  })
+
+  it('outranks feature drop handlers: a chip drop into a closed header is blocked regardless of feature order', async () => {
+    const { DOMParser } = await import('@tiptap/pm/model')
+    const { MergeFieldFeature } = await import('./mergeField')
+    const { mergeFieldDragHTML } = await import('./mergeField')
+    // MergeField listed FIRST — only the guard's priority puts it in front.
+    const created = renderEditor([MergeFieldFeature, HeaderFooterFeature])
+    created.api.setJSON(REGIONS_DOC)
+    const view = created.editor.view
+    vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 2, inside: 0 })
+    const el = document.createElement('div')
+    el.innerHTML = mergeFieldDragHTML({ id: 'x', label: 'X' })
+    const slice = DOMParser.fromSchema(created.editor.schema).parseSlice(el)
+    const before = created.editor.state
+
+    const handled = view.someProp('handleDrop', (handler) =>
+      handler(view, new MouseEvent('drop', { clientX: 5, clientY: 5 }) as DragEvent, slice, false),
+    )
+
+    expect(handled).toBe(true) // the guard claimed it…
+    expect(created.editor.state).toBe(before) // …and nothing was inserted
+  })
+})
+
 describe('header/footer node view (the React chrome)', () => {
   const REGION_DOC = {
     doc: {
@@ -393,8 +521,7 @@ describe('header/footer node view (the React chrome)', () => {
       />,
     )
     await screen.findByText('Header')
-    const pm = document.querySelector('.ProseMirror') as HTMLElement & { editor?: Editor }
-    const editor = pm.editor!
+    const editor = editorFromDOM()
     const posAtCoords = vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
     const region = () => document.querySelector('.doc-region--header') as HTMLElement
     return { editor, api: api!, region, posAtCoords }

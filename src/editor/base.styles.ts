@@ -3,8 +3,6 @@ import { css } from '@emotion/react'
 /**
  * Base tokens + reset for the editor SDK skin. Every other partial builds on
  * these '--editor-*' custom properties — override them to theme.
- * Migrated from base.css into the Emotion Global skin (aggregated by
- * src/editor/skin.tsx).
  *
  * ':where(:root)' — specificity ZERO on purpose. The Emotion <Global> injects
  * its <style> at RENDER time, i.e. AFTER any consumer stylesheet loaded via

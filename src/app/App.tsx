@@ -44,7 +44,7 @@ export default function App() {
         {/* Document variables come from here (consumer), via context — shared by
             merge fields and conditional blocks. */}
         <DocumentVariablesProvider variables={mergeVariables}>
-          {/* Same features, three different toolbar presentations — chosen by the app. */}
+          {/* The full feature set, presented through the bubble + footer dock. */}
           <DocumentEditor
             features={fullFeatures}
             zoom={zoom}

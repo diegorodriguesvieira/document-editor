@@ -40,6 +40,11 @@ describe('<InsertToolbar />', () => {
     expect(bar).not.toHaveAttribute('aria-orientation') // horizontal (the toolbar default)
     expect(screen.getByRole('button', { name: 'Table' })).toHaveTextContent('T')
     expect(screen.getByRole('button', { name: 'Quote' })).toBeInTheDocument()
+
+    // Pure ACTIONS never announce a pressed state — only toggles (an item
+    // with isActive) carry aria-pressed.
+    expect(screen.getByRole('button', { name: 'Table' })).not.toHaveAttribute('aria-pressed')
+    expect(screen.getByRole('button', { name: 'Quote' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('dispatches the insert command via api.exec on click', async () => {

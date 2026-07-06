@@ -1,9 +1,13 @@
 import { css } from '@emotion/react'
 
 /* Bubble menu — formatting on text selection (floated by TipTap). Overrides the
-   shared .editor-toolbar__btn skin for the dark floating surface.
-   Migrated from BubbleToolbar.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+   shared .editor-toolbar__btn skin for the dark floating surface. */
 export const bubbleToolbarStyles = css`
+  /* Floating surface: must stack above the fixed insert dock (z 900). */
+  .bubble-toolbar {
+    z-index: var(--editor-z-popup);
+  }
+
   .bubble-toolbar__inner {
     display: inline-flex;
     flex-wrap: nowrap;

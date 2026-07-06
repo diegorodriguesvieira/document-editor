@@ -22,7 +22,7 @@ export function CommentCards({ editor }: { editor: Editor | null }) {
       </div>
       {comments.map((comment, index) => (
         <button
-          key={comment.id}
+          key={`${comment.id}:${comment.from}`}
           type="button"
           className="comment-cards__card"
           onClick={() =>

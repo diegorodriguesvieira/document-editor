@@ -31,7 +31,7 @@ describe('<MergeFieldMenu />', () => {
   })
 
   it('filters to labels that start with the typed query', () => {
-    renderMenu('cli') // the "cliente" word of "Nome do cliente"
+    renderMenu('cli') // matches "Client name" only
     expect(screen.getByRole('option', { name: /Client name/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Tax ID/ })).toBeNull()
   })

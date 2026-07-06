@@ -26,6 +26,17 @@ import { BoldFeature, ItalicFeature, HeadingFeature } from '../features'
 and add to it: `features={[...base, MyFeature]}`). Editor identity tracks the
 feature *ids*, so an inline array is safe.
 
+Zoom is a controlled prop — the SDK owns the scaling mechanics (CSS zoom,
+in-column scrolling past 100%, chrome staying put); you own the number. The
+`useZoom()` hook ships the state and policy (clamping, stepping, float-safe
+rounding) so your UI is just buttons:
+
+```tsx
+const { zoom, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom() // 0.5–2 by 0.1
+<button onClick={zoomIn} disabled={!canZoomIn}>+</button>
+<DocumentEditor features={…} zoom={zoom} />
+```
+
 ## 2. The feature contract at a glance
 
 ```ts
@@ -178,6 +189,10 @@ surface: `getJSON / setJSON / getHTML / hasNode / focus / exec(commandId, payloa
 / on('update' | 'selection')`.
 Loading content whose feature is disabled **throws** (it won't silently wipe
 the document).
+
+Feature commands holding a raw ProseMirror doc can share `api.hasNode`'s
+definition via the exported `hasTopLevelNode(doc, name)` — one meaning of
+"the document has a header", not two.
 
 ### Autosave and race conditions — who does what
 

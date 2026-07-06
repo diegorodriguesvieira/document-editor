@@ -1,7 +1,6 @@
 import { css } from '@emotion/react'
 
-/* HeadingFeature — h1–h3 inside the page.
-   Migrated from heading.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* HeadingFeature — h1–h3 inside the page. */
 export const headingStyles = css`
   .document-editor__surface h1 {
     font-size: 26px;

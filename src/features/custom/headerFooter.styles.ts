@@ -1,8 +1,6 @@
 import { css } from '@emotion/react'
 
-/* HeaderFooterFeature — rendered header/footer regions.
-   Migrated from headerFooter.css into the Emotion Global skin (aggregated by
-   src/editor/skin.tsx). */
+/* HeaderFooterFeature — rendered header/footer regions. */
 export const headerFooterStyles = css`
   /* Google-Docs behavior: the FOOTER sits at the BOTTOM of the page's
      min-height even when the body is short, and gets pushed further down as

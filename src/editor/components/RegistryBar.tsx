@@ -21,7 +21,6 @@ export function RegistryBar({
   className,
   buttonClassName,
   ariaLabel,
-  orientation,
   iconFallback,
   hideWhenEmpty = false,
 }: {
@@ -34,7 +33,6 @@ export function RegistryBar({
   className: string
   buttonClassName: string
   ariaLabel: string
-  orientation?: 'vertical'
   /** What the default button shows when the item has no icon. */
   iconFallback: (item: ToolbarItem) => ReactNode
   hideWhenEmpty?: boolean
@@ -43,7 +41,7 @@ export function RegistryBar({
   if (hideWhenEmpty && shown.length === 0 && !children) return null
 
   return (
-    <div className={className} role="toolbar" aria-orientation={orientation} aria-label={ariaLabel}>
+    <div className={className} role="toolbar" aria-label={ariaLabel}>
       {shown.map((button) => {
         // A feature can ship its own control.
         if (button.item.render) {
@@ -83,7 +81,9 @@ function DefaultButton({
       className={className}
       data-group={item.group}
       aria-label={item.label}
-      aria-pressed={active}
+      // Only TOGGLES announce a pressed state — an action button (insert
+      // Table, Undo…) with aria-pressed="false" reads as a stuck toggle.
+      aria-pressed={item.isActive ? active : undefined}
       disabled={disabled}
       title={item.label}
       // Keep the selection while clicking the button.

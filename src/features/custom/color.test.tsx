@@ -40,6 +40,24 @@ describe('color feature', () => {
     expect(mock.execCalls).toContainEqual({ commandId: 'color.unset', payload: undefined })
   })
 
+  it('clamps the popover to the viewport when the swatch sits near the right edge', async () => {
+    const user = userEvent.setup()
+    const mock = createMockEditor()
+    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />)
+
+    const swatch = screen.getByRole('button', { name: 'Text color' })
+    // The swatch rides the BUBBLE, which follows the selection — near the
+    // right edge the ~190px grid must shift left instead of overflowing.
+    swatch.getBoundingClientRect = () =>
+      ({ top: 40, bottom: 76, left: 1000, right: 1036, width: 36, height: 36, x: 1000, y: 40, toJSON: () => ({}) }) as DOMRect
+    await user.click(swatch)
+
+    const popover = document.querySelector('.color-picker') as HTMLElement
+    expect(popover).not.toBeNull()
+    expect(popover.style.left).toBe(`${window.innerWidth - 198}px`)
+    expect(popover.style.top).toBe('82px')
+  })
+
   it('reflects the current color in the swatch reactively (real editor)', async () => {
     const created = renderEditor([ColorFeature], { content: HELLO })
     render(

@@ -65,7 +65,7 @@ extensions — features are TipTap-native by design), and optional channels:
 | `commands` | `id → (editor, payload?) => boolean` | routed via `api.exec(id)` |
 | `keymap` | `'Mod-Shift-x' → commandId` | synthetic `registryKeymap` extension |
 | `toolbar` | `ToolbarItem[]` (data; optional `render` escape hatch) | `EditorToolbar` / `BubbleToolbar` |
-| `inserts` | `ToolbarItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
+| `insert` | `ToolbarItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
 | `contextMenu` | `ContextMenuSection[]` | `EditorContextMenu` (all matching sections compose) |
 | `pageRegions` | `PageRegion[]` (position, label, addCommandId, nodeName) | `PageAffordances` hover chrome; kernel derives `TrailingNode.notAfter` from `position: 'bottom'` entries |
 
@@ -147,7 +147,8 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
 - **Render-prop ladder**: `renderToolbar`, `renderInsertBar`, `renderRightBar`
   (consumer-owned, renders anything), `renderEmptyState` (screen-centered
   `position: fixed` overlay, `pointer-events: none` with clickable children,
-  shown only while `editor.isEmpty`). Each receives the same
+  shown only while the document is BLANK — `api.isEmpty`, one empty
+  paragraph; deliberately NOT TipTap's "no text" semantics). Each receives the same
   `DocumentEditorRenderContext { editor, api, resolved }`.
 - `RegistryBar` (internal, not exported) is the one rendering pipeline behind
   `EditorToolbar` and `InsertToolbar` — item filtering, disabled state via

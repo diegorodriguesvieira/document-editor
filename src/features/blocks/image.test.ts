@@ -50,6 +50,17 @@ describe('image resize (width attribute)', () => {
     expect(image?.attrs?.width).toBe(250)
   })
 
+  it('ignores NON-pixel CSS widths on paste — "80%" is not 80 pixels', () => {
+    const widthFor = (style: string) => {
+      const created = renderEditor([ImageFeature])
+      created.editor.commands.insertContent(`<img src="https://example.com/a.png" style="width: ${style}">`)
+      return created.api.getJSON().doc.content?.find((node) => node.type === 'image')?.attrs?.width
+    }
+    expect(widthFor('80%')).toBeNull()
+    expect(widthFor('12em')).toBeNull()
+    expect(widthFor('40vw')).toBeNull()
+  })
+
   it('images without width stay width-less (no serialized attr)', () => {
     const created = renderEditor([ImageFeature])
     created.api.exec('image.insert', 'https://example.com/a.png')
@@ -220,6 +231,42 @@ describe('image resize interaction (dragging the handles)', () => {
     expect(at(dom.querySelector('.image-resizer__handle--e'))).toBe(true)
     expect(at(dom.querySelector('img'))).toBe(false)
     nodeView.destroy?.()
+  })
+
+  it('an unloaded image (zero offsets) still writes real dimensions on an edge drag', () => {
+    // NO offset stubs here: jsdom's offsetWidth/Height are 0, exactly like an
+    // <img> whose file has not loaded yet. The drag seeds must fall back to
+    // the attrs — otherwise the untouched axis is written as 0.
+    const created = renderEditor([ImageFeature], {
+      content: {
+        doc: {
+          type: 'doc',
+          content: [
+            { type: 'image', attrs: { src: 'https://example.com/a.png', width: 200, height: 100 } },
+            { type: 'paragraph' },
+          ],
+        },
+      },
+    })
+    const resizer = created.editor.view.dom.querySelector('.image-resizer') as HTMLElement
+    fireEvent.mouseDown(resizer.querySelector('.image-resizer__handle--s')!, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(document, { clientX: 0, clientY: 60 })
+    fireEvent.mouseUp(document)
+
+    const attrs = created.api.getJSON().doc.content?.find((node) => node.type === 'image')?.attrs
+    expect(attrs).toMatchObject({ width: 200, height: 160 }) // width NOT zeroed
+  })
+
+  it('clears alt/title from the DOM when the attrs are removed (sync must not leave leftovers)', () => {
+    const { created, img } = mountImage({ width: 200, height: 100 })
+    created.editor.commands.setNodeSelection(0) // updateAttributes targets the selection
+    created.editor.commands.updateAttributes('image', { alt: 'legenda', title: 'dica' })
+    expect(img.getAttribute('alt')).toBe('legenda')
+    expect(img.getAttribute('title')).toBe('dica')
+
+    created.editor.commands.updateAttributes('image', { alt: null, title: null })
+    expect(img.hasAttribute('alt')).toBe(false)
+    expect(img.hasAttribute('title')).toBe(false)
   })
 
   it('destroy removes the document-level drag listeners (no zombie handlers mid-drag)', () => {

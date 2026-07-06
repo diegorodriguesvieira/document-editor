@@ -1,7 +1,6 @@
 import { css } from '@emotion/react'
 
-/* ConditionalBlockFeature — React node view + condition editor.
-   Migrated from conditionalBlock.css into the Emotion Global skin (aggregated by src/editor/skin.tsx). */
+/* ConditionalBlockFeature — React node view + condition editor. */
 export const conditionalBlockStyles = css`
   .document-editor__surface .conditional-block {
     margin: 0.6em 0;

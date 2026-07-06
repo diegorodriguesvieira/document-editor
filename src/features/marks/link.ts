@@ -11,8 +11,9 @@ export const LinkFeature = defineFeature({
   commands: {
     'link.set': (editor, payload) => {
       const href = promptOr(payload, 'Link URL:')
+      if (href == null) return false // cancelled — never clear an existing link
       if (!href) {
-        return editor.chain().focus().unsetLink().run()
+        return editor.chain().focus().unsetLink().run() // emptied on purpose
       }
       // extendMarkRange: a CARET inside an existing link retargets the whole
       // mark range (that's the "edit link" flow the toolbar enables at a caret).
@@ -27,6 +28,10 @@ export const LinkFeature = defineFeature({
       if (!text) return false
       const href = promptOr(fields.href, 'Link URL:')
       if (!href) return false
+      // insertContent applies mark attrs UNCHECKED — route the href through
+      // the same isAllowedUri gate link.set gets from the Link extension, or
+      // a `javascript:` URL would persist in the document JSON.
+      if (!editor.can().setLink({ href })) return false
       return editor
         .chain()
         .focus()

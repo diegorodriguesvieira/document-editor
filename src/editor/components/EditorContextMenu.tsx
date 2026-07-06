@@ -65,10 +65,11 @@ export function ContextMenuView({
                   ? 'context-menu__item context-menu__item--danger'
                   : 'context-menu__item'
               }
-              onMouseDown={(event) => {
-                event.preventDefault()
-                onRun(item.commandId)
-              }}
+              // mousedown only guards the selection (a click must not collapse
+              // it before the command runs); activation lives on click so the
+              // keyboard path works too — role="menuitem" promises Enter/Space.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onRun(item.commandId)}
             >
               {item.icon ? <span className="context-menu__icon">{item.icon}</span> : null}
               {item.label}
