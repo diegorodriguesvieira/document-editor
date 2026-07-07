@@ -47,18 +47,11 @@ export const conditionalBlockStyles = css`
     font-size: 0.9em;
   }
 
-  .document-editor__surface .conditional-block__nest,
-  .document-editor__surface .conditional-block__delete {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 14px;
+  /* The bar buttons are MUI IconButtons (hover/disabled from the theme);
+     only the muted chrome color needs to persist over MUI's action color. */
+  .conditional-block__nest.conditional-block__nest,
+  .conditional-block__delete.conditional-block__delete {
     color: var(--editor-control-fg);
-  }
-
-  .document-editor__surface .conditional-block__nest:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 
   .document-editor__surface .conditional-block__content {
@@ -75,14 +68,6 @@ export const conditionalBlockStyles = css`
     border-bottom: 1px solid var(--editor-border);
   }
 
-  .document-editor__surface .cond-editor__field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--editor-text-muted);
-  }
-
   /* Non-editable notice for multi-condition trees authored outside the UI. */
   .document-editor__surface .cond-editor__complex {
     margin: 0;
@@ -90,25 +75,12 @@ export const conditionalBlockStyles = css`
     color: var(--editor-text-muted);
   }
 
-  .document-editor__surface .cond-editor__field select,
-  .document-editor__surface .cond-editor__field input {
-    font: inherit;
-    font-size: 14px;
-    color: var(--editor-text);
-    padding: 8px 10px;
-    border: 1px solid var(--editor-border-muted);
-    border-radius: 8px;
-    background: var(--editor-surface);
-  }
-
-  .document-editor__surface .cond-editor__done {
+  .document-editor__surface .cond-editor__done.cond-editor__done {
     align-self: flex-end;
     padding: 8px 16px;
-    border: none;
     border-radius: 8px;
     background: var(--editor-inverse-bg);
     color: var(--editor-inverse-fg);
     font-size: 13px;
-    cursor: pointer;
   }
 `

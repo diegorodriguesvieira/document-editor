@@ -1,6 +1,8 @@
 import { Image } from '@tiptap/extension-image'
 import { defineFeature } from '../../editor'
 import { promptOr } from '../promptFallback'
+import { icons } from '../icons'
+import { renderImageInsertControl } from '../promptForms'
 
 /**
  * Allow http(s)/data and relative URLs; reject `javascript:` and other script
@@ -73,6 +75,22 @@ const ResizableImage = Image.extend({
     }
   },
 
+  parseHTML() {
+    // One src policy, BOTH directions. The base rule has no protocol check
+    // (pasted `javascript:` srcs would persist into the backend/PDF HTML
+    // contract) and — with allowBase64 off — refuses the `data:` images that
+    // image.insert itself accepts, so the feature would emit content its own
+    // schema can't re-parse. getAttrs: null accepts the element (the
+    // per-attribute parseHTML for src/width/height still runs), false rejects.
+    return [
+      {
+        tag: 'img[src]',
+        getAttrs: (element) =>
+          isSafeImageSrc(element.getAttribute('src') ?? '') ? null : false,
+      },
+    ]
+  },
+
   addNodeView() {
     return ({ node, view, getPos }) => {
       let current = node
@@ -106,6 +124,7 @@ const ResizableImage = Image.extend({
         startY: number
         startW: number
         startH: number
+        scale: number
         dx: -1 | 0 | 1
         dy: -1 | 0 | 1
         width: number
@@ -116,9 +135,11 @@ const ResizableImage = Image.extend({
         if (!drag) return
         drag.moved = true
         // Live feedback is style-only; the document is written once, on drop.
+        // Pointer deltas are visual-viewport px while sizes are local CSS px —
+        // divide by the captured zoom scale so the edge tracks the cursor.
         const max = dom.parentElement?.clientWidth || Number.POSITIVE_INFINITY
         if (drag.dx !== 0) {
-          const next = drag.startW + drag.dx * (event.clientX - drag.startX)
+          const next = drag.startW + (drag.dx * (event.clientX - drag.startX)) / drag.scale
           drag.width = Math.round(Math.min(Math.max(next, MIN_WIDTH), max))
           if (drag.dy !== 0) {
             // Corner: proportional — height follows the width's scale.
@@ -126,7 +147,7 @@ const ResizableImage = Image.extend({
           }
         }
         if (drag.dx === 0 && drag.dy !== 0) {
-          const next = drag.startH + drag.dy * (event.clientY - drag.startY)
+          const next = drag.startH + (drag.dy * (event.clientY - drag.startY)) / drag.scale
           drag.height = Math.round(Math.max(next, MIN_HEIGHT))
         }
         img.style.width = `${drag.width}px`
@@ -166,6 +187,11 @@ const ResizableImage = Image.extend({
             startY: event.clientY,
             startW,
             startH,
+            // Effective CSS zoom (page `zoom` prop): rect is zoom-scaled,
+            // offsetWidth is not. Captured once — zoom is stable mid-drag.
+            // `|| 1` covers both a zero rect (unloaded image) and division
+            // fallbacks.
+            scale: img.getBoundingClientRect().width / (img.offsetWidth || 1) || 1,
             dx,
             dy,
             // Seed with the same fallbacks: a not-yet-loaded image has zero
@@ -225,5 +251,14 @@ export const ImageFeature = defineFeature({
   // Mod-Alt-p ("picture"): Mod-Shift-i collides with Safari's Mail Contents
   // of Page; the Alt+I/J/C/K/U row is devtools territory across browsers.
   keymap: { 'Mod-Alt-p': 'image.insert' },
-  insert: [{ id: 'image', label: 'Image', icon: 'I', commandId: 'image.insert' }],
+  insert: [
+    {
+      id: 'image',
+      label: 'Image',
+      icon: icons.image,
+      commandId: 'image.insert',
+      // URL form → exec('image.insert', src); Mod-Alt-p keeps the fallback.
+      render: renderImageInsertControl,
+    },
+  ],
 })

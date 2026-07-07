@@ -13,6 +13,11 @@ import { GapCursor } from '@tiptap/pm/gapcursor'
 import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import Add from '@mui/icons-material/Add'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import TextField from '@mui/material/TextField'
+import { icons } from '../icons'
 
 /** Hard cap on conditional-block nesting (1 = a single, top-level block). */
 export const MAX_CONDITIONAL_DEPTH = 5
@@ -203,15 +208,53 @@ function literalFromInput(text: string): ConditionOperand | null {
 function LiteralValueInput({ initial, onCommit }: { initial: string; onCommit: (text: string) => void }) {
   const [text, setText] = useState(initial)
   return (
-    <input
-      aria-label="Value"
+    <TextField
+      className="cond-editor__field"
+      label="Value"
       type="text"
       value={text}
+      slotProps={{ htmlInput: { 'aria-label': 'Value' } }}
       onChange={(event) => {
         setText(event.target.value)
         onCommit(event.target.value)
       }}
     />
+  )
+}
+
+/** The native variable-<select> both operand slots render — module scope so
+ *  the TextField keeps its identity across renders (an inline component would
+ *  remount and drop focus mid-interaction). Visible label is always
+ *  "Variable"; the accessible name distinguishes the slots. */
+function VariableSelect({
+  variables,
+  value,
+  ariaLabel,
+  onPick,
+}: {
+  variables: DocumentVariable[]
+  value: string
+  ariaLabel: string
+  onPick: (operand: ConditionOperand | null) => void
+}) {
+  return (
+    <TextField
+      select
+      className="cond-editor__field"
+      label="Variable"
+      value={value}
+      slotProps={{ select: { native: true }, htmlInput: { 'aria-label': ariaLabel } }}
+      onChange={(event) =>
+        onPick(event.target.value ? { type: 'variable', ref: event.target.value } : null)
+      }
+    >
+      <option value="">Select a variable *</option>
+      {variables.map((variable) => (
+        <option key={variable.id} value={variable.id}>
+          {variable.label}
+        </option>
+      ))}
+    </TextField>
   )
 }
 
@@ -244,9 +287,9 @@ export function ConditionEditor({
           This block carries a multi-condition rule authored outside this editor — it can’t be
           edited here without losing structure.
         </p>
-        <button type="button" className="cond-editor__done" onClick={onDone}>
+        <Button className="cond-editor__done" onClick={onDone}>
           Done
-        </button>
+        </Button>
       </div>
     )
   }
@@ -265,106 +308,67 @@ export function ConditionEditor({
 
   return (
     <div className="cond-editor">
-      <label className="cond-editor__field">
-        <span>Variable</span>
-        <select
-          aria-label="Variable"
-          value={left?.type === 'variable' ? left.ref : ''}
-          onChange={(event) =>
-            commit({
-              ...leaf,
-              params: withParam(
-                leaf.params,
-                0,
-                event.target.value ? { type: 'variable', ref: event.target.value } : null,
-              ),
-            })
-          }
-        >
-          <option value="">Select a variable *</option>
-          {variables.map((variable) => (
-            <option key={variable.id} value={variable.id}>
-              {variable.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <VariableSelect
+        variables={variables}
+        value={left?.type === 'variable' ? left.ref : ''}
+        ariaLabel="Variable"
+        onPick={(operand) => commit({ ...leaf, params: withParam(leaf.params, 0, operand) })}
+      />
 
-      <label className="cond-editor__field">
-        <span>Condition</span>
-        <select
-          aria-label="Condition"
-          value={leaf.op ?? ''}
-          onChange={(event) => setOp(event.target.value)}
-        >
-          <option value="">Select a condition *</option>
-          {CONDITIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <TextField
+        select
+        className="cond-editor__field"
+        label="Condition"
+        value={leaf.op ?? ''}
+        slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Condition' } }}
+        onChange={(event) => setOp(event.target.value)}
+      >
+        <option value="">Select a condition *</option>
+        {CONDITIONS.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </TextField>
 
       {option?.arity === 2 ? (
         <>
-          <label className="cond-editor__field">
-            <span>Compare with</span>
-            <select
-              aria-label="Compare with"
-              value={rightType}
-              onChange={(event) => {
-                setDraftRightType(event.target.value as 'literal' | 'variable')
-                // The old operand belongs to the other face — clear it.
-                commit({ ...leaf, params: withParam(leaf.params, 1, null) })
-              }}
-            >
-              <option value="literal">a value</option>
-              <option value="variable">a variable</option>
-            </select>
-          </label>
+          <TextField
+            select
+            className="cond-editor__field"
+            label="Compare with"
+            value={rightType}
+            slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Compare with' } }}
+            onChange={(event) => {
+              setDraftRightType(event.target.value as 'literal' | 'variable')
+              // The old operand belongs to the other face — clear it.
+              commit({ ...leaf, params: withParam(leaf.params, 1, null) })
+            }}
+          >
+            <option value="literal">a value</option>
+            <option value="variable">a variable</option>
+          </TextField>
           {rightType === 'variable' ? (
-            <label className="cond-editor__field">
-              <span>Variable</span>
-              <select
-                aria-label="Comparison variable"
-                value={right?.type === 'variable' ? right.ref : ''}
-                onChange={(event) =>
-                  commit({
-                    ...leaf,
-                    params: withParam(
-                      leaf.params,
-                      1,
-                      event.target.value ? { type: 'variable', ref: event.target.value } : null,
-                    ),
-                  })
-                }
-              >
-                <option value="">Select a variable *</option>
-                {variables.map((variable) => (
-                  <option key={variable.id} value={variable.id}>
-                    {variable.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <VariableSelect
+              variables={variables}
+              value={right?.type === 'variable' ? right.ref : ''}
+              ariaLabel="Comparison variable"
+              onPick={(operand) => commit({ ...leaf, params: withParam(leaf.params, 1, operand) })}
+            />
           ) : (
-            <label className="cond-editor__field">
-              <span>Value</span>
-              <LiteralValueInput
-                initial={right?.type === 'literal' ? String(right.value) : ''}
-                onCommit={(text) =>
-                  commit({ ...leaf, params: withParam(leaf.params, 1, literalFromInput(text)) })
-                }
-              />
-            </label>
+            <LiteralValueInput
+              initial={right?.type === 'literal' ? String(right.value) : ''}
+              onCommit={(text) =>
+                commit({ ...leaf, params: withParam(leaf.params, 1, literalFromInput(text)) })
+              }
+            />
           )}
         </>
       ) : null}
 
-      <button type="button" className="cond-editor__done" onClick={onDone}>
+      <Button className="cond-editor__done" onClick={onDone}>
         Done
-      </button>
+      </Button>
     </div>
   )
 }
@@ -452,13 +456,13 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
             onClick={() => setEditing((open) => !open)}
           >
             <span className="conditional-block__icon" aria-hidden>
-              ⑂
+              {icons.conditional}
             </span>
             <span>Show if</span>
             <span className="conditional-block__cond">{conditionText(cond, variables)}</span>
           </button>
-          <button
-            type="button"
+          <IconButton
+            size="small"
             className="conditional-block__nest"
             aria-label="Add nested condition"
             title="Nest a condition (AND)"
@@ -466,16 +470,16 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
             onMouseDown={(event) => event.preventDefault()}
             onClick={addNested}
           >
-            ＋
-          </button>
-          <button
-            type="button"
+            <Add fontSize="inherit" />
+          </IconButton>
+          <IconButton
+            size="small"
             className="conditional-block__delete"
             aria-label="Remove conditional block"
             onClick={() => deleteNode()}
           >
-            🗑
-          </button>
+            {icons.delete}
+          </IconButton>
         </div>
         {editing ? (
           <ConditionEditor
@@ -605,5 +609,5 @@ export const ConditionalBlockFeature = defineFeature({
   },
   // Mod-Alt-b ("block"): Mod-Shift-k is Firefox's Web Console.
   keymap: { 'Mod-Alt-b': 'conditional.wrap' },
-  insert: [{ id: 'conditional', label: 'Conditional block', icon: '⑂', commandId: 'conditional.wrap' }],
+  insert: [{ id: 'conditional', label: 'Conditional block', icon: icons.conditional, commandId: 'conditional.wrap' }],
 })

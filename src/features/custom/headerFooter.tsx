@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import Button from '@mui/material/Button'
+import { POPUP_CLASS } from '../../editor'
 import {
   defineFeature,
   hasTopLevelNode,
@@ -138,7 +140,7 @@ function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
       if (wrapperRef.current?.contains(target)) return false // the region itself
       const el = target instanceof Element ? target : target.parentElement
       if (!el) return true
-      if (el.closest('.document-editor-popup')) return false // portaled popovers
+      if (el.closest(`.${POPUP_CLASS}`)) return false // portaled popovers
       if (editor.view.dom.contains(el)) return true // elsewhere in the document
       const shell = editor.view.dom.closest('.document-editor')
       const isControl = Boolean(
@@ -180,19 +182,79 @@ function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
         onMouseDown={(event) => event.preventDefault()}
       >
         <span className="doc-region__label">{isHeader ? 'Header' : 'Footer'}</span>
-        <button
-          type="button"
+        <Button
           className="doc-region__remove"
+          size="small"
           aria-label={`Remove ${isHeader ? 'header' : 'footer'}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => deleteNode()}
         >
           Remove
-        </button>
+        </Button>
       </div>
       <NodeViewContent className="doc-region__content" />
     </NodeViewWrapper>
   )
+}
+
+/**
+ * The selection gate's clamp, shared by the after-every-transaction gate and
+ * the normalizer (whose own appended transaction ProseMirror never re-gates).
+ * Returns the corrected selection for one touching a CLOSED region, or null
+ * when the selection is allowed as-is.
+ */
+function clampSelectionToBody(
+  doc: PMNode,
+  selection: Selection,
+  editing: string | null,
+): Selection | null {
+  const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
+  if (!headerSize && !footerSize) return null
+
+  // An endpoint offends when it sits in a region that is not the open one —
+  // check BOTH endpoints: short-circuiting on the first (`??`) would let a
+  // selection anchored in the OPEN header reach into (and delete) the closed
+  // footer. A NodeSelection OF a region has endpoints at depth 0 (regionNameAt
+  // sees null) — the wrapped node itself offends.
+  const offends = (region: string | null) => region !== null && region !== editing
+  const nodeOffends =
+    selection instanceof NodeSelection &&
+    (selection.node.type.name === REGION_TOP || selection.node.type.name === REGION_BOTTOM) &&
+    selection.node.type.name !== editing
+  if (
+    !nodeOffends &&
+    !offends(regionNameAt(selection.$from)) &&
+    !offends(regionNameAt(selection.$to))
+  ) {
+    return null
+  }
+
+  const clamp = (pos: number) => Math.min(Math.max(pos, bodyFrom), bodyTo)
+  const next = TextSelection.between(
+    doc.resolve(clamp(selection.from)),
+    doc.resolve(clamp(selection.to)),
+  )
+  // The clamp can still land in a region: at a block boundary
+  // TextSelection.between may walk BACKWARD into the header (e.g. a template
+  // load whose mapped selection offends), and a body with no text position at
+  // all (only leaf blocks — a divider) INVERTS the clamp. Verify the result;
+  // prefer the body's first TEXT position (a template load must read like
+  // "caret at the top", not like a node-selected leading image), and only a
+  // truly text-less body falls back to selecting its first node / a gap
+  // cursor (valid there — the GapCursor filter only bans the doc's outer
+  // edges).
+  if (regionNameAt(next.$from) ?? regionNameAt(next.$to)) {
+    let fallback = Selection.findFrom(doc.resolve(headerSize), 1, true)
+    if (!fallback || regionNameAt(fallback.$from)) {
+      const child = doc.nodeAt(headerSize)
+      fallback =
+        child && NodeSelection.isSelectable(child)
+          ? NodeSelection.create(doc, headerSize)
+          : new GapCursor(doc.resolve(headerSize))
+    }
+    return fallback.eq(selection) ? null : fallback
+  }
+  return next.eq(selection) ? null : next
 }
 
 /** Singleton block region serialized to a `data-*` div the backend reads. */
@@ -203,6 +265,12 @@ function regionNode(name: string, dataAttr: string, regionClass: string) {
     content: 'block+',
     defining: true,
     isolating: true,
+    // Backspace at the body's start (Delete at its end) node-selects the
+    // previous/next block when it is selectable — a second press would then
+    // DELETE the closed region wholesale. Non-selectable kills that path at
+    // the source (the keymap becomes a no-op, Docs-style); the selection gate
+    // still seals programmatic NodeSelection.create.
+    selectable: false,
 
     parseHTML() {
       return [{ tag: `div[${dataAttr}]` }]
@@ -354,6 +422,13 @@ const HeaderFooterGuard = Extension.create({
               const tr = newState.tr
               tr.replaceWith(0, newState.doc.content.size, Fragment.fromArray(desired))
               tr.setMeta('addToHistory', false)
+              // PM never re-runs appendTransaction on a plugin's OWN appended
+              // transaction — the gate below cannot catch the selection this
+              // rewrite produces (a paste's mapped selection can land inside
+              // a closed region and the next keystroke would write there).
+              // Clamp on this tr, against ITS doc.
+              const clamped = clampSelectionToBody(tr.doc, tr.selection, storage.editing)
+              if (clamped) tr.setSelection(clamped)
               return tr
             }
 
@@ -394,49 +469,11 @@ const HeaderFooterGuard = Extension.create({
           // SELECTION GATE — regions are entered by DOUBLE-CLICK only. Any
           // selection landing inside a region that is not open for editing
           // (arrow keys, shift-selection, a load's initial selection…) is
-          // clamped back to the body. Runs after every transaction, so there
-          // is no path around it.
-          const { doc, selection } = newState
-          const { headerSize, footerSize, bodyFrom, bodyTo } = regionBounds(doc)
-          if (!headerSize && !footerSize) return null
-
-          // An endpoint offends when it sits in a region that is not the open
-          // one — check BOTH endpoints: short-circuiting on the first (`??`)
-          // would let a selection anchored in the OPEN header reach into (and
-          // delete) the closed footer.
-          const offends = (region: string | null) => region !== null && region !== storage.editing
-          if (!offends(regionNameAt(selection.$from)) && !offends(regionNameAt(selection.$to))) {
-            return null
-          }
-
-          const clamp = (pos: number) => Math.min(Math.max(pos, bodyFrom), bodyTo)
-          const next = TextSelection.between(
-            doc.resolve(clamp(selection.from)),
-            doc.resolve(clamp(selection.to)),
-          )
-          // The clamp can still land in a region: at a block boundary
-          // TextSelection.between may walk BACKWARD into the header (e.g. a
-          // template load whose mapped selection offends), and a body with no
-          // text position at all (only leaf blocks — a divider) INVERTS the
-          // clamp. Verify the result; prefer the body's first TEXT position
-          // (a template load must read like "caret at the top", not like a
-          // node-selected leading image), and only a truly text-less body
-          // falls back to selecting its first node / a gap cursor (valid
-          // there — the filter above only bans the doc's outer edges).
-          if (regionNameAt(next.$from) ?? regionNameAt(next.$to)) {
-            let fallback = Selection.findFrom(doc.resolve(headerSize), 1, true)
-            if (!fallback || regionNameAt(fallback.$from)) {
-              const child = doc.nodeAt(headerSize)
-              fallback =
-                child && NodeSelection.isSelectable(child)
-                  ? NodeSelection.create(doc, headerSize)
-                  : new GapCursor(doc.resolve(headerSize))
-            }
-            if (fallback.eq(selection)) return null
-            return newState.tr.setSelection(fallback)
-          }
-          if (next.eq(selection)) return null
-          return newState.tr.setSelection(next)
+          // clamped back to the body. Runs after every transaction — the one
+          // path PM never re-gates (a plugin's OWN appended transaction) is
+          // the normalizer above, which clamps on its tr itself.
+          const clamped = clampSelectionToBody(newState.doc, newState.selection, storage.editing)
+          return clamped ? newState.tr.setSelection(clamped) : null
         },
       }),
     ]

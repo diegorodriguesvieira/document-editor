@@ -1,7 +1,8 @@
 import { fireEvent } from '@testing-library/dom'
 import { describe, expect, it, vi } from 'vitest'
+import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import { DecorationSet } from '@tiptap/pm/view'
-import { jsonHasNode, renderEditor } from '../../test/editorHarness'
+import { jsonFindNode, jsonHasNode, renderEditor } from '../../test/editorHarness'
 import { ImageFeature } from './image'
 
 describe('image src safety', () => {
@@ -22,6 +23,41 @@ describe('image src safety', () => {
     expect(api.exec('image.insert', 'vbscript:msgbox')).toBe(false)
     expect(jsonHasNode(api.getJSON().doc, 'image')).toBe(false)
   })
+
+  it('pasted HTML cannot smuggle a script-URL src — the PARSE rule enforces the same policy as image.insert', () => {
+    // The command guard alone is not enough: without a parseHTML override the
+    // base rule persisted `javascript:` srcs straight into the backend/PDF
+    // HTML contract (the exact threat isSafeImageSrc documents).
+    const { editor, api } = renderEditor([ImageFeature])
+    // The paste pipeline's parse rules (jsdom has no ClipboardEvent — parse
+    // with the schema's DOMParser, exactly what paste runs) drop it silently…
+    const pasteParse = (html: string) => {
+      const el = document.createElement('div')
+      el.innerHTML = html
+      return JSON.stringify(PMDOMParser.fromSchema(editor.schema).parse(el).toJSON())
+    }
+    expect(pasteParse('<img src="javascript:alert(1)">')).not.toContain('image')
+    expect(pasteParse('<img src="vbscript:msgbox">')).not.toContain('javascript:')
+    // …while the programmatic path refuses LOUDLY (content check, no silent wipe).
+    expect(() => editor.commands.insertContent('<img src="javascript:alert(1)">')).toThrow()
+    expect(jsonHasNode(api.getJSON().doc, 'image')).toBe(false)
+  })
+
+  it('data: images survive the round trip — the schema must re-parse what image.insert emits', () => {
+    const src = 'data:image/png;base64,iVBOR'
+    // Paste path (the base rule, allowBase64: false, used to REFUSE these).
+    const pasted = renderEditor([ImageFeature])
+    pasted.editor.commands.insertContent(`<img src="${src}">`)
+    const image = jsonFindNode(pasted.api.getJSON().doc, 'image')
+    expect(image?.attrs?.src).toBe(src)
+
+    // Copy/paste of the feature's own serialized HTML.
+    const source = renderEditor([ImageFeature])
+    source.api.exec('image.insert', src)
+    const reloaded = renderEditor([ImageFeature])
+    reloaded.editor.commands.insertContent(source.api.getHTML())
+    expect(jsonHasNode(reloaded.api.getJSON().doc, 'image')).toBe(true)
+  })
 })
 
 describe('image resize (width attribute)', () => {
@@ -34,19 +70,19 @@ describe('image resize (width attribute)', () => {
 
     const reloaded = renderEditor([ImageFeature])
     reloaded.api.setJSON(created.api.getJSON())
-    const image = reloaded.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    const image = jsonFindNode(reloaded.api.getJSON().doc, 'image')
     expect(image?.attrs?.width).toBe(400)
   })
 
   it('parses width from pasted HTML (attribute or inline style)', () => {
     const created = renderEditor([ImageFeature])
     created.editor.commands.insertContent('<img src="https://example.com/a.png" width="300">')
-    let image = created.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    let image = jsonFindNode(created.api.getJSON().doc, 'image')
     expect(image?.attrs?.width).toBe(300)
 
     const other = renderEditor([ImageFeature])
     other.editor.commands.insertContent('<img src="https://example.com/b.png" style="width: 250px">')
-    image = other.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    image = jsonFindNode(other.api.getJSON().doc, 'image')
     expect(image?.attrs?.width).toBe(250)
   })
 
@@ -54,7 +90,7 @@ describe('image resize (width attribute)', () => {
     const widthFor = (style: string) => {
       const created = renderEditor([ImageFeature])
       created.editor.commands.insertContent(`<img src="https://example.com/a.png" style="width: ${style}">`)
-      return created.api.getJSON().doc.content?.find((node) => node.type === 'image')?.attrs?.width
+      return jsonFindNode(created.api.getJSON().doc, 'image')?.attrs?.width
     }
     expect(widthFor('80%')).toBeNull()
     expect(widthFor('12em')).toBeNull()
@@ -78,7 +114,7 @@ describe('image resize (width attribute)', () => {
 
     const reloaded = renderEditor([ImageFeature])
     reloaded.api.setJSON(created.api.getJSON())
-    const image = reloaded.api.getJSON().doc.content?.find((node) => node.type === 'image')
+    const image = jsonFindNode(reloaded.api.getJSON().doc, 'image')
     expect(image?.attrs?.height).toBe(250)
   })
 })
@@ -122,7 +158,7 @@ describe('image resize interaction (dragging the handles)', () => {
       fireEvent.mouseUp(document)
     }
     const imageAttrs = () =>
-      created.api.getJSON().doc.content?.find((node) => node.type === 'image')?.attrs
+      jsonFindNode(created.api.getJSON().doc, 'image')?.attrs
     return { created, resizer, img, handle, drag, imageAttrs }
   }
 
@@ -145,6 +181,23 @@ describe('image resize interaction (dragging the handles)', () => {
     expect(imageAttrs()).toMatchObject({ width: 200, height: 160 })
     drag('w', { x: 50, y: 0 }) // left edge: dragging right (+50) SHRINKS width
     expect(imageAttrs()).toMatchObject({ width: 150, height: 160 })
+  })
+
+  it('divides pointer deltas by the page zoom — the edge tracks the cursor at any scale', () => {
+    // Pointer deltas are visual-viewport px; offset sizes are local CSS px.
+    // At zoom 2 the rect is twice the offset width: 100 screen px = 50 CSS px.
+    const zoomed = mountImage({ width: 200, height: 100 })
+    zoomed.img.getBoundingClientRect = () =>
+      ({ width: zoomed.img.offsetWidth * 2 } as DOMRect)
+    zoomed.drag('e', { x: 100, y: 0 })
+    expect(zoomed.imageAttrs()).toMatchObject({ width: 250 })
+
+    // Zoom OUT (0.5): 50 screen px = 100 CSS px.
+    const shrunk = mountImage({ width: 200, height: 100 })
+    shrunk.img.getBoundingClientRect = () =>
+      ({ width: shrunk.img.offsetWidth * 0.5 } as DOMRect)
+    shrunk.drag('e', { x: 50, y: 0 })
+    expect(shrunk.imageAttrs()).toMatchObject({ width: 300 })
   })
 
   it('corner handle keeps the aspect ratio', () => {
@@ -253,7 +306,7 @@ describe('image resize interaction (dragging the handles)', () => {
     fireEvent.mouseMove(document, { clientX: 0, clientY: 60 })
     fireEvent.mouseUp(document)
 
-    const attrs = created.api.getJSON().doc.content?.find((node) => node.type === 'image')?.attrs
+    const attrs = jsonFindNode(created.api.getJSON().doc, 'image')?.attrs
     expect(attrs).toMatchObject({ width: 200, height: 160 }) // width NOT zeroed
   })
 

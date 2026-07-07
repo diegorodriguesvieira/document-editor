@@ -19,8 +19,9 @@ export interface ToolbarItem {
    *  features interleave their buttons deterministically. */
   order?: number
   label: string
-  /** Short text/emoji icon; the host decides how to render it. */
-  icon?: string
+  /** Icon for the item — a ReactNode (e.g. an @mui/icons-material element)
+   *  or a short text/emoji string; the host decides how to render it. */
+  icon?: ReactNode
   /** Command id (from some feature's `commands`) to run on click. Optional
    *  when `render` provides a fully custom control. */
   commandId?: string
@@ -37,8 +38,9 @@ export interface ToolbarItem {
 export interface ContextMenuItem {
   id: string
   label: string
-  /** Short text/emoji icon; the host decides how to render it. */
-  icon?: string
+  /** Icon for the item — a ReactNode (e.g. an @mui/icons-material element)
+   *  or a short text/emoji string; the host decides how to render it. */
+  icon?: ReactNode
   /** Command id (from some feature's `commands`) to run when picked. */
   commandId: string
   /** Render in a destructive (red) style, e.g. "Delete row". */

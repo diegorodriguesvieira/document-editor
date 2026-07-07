@@ -2,36 +2,12 @@ import { css } from '@emotion/react'
 
 /* ColorFeature — toolbar swatch + preset/custom picker (picker portals to <body>). */
 export const colorStyles = css`
-  .color-swatch {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .color-swatch:hover {
-    background: var(--editor-control-hover-bg);
-  }
-
+  /* The swatch button itself is a MUI IconButton (theme metrics). */
   .color-swatch__dot {
     width: 16px;
     height: 16px;
     border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.25);
-  }
-
-  .document-editor-popup.color-picker {
-    padding: 8px;
-    background: var(--editor-surface);
-    border: 1px solid var(--editor-border);
-    border-radius: 8px;
-    box-shadow: var(--editor-shadow-pop);
   }
 
   .document-editor-popup .color-picker__grid {

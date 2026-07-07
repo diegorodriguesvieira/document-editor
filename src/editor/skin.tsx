@@ -6,7 +6,6 @@ import { baseStyles } from './base.styles'
 /* Editor shell + components */
 import { documentEditorStyles } from './components/DocumentEditor.styles'
 import { insertToolbarStyles } from './components/InsertToolbar.styles'
-import { editorToolbarStyles } from './components/EditorToolbar.styles'
 import { bubbleToolbarStyles } from './components/BubbleToolbar.styles'
 
 /* In-page block & mark styling */
@@ -25,7 +24,6 @@ import { conditionalBlockStyles } from '../features/custom/conditionalBlock.styl
 
 /* Floating surfaces (portal to <body>) */
 import { slashMenuStyles } from './components/SlashMenu.styles'
-import { editorContextMenuStyles } from './components/EditorContextMenu.styles'
 
 /* Page regions + remaining features */
 import { pageAffordancesStyles } from './components/PageAffordances.styles'
@@ -54,7 +52,6 @@ const SKIN = [
   baseStyles,
   documentEditorStyles,
   insertToolbarStyles,
-  editorToolbarStyles,
   bubbleToolbarStyles,
   headingStyles,
   linkStyles,
@@ -67,7 +64,6 @@ const SKIN = [
   mergeFieldStyles,
   conditionalBlockStyles,
   slashMenuStyles,
-  editorContextMenuStyles,
   pageAffordancesStyles,
   headerFooterStyles,
   commentsStyles,
@@ -78,7 +74,8 @@ const SKIN = [
 /**
  * Mounts the SDK skin. `DocumentEditor` renders one automatically; custom
  * shells that assemble the exported components themselves (EditorToolbar,
- * CommentsPanel, …) should render `<EditorSkin />` once near their root.
+ * CommentsPanel, …) should render `<EditorSkin />` once near their root and
+ * wrap themselves in `<EditorThemeProvider>` (theme.tsx) for the MUI chrome.
  * Duplicate mounts are harmless (identical rules).
  */
 export function EditorSkin() {

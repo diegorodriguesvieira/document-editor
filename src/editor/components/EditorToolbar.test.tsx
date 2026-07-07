@@ -30,12 +30,12 @@ describe('<EditorToolbar />', () => {
   })
 
   it('applies a custom container className (restyle without forking)', () => {
-    const { editor, api, resolved } = renderEditor([])
+    const mock = createMockEditor()
     render(
       <EditorToolbar
-        editor={editor}
-        api={api}
-        resolved={resolved}
+        editor={null}
+        api={mock.api}
+        resolved={resolveFeatures([])}
         className="custom-bar"
       />,
     )
@@ -43,14 +43,13 @@ describe('<EditorToolbar />', () => {
   })
 
   it('lets the consumer override the button markup via renderButton', () => {
-    const { editor, api, resolved } = renderEditor([commandFeature()])
+    const mock = createMockEditor()
     render(
       <EditorToolbar
-        editor={editor}
-        api={api}
-        resolved={resolved}
+        editor={null}
+        api={mock.api}
+        resolved={resolveFeatures([commandFeature()])}
         renderButton={(button) => (
-          // eslint-disable-next-line jsx-a11y/anchor-is-valid
           <a role="link" onClick={button.run}>
             {button.item.label}
           </a>
@@ -62,9 +61,9 @@ describe('<EditorToolbar />', () => {
   })
 
   it('appends children as custom controls (slot)', () => {
-    const { editor, api, resolved } = renderEditor([])
+    const mock = createMockEditor()
     render(
-      <EditorToolbar editor={editor} api={api} resolved={resolved}>
+      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([])}>
         <button type="button">Custom</button>
       </EditorToolbar>,
     )
@@ -77,9 +76,9 @@ describe('<EditorToolbar />', () => {
       extensions: () => [],
       toolbar: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">hi</span> }],
     })
-    const { editor, api, resolved } = renderEditor([feature])
+    const mock = createMockEditor()
 
-    render(<EditorToolbar editor={editor} api={api} resolved={resolved} />)
+    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([feature])} />)
     expect(screen.getByTestId('custom')).toHaveTextContent('hi')
   })
 

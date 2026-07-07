@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { DocumentEditor, type EditorApi } from '../../editor'
-import { docWith, editorFromDOM, jsonHasNode, renderEditor } from '../../test/editorHarness'
+import { docWith, editorFromDOM, jsonHasNode, jsonFindNode, renderEditor } from '../../test/editorHarness'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 import {
   ConditionalBlockFeature,
@@ -35,6 +35,18 @@ const equalsCondition = (ref: string, value: string | number): Condition => ({
 
 /** What a freshly inserted block carries (the documented contract default). */
 const DRAFT = { all: [{ op: null, params: [null, null] }] }
+
+  /** Paste a data-condition payload through a fresh editor and read back the
+   *  attr — the shape-guard rig every degradation test shares. Strings pass
+   *  through RAW (some payloads are deliberately exact). */
+  const pasteCondition = (condition: unknown): unknown => {
+    const created = renderEditor([ConditionalBlockFeature])
+    const payload = typeof condition === 'string' ? condition : JSON.stringify(condition)
+    created.editor.commands.insertContent(
+      `<div data-conditional-block data-condition='${payload}'><p>x</p></div>`,
+    )
+    return jsonFindNode(created.api.getJSON().doc, 'conditionalBlock')?.attrs?.condition
+  }
 
 /** Wrap `inner` in `depth` nested conditionalBlocks. */
 function nestedConditional(depth: number, inner: JSONContent): JSONContent {
@@ -156,20 +168,12 @@ describe('conditional block', () => {
   })
 
   it('degrades an op:null leaf with WRONG params length to a draft (empty params would swallow the variable pick)', () => {
-    const paste = (condition: string) => {
-      const created = renderEditor([ConditionalBlockFeature])
-      created.editor.commands.insertContent(
-        `<div data-conditional-block data-condition='${condition}'><p>x</p></div>`,
-      )
-      return created.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
-        ?.attrs?.condition
-    }
     // The form writes via params.map — an empty array drops every write, so
     // the shape guard must refuse drafts outside the 1–2 slot range.
-    expect(paste('{"all":[{"op":null,"params":[]}]}')).toEqual(DRAFT)
-    expect(paste(`{"all":[{"op":null,"params":${JSON.stringify(Array(50).fill(null))}}]}`)).toEqual(DRAFT)
+    expect(pasteCondition('{"all":[{"op":null,"params":[]}]}')).toEqual(DRAFT)
+    expect(pasteCondition(`{"all":[{"op":null,"params":${JSON.stringify(Array(50).fill(null))}}]}`)).toEqual(DRAFT)
     // A normal two-hole draft still round-trips untouched.
-    expect(paste('{"all":[{"op":null,"params":[null,null]}]}')).toEqual({
+    expect(pasteCondition('{"all":[{"op":null,"params":[null,null]}]}')).toEqual({
       all: [{ op: null, params: [null, null] }],
     })
   })
@@ -179,12 +183,7 @@ describe('conditional block', () => {
       { op: 'toString', params: [] }, // Object.prototype key ≠ operator
       { op: 'EXISTS', params: [{ type: 'variable', ref: 'a' }, null] }, // unary with 2 params
     ]) {
-      const created = renderEditor([ConditionalBlockFeature])
-      created.editor.commands.insertContent(
-        `<div data-conditional-block data-condition='${JSON.stringify(condition)}'><p>x</p></div>`,
-      )
-      const block = created.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')
-      expect(block?.attrs?.condition).toEqual(DRAFT)
+      expect(pasteCondition(condition)).toEqual(DRAFT)
     }
   })
 
@@ -196,15 +195,6 @@ describe('conditional block', () => {
       return c
     }
     const wide = (leaves: number) => ({ all: Array.from({ length: leaves }, () => LEAF) })
-    const pasteCondition = (cond: unknown) => {
-      const ed = renderEditor([ConditionalBlockFeature])
-      ed.editor.commands.insertContent(
-        `<div data-conditional-block data-condition='${JSON.stringify(cond)}'><p>x</p></div>`,
-      )
-      return ed.api.getJSON().doc.content?.find((n) => n.type === 'conditionalBlock')?.attrs
-        ?.condition
-    }
-
     expect(pasteCondition(deep(2))).toEqual(deep(2)) // control: sane nesting survives
     expect(pasteCondition(deep(12))).toEqual(DRAFT) // depth cap
     expect(pasteCondition(wide(51))).toEqual(DRAFT) // leaf cap

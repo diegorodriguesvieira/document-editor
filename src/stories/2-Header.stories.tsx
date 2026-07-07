@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { DocumentEditor } from '../editor'
+import {
+  DocumentEditor,
+  useFeatureState,
+  type DocumentEditorRenderContext,
+} from '../editor'
 import { ALL_FEATURES, Shell, STARTER_DOC } from './storyShell'
 
 
@@ -74,6 +78,15 @@ export const CustomContent: Story = {
   },
 }
 
+/** LIVE header state: the render prop is invoked on React renders, not on
+ *  document transactions — reactive reads go through `useFeatureState`. */
+function DocumentStatus({ ctx }: { ctx: DocumentEditorRenderContext }) {
+  const isEmpty = useFeatureState(ctx.editor, () => ctx.api.isEmpty())
+  return (
+    <span style={{ fontSize: 12, color: '#5f6368' }}>{isEmpty ? 'empty' : 'editing'}</span>
+  )
+}
+
 export const DifferentContent: Story = {
   name: 'A different header (breadcrumb style)',
   render: () => (
@@ -86,9 +99,7 @@ export const DifferentContent: Story = {
             <nav style={{ fontSize: 13, color: '#5f6368' }}>
               Contracts / 2026 / <strong style={{ color: '#202124' }}>ACME renewal</strong>
             </nav>
-            <span style={{ fontSize: 12, color: '#5f6368' }}>
-              {ctx.api.isEmpty() ? 'empty' : 'editing'}
-            </span>
+            <DocumentStatus ctx={ctx} />
           </>
         )}
       />
@@ -98,8 +109,10 @@ export const DifferentContent: Story = {
     docs: {
       description: {
         story:
-          'The render prop receives the full context (`{ editor, api, resolved }`) — header content can be ' +
-          'live (this one reads `api.isEmpty()`).',
+          'The render prop receives the full context (`{ editor, api, resolved }`). For LIVE state ' +
+          '(this status flips as you edit), put a small component in the header and read the document ' +
+          'through `useFeatureState(ctx.editor, () => ctx.api.isEmpty())` — the render prop itself is ' +
+          'only re-invoked on React renders, not on every document transaction.',
       },
     },
   },

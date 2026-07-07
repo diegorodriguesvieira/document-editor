@@ -25,9 +25,9 @@ describe('platform features', () => {
     expect(boldOnly.resolved.toolbar.map((t) => t.id)).not.toContain('bulletList')
   })
 
-  it('exec returns false for a command no enabled feature provides', () => {
+  it('exec THROWS for a command no enabled feature provides (no silent no-op)', () => {
     const { api } = renderEditor([BoldFeature])
-    expect(api.exec('lists.bullet')).toBe(false)
+    expect(() => api.exec('lists.bullet')).toThrow(/lists\.bullet.*not registered/)
   })
 
   it('every block/mark command the presets rely on actually applies', () => {

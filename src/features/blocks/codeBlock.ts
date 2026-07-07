@@ -1,5 +1,6 @@
 import { CodeBlock } from '@tiptap/extension-code-block'
 import { defineFeature } from '../../editor'
+import { icons } from '../icons'
 
 /** Fenced code block. */
 export const CodeBlockFeature = defineFeature({
@@ -13,7 +14,7 @@ export const CodeBlockFeature = defineFeature({
     {
       id: 'codeBlock',
       label: 'Code block',
-      icon: 'C',
+      icon: icons.code,
       commandId: 'codeBlock.toggle',
       isActive: (state) => state.isActive('codeBlock'),
     },

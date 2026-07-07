@@ -1,7 +1,7 @@
-/* App-only chrome (playground). The editor's own look lives in the SDK skin
-   `src/editor/editor.css`, imported by App.tsx. Everything here styles the demo
-   shell around the editor and will go away when the app is replaced by a real
-   consumer. */
+/* App-only chrome (playground). The SDK skin ships inside the components
+   (an Emotion Global mounted by DocumentEditor) — there is no editor.css to
+   import. Everything here styles the demo shell around the editor and will go
+   away when the app is replaced by a real consumer. */
 
 :root {
   font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
@@ -61,7 +61,8 @@ body {
   flex: 1 0 auto;
 }
 
-/* Right rail wrapper — the app composes ZoomRail + CommentsPanel in here. */
+/* Right rail wrapper — consumer-owned gutter; the app renders its own
+   CommentCards here (not the SDK's CommentsPanel). */
 .right-rail {
   display: flex;
   flex-direction: column;
@@ -103,7 +104,7 @@ body {
   font-size: 12px;
 }
 
-.empty-state__cta {
+.empty-state__cta.empty-state__cta {
   margin-top: 8px;
   padding: 8px 16px;
   border: none;
@@ -114,7 +115,7 @@ body {
   cursor: pointer;
 }
 
-.empty-state__cta:hover {
+.empty-state__cta.empty-state__cta:hover {
   background: #333;
 }
 
@@ -151,7 +152,7 @@ body {
   text-align: center;
 }
 
-.comment-cards__card {
+.comment-cards__card.comment-cards__card {
   display: flex;
   gap: 8px;
   padding: 8px 10px;
@@ -165,7 +166,7 @@ body {
   cursor: pointer;
 }
 
-.comment-cards__card:hover {
+.comment-cards__card.comment-cards__card:hover {
   background: #333;
 }
 
@@ -220,7 +221,7 @@ body {
   gap: 4px;
 }
 
-.zoom-controls__btn {
+.zoom-controls__btn.zoom-controls__btn {
   width: 36px;
   height: 36px;
   border: 1px solid transparent;
@@ -232,7 +233,7 @@ body {
   cursor: pointer;
 }
 
-.zoom-controls__btn:hover {
+.zoom-controls__btn.zoom-controls__btn:hover {
   background: #f1f3f4;
 }
 
@@ -244,7 +245,7 @@ body {
   user-select: none;
 }
 
-.app-dock__send {
+.app-dock__send.app-dock__send {
   grid-column: 3;
   justify-self: end;
   height: 40px;
@@ -259,7 +260,7 @@ body {
   cursor: pointer;
 }
 
-.app-dock__send:hover {
+.app-dock__send.app-dock__send:hover {
   background: #343434;
 }
 

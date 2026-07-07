@@ -10,8 +10,9 @@ export interface CreateEditorOptions {
   content?: DocumentJSON
   /** Optional mount point. Omit for a headless editor (SSR, tests, export). */
   element?: HTMLElement
-  /** Called when content fails schema validation instead of silently wiping the
-   *  document. Defaults to throwing. */
+  /** Called when INITIAL content (or an insertContent-style flow) fails schema
+   *  validation instead of silently wiping the document. Defaults to throwing.
+   *  `api.setJSON` does NOT route here — it throws synchronously. */
   onContentError?: (error: Error) => void
 }
 

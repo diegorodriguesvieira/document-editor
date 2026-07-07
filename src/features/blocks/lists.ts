@@ -2,6 +2,7 @@ import { BulletList } from '@tiptap/extension-bullet-list'
 import { OrderedList } from '@tiptap/extension-ordered-list'
 import { ListItem } from '@tiptap/extension-list-item'
 import { defineFeature } from '../../editor'
+import { icons } from '../icons'
 
 /** Bullet and ordered lists (bundles the shared ListItem node). */
 export const ListsFeature = defineFeature({
@@ -16,7 +17,7 @@ export const ListsFeature = defineFeature({
       id: 'bulletList',
       group: 'blocks',
       label: 'Bullet list',
-      icon: '•',
+      icon: icons.bulletList,
       commandId: 'lists.bullet',
       isActive: (state) => state.isActive('bulletList'),
     },
@@ -24,7 +25,7 @@ export const ListsFeature = defineFeature({
       id: 'orderedList',
       group: 'blocks',
       label: 'Numbered list',
-      icon: '1.',
+      icon: icons.orderedList,
       commandId: 'lists.ordered',
       isActive: (state) => state.isActive('orderedList'),
     },

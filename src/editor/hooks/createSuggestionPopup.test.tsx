@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { createRef } from 'react'
 import { describe, expect, it } from 'vitest'
 import { DocumentEditor } from '../../editor'
@@ -60,7 +61,7 @@ describe('createSuggestionPopup (the / menu, end to end)', () => {
     expect(await screen.findByRole('option', { name: /Table/ })).toBeInTheDocument()
   })
 
-  it('the query filters the rail items and Enter runs the pick where the "/query" was', async () => {
+  it('the query filters the dock items and Enter runs the pick where the "/query" was', async () => {
     const { editor, type, keydown } = await mountEditor(
       <DocumentEditor features={[TableFeature, LinkFeature]} />,
     )
@@ -181,5 +182,37 @@ describe('useListKeyboardNav (the shared ref contract)', () => {
       handled = ref.current!.onKeyDown(keyEvent('ArrowDown'))
     })
     expect(handled).toBe(true)
+  })
+})
+
+describe('Escape ordering across surfaces (innermost-first)', () => {
+  it('closes the POPUP first — an older pinned panel survives the press', async () => {
+    // The popup lives in TipTap plugin callbacks, not a useDismissable
+    // component: without joining the Escape stack, the PANEL (older surface,
+    // still top-of-stack) closed in its place, its preventDefault starved
+    // ProseMirror, and the popup survived — exactly inverted.
+    const user = userEvent.setup()
+    const { type, keydown } = await mountEditor(
+      <DocumentVariablesProvider variables={[{ id: 'client.name', label: 'Client name' }]}>
+        <DocumentEditor features={[MergeFieldFeature]} />
+      </DocumentVariablesProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    await user.click(screen.getByRole('button', { name: 'Pin panel' }))
+    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
+
+    await type('@')
+    await waitFor(() => expect(popup()).not.toBeNull())
+
+    await keydown('Escape')
+    await waitFor(() => expect(popup()).toBeNull())
+    // The pinned panel is untouched — only the innermost surface closed.
+    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
+
+    // With the popup gone the panel is innermost again: Escape now closes IT.
+    await keydown('Escape')
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Variables' })).toBeNull(),
+    )
   })
 })

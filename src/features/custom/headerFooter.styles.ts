@@ -58,12 +58,10 @@ export const headerFooterStyles = css`
     color: var(--editor-text-subtle);
   }
 
-  .document-editor__surface .doc-region__remove {
-    border: none;
+  .document-editor__surface .doc-region__remove.doc-region__remove {
     background: transparent;
     color: var(--editor-danger);
     font-size: 12px;
-    cursor: pointer;
     opacity: 0;
     transition: opacity 0.12s;
   }

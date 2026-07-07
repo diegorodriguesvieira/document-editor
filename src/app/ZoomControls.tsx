@@ -1,3 +1,7 @@
+import AddIcon from '@mui/icons-material/Add'
+import RemoveIcon from '@mui/icons-material/Remove'
+import IconButton from '@mui/material/IconButton'
+
 interface ZoomControlsProps {
   zoom: number
   onZoomIn: () => void
@@ -21,8 +25,7 @@ export function ZoomControls({
 }: ZoomControlsProps) {
   return (
     <div className="zoom-controls" role="toolbar" aria-label="Zoom">
-      <button
-        type="button"
+      <IconButton
         className="zoom-controls__btn"
         title="Zoom out"
         aria-label="Zoom out"
@@ -30,13 +33,12 @@ export function ZoomControls({
         onMouseDown={(event) => event.preventDefault()}
         onClick={onZoomOut}
       >
-        −
-      </button>
+        <RemoveIcon />
+      </IconButton>
       <span className="zoom-controls__zoom" aria-hidden>
         {Math.round(zoom * 100)}%
       </span>
-      <button
-        type="button"
+      <IconButton
         className="zoom-controls__btn"
         title="Zoom in"
         aria-label="Zoom in"
@@ -44,8 +46,8 @@ export function ZoomControls({
         onMouseDown={(event) => event.preventDefault()}
         onClick={onZoomIn}
       >
-        +
-      </button>
+        <AddIcon />
+      </IconButton>
     </div>
   )
 }

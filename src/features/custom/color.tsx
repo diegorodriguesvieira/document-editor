@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import IconButton from '@mui/material/IconButton'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
-import { defineFeature, useDismissable, useFeatureState, type FeatureRenderContext } from '../../editor'
+import { defineFeature, PopupShell, useFeatureState, type FeatureRenderContext } from '../../editor'
+import { popupTriggerProps } from '../promptForms'
 
 /** The default palette (Google-Docs-ish) — swap it via `createColorFeature`. */
 const DEFAULT_PALETTE = [
@@ -36,30 +37,8 @@ function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette
     (ed) => (ed.getAttributes('textStyle').color as string | undefined) ?? null,
   )
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ left: 0, top: 0 })
   const swatchRef = useRef<HTMLButtonElement>(null)
-  const popoverRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  // The swatch counts as "inside" so toggling it doesn't insta-reopen. Fixed
-  // coordinates → close on scroll/resize too (the anchor drifts away).
-  useDismissable([popoverRef, swatchRef], () => setOpen(false), {
-    enabled: open,
-    closeOnScroll: true,
-  })
-
-  const toggle = () => {
-    const rect = swatchRef.current?.getBoundingClientRect()
-    // The swatch lives in the BUBBLE, which follows the selection anywhere —
-    // clamp so the ~190px grid never overflows the right edge of the viewport.
-    if (rect) {
-      setPos({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 198)),
-        top: rect.bottom + 6,
-      })
-    }
-    setOpen((value) => !value)
-  }
 
   const set = (color: string) => {
     api.exec('color.set', color)
@@ -68,30 +47,25 @@ function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette
 
   return (
     <>
-      <button
+      <IconButton
         ref={swatchRef}
-        type="button"
         className="color-swatch"
-        title="Text color"
-        aria-label="Text color"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={toggle}
+        {...popupTriggerProps('Text color', open, () => setOpen((value) => !value), 'menu')}
       >
         <span className="color-swatch__dot" style={{ backgroundColor: current ?? '#000000' }} />
-      </button>
+      </IconButton>
 
-      {open
-        ? createPortal(
-            <div
-              ref={popoverRef}
-              className="document-editor-popup color-picker"
-              role="menu"
-              aria-label="Text color"
-              // z-index lives in the stylesheet (--editor-z-popup) so consumers can re-stack.
-              style={{ position: 'fixed', left: pos.left, top: pos.top }}
-              onMouseDown={(event) => event.preventDefault()}
-            >
-              <div className="color-picker__grid">
+      <PopupShell
+        anchorEl={swatchRef.current}
+        open={open}
+        onClose={() => setOpen(false)}
+        surfaceClassName="color-picker"
+        role="menu"
+        ariaLabel="Text color"
+        popperProps={{ onMouseDown: (event) => event.preventDefault() }}
+        paperProps={{ sx: { p: 1.5 } }}
+      >
+        <div className="color-picker__grid">
                 <button
                   type="button"
                   className="color-picker__swatch color-picker__default"
@@ -129,19 +103,16 @@ function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette
                 >
                   +
                 </button>
-              </div>
-              {/* Hidden native picker — the "+" triggers it; live-applies on change. */}
-              <input
-                ref={inputRef}
-                type="color"
-                className="color-picker__input"
-                defaultValue={current ?? '#000000'}
-                onChange={(event) => api.exec('color.set', event.target.value)}
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+          </div>
+          {/* Hidden native picker — the "+" triggers it; live-applies on change. */}
+          <input
+            ref={inputRef}
+            type="color"
+            className="color-picker__input"
+            defaultValue={current ?? '#000000'}
+            onChange={(event) => api.exec('color.set', event.target.value)}
+          />
+      </PopupShell>
     </>
   )
 }
@@ -162,7 +133,19 @@ export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOp
     id: 'color',
     extensions: () => [TextStyle, Color],
     commands: {
-      'color.set': (editor, payload) => editor.chain().focus().setColor(payload as string).run(),
+      'color.set': (editor, payload) => {
+        // The value lands in a style attribute (`color: <value>`) of the
+        // backend/PDF HTML contract — validate like every payload sibling
+        // (link.set, image.insert). The regex is the injection gate (no
+        // declaration smuggling); CSS.supports refines it in real browsers
+        // (jsdom lacks it).
+        const color = typeof payload === 'string' ? payload.trim() : ''
+        if (!color || /[;{}<>]/.test(color)) return false
+        if (typeof CSS !== 'undefined' && CSS.supports && !CSS.supports('color', color)) {
+          return false
+        }
+        return editor.chain().focus().setColor(color).run()
+      },
       'color.unset': (editor) => editor.chain().focus().unsetColor().run(),
     },
     toolbar: [

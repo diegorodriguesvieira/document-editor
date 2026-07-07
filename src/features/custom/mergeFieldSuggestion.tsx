@@ -1,6 +1,11 @@
 import { forwardRef, useMemo } from 'react'
 import type { Extension } from '@tiptap/core'
-import { createSuggestionPopup, useListKeyboardNav, type SuggestionPopupRef } from '../../editor'
+import {
+  createSuggestionPopup,
+  SuggestionList,
+  useListKeyboardNav,
+  type SuggestionPopupRef,
+} from '../../editor'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 
 /**
@@ -28,31 +33,18 @@ export const MergeFieldMenu = forwardRef<
 
   const { index, setIndex } = useListKeyboardNav(ref, items, command)
 
-  if (items.length === 0) {
-    return <div className="slash-menu slash-menu--empty">No variables found</div>
-  }
-
   return (
-    <div className="slash-menu" role="listbox" aria-label="Variables">
-      {items.map((variable, i) => (
-        <button
-          key={variable.id}
-          type="button"
-          role="option"
-          aria-selected={i === index}
-          className="slash-menu__item"
-          data-active={i === index}
-          onMouseEnter={() => setIndex(i)}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            command(variable)
-          }}
-        >
-          <span className="slash-menu__icon">@</span>
-          {variable.label}
-        </button>
-      ))}
-    </div>
+    <SuggestionList
+      items={items}
+      index={index}
+      setIndex={setIndex}
+      onPick={command}
+      ariaLabel="Variables"
+      emptyText="No variables found"
+      itemKey={(variable) => variable.id}
+      icon={() => '@'}
+      label={(variable) => variable.label}
+    />
   )
 })
 

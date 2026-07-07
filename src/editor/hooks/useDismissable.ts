@@ -12,12 +12,46 @@ type MaybeRef = RefObject<HTMLElement | null>
 const escapeStack: Array<() => void> = []
 
 /**
+ * Non-React surfaces join the same innermost-first Escape coordination (the
+ * caret suggestion popups live in TipTap plugin callbacks, not components).
+ * While the returned marker tops the stack, every `useDismissable` instance
+ * leaves Escape alone — no close, no preventDefault — so the unprevented
+ * event reaches the surface's OWN exit handler (Suggestion's, for popups).
+ * Returns an idempotent unregister; call it on the surface's exit.
+ */
+export function registerEscapeSurface(): () => void {
+  const marker = () => {}
+  escapeStack.push(marker)
+  return () => {
+    const index = escapeStack.indexOf(marker)
+    if (index >= 0) escapeStack.splice(index, 1)
+  }
+}
+
+/**
+ * React face of {@link registerEscapeSurface} for surfaces whose Escape is
+ * owned by SOMEONE ELSE — an MUI Menu/Popover/Dialog handles its own
+ * `onClose(…, 'escapeKeyDown')`. While `enabled`, the older useDismissable
+ * surfaces (an open page region, the pinned variables panel) yield the press
+ * instead of closing in the newer surface's place.
+ */
+export function useEscapeSurface(enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return
+    return registerEscapeSurface()
+  }, [enabled])
+}
+
+/**
  * The dismiss contract every floating surface shares — capture-phase outside
  * click (so it wins over ProseMirror's own mousedown handling) + Escape, and
  * optionally scroll/resize for surfaces anchored to fixed page coordinates
  * that would drift. One owner, so behavior fixes land once instead of once
- * per popover: the context menu, the color picker and the merge-field modal
- * all sit on this hook, and a feature shipping its own popover should too.
+ * per popover: the color picker, the variables panel (merge-field), the
+ * prompt forms and open page regions (header/footer) all sit on this hook —
+ * usually through PopupShell — and a feature shipping its own popover should
+ * too. A surface whose dismissal MUI already owns (Menu/Popover/Dialog)
+ * coordinates via {@link useEscapeSurface} instead.
  *
  * `refs` are the elements that count as "inside" (e.g. the popover AND the
  * button that toggles it, so the toggle doesn't insta-reopen).

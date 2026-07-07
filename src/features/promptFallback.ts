@@ -1,8 +1,10 @@
 /**
  * The payload-or-prompt idiom shared by the example features (link, image,
- * comments): commands take a typed payload — tests and custom controls pass
- * it — and fall back to a bare `window.prompt` as placeholder UI. One home,
- * so swapping the prompt for a dialog happens once.
+ * comments): commands take a typed payload — the promptForms controls, custom
+ * controls and tests pass it — and fall back to a bare `window.prompt` only
+ * when exec'd WITHOUT one (keymaps, headless calls). Deliberately kept as the
+ * last-resort fallback; the shipped UI is the non-modal forms in
+ * promptForms.tsx.
  *
  * `null` means the user CANCELLED the prompt (Escape) — callers must abort,
  * never treat it as a submitted empty string. `''` is a deliberate empty

@@ -49,8 +49,8 @@ export const MinimalFeatureSet: Story = {
   name: 'Minimal feature set (opt-in)',
   render: () => (
     <Shell>
-      {/* BASIC_DOC: no custom nodes — content whose feature is disabled
-          would THROW (the SDK never silently wipes a document). */}
+      {/* BASIC_DOC: paragraphs only (the kernel-safe shape) — content whose
+          feature is disabled would THROW (no silent wipe). */}
       <DocumentEditor
         features={[HistoryFeature, BoldFeature, ItalicFeature, HeadingFeature]}
         content={BASIC_DOC}

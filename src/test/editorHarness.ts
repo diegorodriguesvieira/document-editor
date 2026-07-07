@@ -1,3 +1,5 @@
+import { DOMParser as PMDOMParser, type Slice } from '@tiptap/pm/model'
+import type { EditorView } from '@tiptap/pm/view'
 import { onTestFinished } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import {
@@ -66,4 +68,25 @@ export function jsonFindNode(node: JSONContent, type: string): JSONContent | und
     if (found) return found
   }
   return undefined
+}
+
+/** Parse HTML into a Slice against the editor's schema — exactly what the
+ *  paste/drop pipeline feeds handleDrop. */
+export function parseSliceFromHTML(editor: Editor, html: string): Slice {
+  const el = document.createElement('div')
+  el.innerHTML = html
+  return PMDOMParser.fromSchema(editor.schema).parseSlice(el)
+}
+
+/** Dispatch a drop through PM's own handleDrop prop chain. Coordinates are
+ *  fixed — every caller stubs view.posAtCoords (jsdom has no layout). */
+export function dispatchDrop(view: EditorView, slice: Slice | null, moved = false) {
+  return view.someProp('handleDrop', (handler) =>
+    handler(
+      view,
+      new MouseEvent('drop', { clientX: 10, clientY: 10 }) as DragEvent,
+      slice as never,
+      moved,
+    ),
+  )
 }

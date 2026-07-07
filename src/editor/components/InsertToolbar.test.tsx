@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createMockEditor } from '../core/createMockEditor'
 import { defineFeature } from '../core/defineFeature'
 import { InsertToolbar } from './InsertToolbar'
+import { LinkFeature } from '../../features'
 import { resolveFeatures } from '../core/registry'
 
 const tableish = defineFeature({
@@ -45,6 +46,14 @@ describe('<InsertToolbar />', () => {
     // with isActive) carry aria-pressed.
     expect(screen.getByRole('button', { name: 'Table' })).not.toHaveAttribute('aria-pressed')
     expect(screen.getByRole('button', { name: 'Quote' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it("the SHIPPED Link insert is a pure action — no aria-pressed in the dock (its pressed state has no skin there)", () => {
+    const mock = createMockEditor()
+    render(
+      <InsertToolbar editor={null} api={mock.api} resolved={resolveFeatures([LinkFeature])} />,
+    )
+    expect(screen.getByRole('button', { name: 'Link' })).not.toHaveAttribute('aria-pressed')
   })
 
   it('dispatches the insert command via api.exec on click', async () => {

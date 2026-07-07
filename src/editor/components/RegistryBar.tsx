@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
+import IconButton from '@mui/material/IconButton'
+import ToggleButton from '@mui/material/ToggleButton'
 import type { Editor } from '@tiptap/core'
 import type { EditorApi } from '../core/EditorApi'
 import type { ToolbarItem } from '../core/types'
@@ -75,22 +77,25 @@ function DefaultButton({
   iconFallback: (item: ToolbarItem) => ReactNode
 }) {
   const { item, active, disabled, run } = button
-  return (
-    <button
-      type="button"
-      className={className}
-      data-group={item.group}
-      aria-label={item.label}
-      // Only TOGGLES announce a pressed state — an action button (insert
-      // Table, Undo…) with aria-pressed="false" reads as a stuck toggle.
-      aria-pressed={item.isActive ? active : undefined}
-      disabled={disabled}
-      title={item.label}
-      // Keep the selection while clicking the button.
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={run}
-    >
-      {item.icon ?? iconFallback(item)}
-    </button>
+  const common = {
+    className,
+    'data-group': item.group,
+    'aria-label': item.label,
+    disabled,
+    title: item.label,
+    // Keep the selection while clicking the button.
+    onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+    onClick: run,
+  }
+  const content = item.icon ?? iconFallback(item)
+  // Only TOGGLES announce a pressed state (MUI emits aria-pressed from
+  // `selected`) — an action button (insert Table, Undo…) with
+  // aria-pressed="false" would read as a stuck toggle.
+  return item.isActive ? (
+    <ToggleButton value={item.id} selected={active} {...common}>
+      {content}
+    </ToggleButton>
+  ) : (
+    <IconButton {...common}>{content}</IconButton>
   )
 }

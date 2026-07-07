@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { defineFeature } from './defineFeature'
 import { docWith, renderEditor } from '../../test/editorHarness'
 import { BoldFeature, HistoryFeature, TableFeature } from '../../features'
 
@@ -52,5 +53,25 @@ describe('EditorApi (the facade over a real editor)', () => {
     off()
     created.editor.commands.setTextSelection(4)
     expect(seen.mock.calls.length).toBe(calls)
+  })
+})
+
+describe('exec fail-fast contract', () => {
+  it('THROWS on an unregistered command id — a typo can never silently no-op', () => {
+    // Boot validation covers declared channel references; dynamic exec()
+    // calls from custom `render` controls are only checkable here. `false`
+    // would make a typo indistinguishable from "didn't apply".
+    const { api } = renderEditor([BoldFeature])
+    expect(() => api.exec('bold.togle')).toThrow(/bold\.togle.*not registered/)
+  })
+
+  it('still returns false for a REGISTERED command that did not apply', () => {
+    const noop = defineFeature({
+      id: 'noop',
+      extensions: () => [],
+      commands: { 'noop.run': () => false },
+    })
+    const { api } = renderEditor([noop])
+    expect(api.exec('noop.run')).toBe(false)
   })
 })

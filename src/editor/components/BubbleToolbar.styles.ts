@@ -1,10 +1,14 @@
 import { css } from '@emotion/react'
 
-/* Bubble menu — formatting on text selection (floated by TipTap). Overrides the
-   shared .editor-toolbar__btn skin for the dark floating surface. */
+/* Bubble menu — formatting on text selection (floated by TipTap). The pill
+   box; the BUTTONS inside are MUI, recolored by editorDarkTheme. */
 export const bubbleToolbarStyles = css`
-  /* Floating surface: must stack above the fixed insert dock (z 900). */
+  /* Floating surface: must stack above the fixed footer/header bars (z 900).
+     'position: relative' is what makes the z-index REAL — the class lands on
+     the inner (static) div, not on TipTap's positioned wrapper, and z-index
+     is inert on non-positioned elements. */
   .bubble-toolbar {
+    position: relative;
     z-index: var(--editor-z-popup);
   }
 
@@ -16,18 +20,5 @@ export const bubbleToolbarStyles = css`
     background: var(--editor-inverse-bg);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.36);
-  }
-
-  .bubble-toolbar__inner .editor-toolbar__btn {
-    color: var(--editor-inverse-fg);
-  }
-
-  .bubble-toolbar__inner .editor-toolbar__btn:hover {
-    background: color-mix(in srgb, var(--editor-inverse-fg) 12%, var(--editor-inverse-bg));
-  }
-
-  .bubble-toolbar__inner .editor-toolbar__btn[aria-pressed='true'] {
-    background: var(--editor-inverse-accent);
-    color: var(--editor-inverse-bg);
   }
 `

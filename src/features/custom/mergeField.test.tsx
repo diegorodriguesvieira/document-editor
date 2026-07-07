@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DocumentEditor, InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
-import { docWith, jsonHasNode, renderEditor } from '../../test/editorHarness'
-import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
+import { dispatchDrop, docWith, jsonHasNode, parseSliceFromHTML, renderEditor } from '../../test/editorHarness'
+import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML, panelAnchorFor } from './mergeField'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const SAMPLE: DocumentVariable[] = [
@@ -28,7 +28,11 @@ describe('mergeField', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Variables' }))
-    expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Variables' })
+    expect(dialog).toBeInTheDocument()
+    // Portaled to <body>, OUTSIDE .document-editor — wrapper-scoped token
+    // overrides do NOT reach it (the THEMING/catalog texts must respect this).
+    expect(dialog.closest('.document-editor')).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Client name' }))
     expect(mock.execCalls).toContainEqual({
@@ -274,64 +278,47 @@ describe('mergeField', () => {
     expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
   })
 
-  it('opens ABOVE the fixed insert dock, left-aligned with the @ button', async () => {
+  it('opens as a body-portaled Popper above the dock, carrying the region-gate MARKER', async () => {
+    // Positioning (own scroll/resize listeners, viewport clamp, top-start
+    // growth) is MUI Popper's job over a VIRTUAL anchor — jsdom mounts it at
+    // 0,0, so the pins here are structural: the dialog is portaled OUT of the
+    // dock, carries the functional 'document-editor-popup' class, and the
+    // Paper card is inside it.
     const user = userEvent.setup()
     const { container } = render(
       <DocumentVariablesProvider variables={SAMPLE}>
         <DocumentEditor features={[MergeFieldFeature]} />
       </DocumentVariablesProvider>,
     )
-    const dock = container.querySelector('.insert-dock') as HTMLElement
-    expect(dock).not.toBeNull()
-    const button = screen.getByRole('button', { name: 'Variables' })
-    const rect = (partial: Partial<DOMRect>) =>
-      ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}), ...partial }) as DOMRect
-    // A 1024×768 viewport (jsdom default) with the dock pinned at its bottom.
-    dock.getBoundingClientRect = () => rect({ top: 694, bottom: 760, left: 8, right: 1016 })
-    button.getBoundingClientRect = () => rect({ top: 709, bottom: 745, left: 500, right: 536 })
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
 
-    await user.click(button)
     const dialog = screen.getByRole('dialog', { name: 'Variables' })
-    // Bottom-anchored 12px above the dock (the panel grows UPWARD and never
-    // covers it), left-aligned with the button that opened it.
-    expect(dialog.style.bottom).toBe(`${window.innerHeight - 694 + 12}px`)
-    expect(dialog.style.left).toBe('500px')
+    expect(dialog.classList.contains('document-editor-popup')).toBe(true)
+    expect(dialog.classList.contains('mf-panel')).toBe(true)
+    expect(container.querySelector('.insert-dock')!.contains(dialog)).toBe(false)
+    expect(dialog.closest('body')).toBe(document.body)
+    expect(dialog.querySelector('.mf-panel__card')).not.toBeNull()
   })
 
-  it('falls back to the nearest toolbar container in a consumer-composed bar (no .insert-dock)', async () => {
-    const user = userEvent.setup()
-    // A consumer bar: InsertToolbar with its OWN class (renderFooter/panel
-    // composition) — the SDK dock class is nowhere in the tree.
-    render(
-      <DocumentVariablesProvider variables={SAMPLE}>
-        <InsertToolbar
-          editor={null}
-          api={createMockEditor().api}
-          resolved={resolveFeatures([MergeFieldFeature])}
-          className="consumer-dock-items"
-        />
-      </DocumentVariablesProvider>,
-    )
-    const bar = screen.getByRole('toolbar', { name: 'Insert' })
-    expect(bar.className).toBe('consumer-dock-items')
-    bar.getBoundingClientRect = () =>
-      ({ top: 700, bottom: 760, left: 400, right: 900, width: 500, height: 60, x: 400, y: 700, toJSON: () => ({}) }) as DOMRect
+  it('panelAnchorFor: the SDK dock wins, a consumer toolbar is the fallback, a loose button anchors itself', () => {
+    // The VERTICAL reference must clear the whole BAR the button lives in —
+    // this resolution used to be inline position math; now it feeds the
+    // Popper's virtual anchor and is pinned as a pure function.
+    const dock = document.createElement('div')
+    dock.className = 'insert-dock'
+    const inDock = document.createElement('button')
+    dock.appendChild(inDock)
+    expect(panelAnchorFor(inDock)).toBe(dock)
 
-    await user.click(screen.getByRole('button', { name: 'Variables' }))
-    const dialog = screen.getByRole('dialog', { name: 'Variables' })
-    // Anchored above the [role="toolbar"] container, not stranded at the
-    // bare-button fallback.
-    expect(dialog.style.bottom).toBe(`${window.innerHeight - 700 + 12}px`)
+    const bar = document.createElement('div')
+    bar.setAttribute('role', 'toolbar')
+    const inBar = document.createElement('button')
+    bar.appendChild(inBar)
+    expect(panelAnchorFor(inBar)).toBe(bar)
 
-    // Unlike the SDK's fixed dock, a consumer bar can sit in normal flow —
-    // scrolling moves its rect and the panel must follow (capture-phase
-    // listener, so inner scrollers count too).
-    bar.getBoundingClientRect = () =>
-      ({ top: 620, bottom: 680, left: 400, right: 900, width: 500, height: 60, x: 400, y: 620, toJSON: () => ({}) }) as DOMRect
-    fireEvent.scroll(window)
-    await waitFor(() =>
-      expect(dialog.style.bottom).toBe(`${window.innerHeight - 620 + 12}px`),
-    )
+    const loose = document.createElement('button')
+    expect(panelAnchorFor(loose)).toBe(loose)
+    expect(panelAnchorFor(null)).toBeNull()
   })
 
   it('updates the modal when variables arrive later — same feature, no remount', async () => {
@@ -356,14 +343,9 @@ describe('mergeField', () => {
 })
 
 describe('drop → caret to the right of the chip', () => {
-  it('chipFromSlice accepts a bare chip or one chip alone in a paragraph — nothing richer', async () => {
-    const { DOMParser } = await import('@tiptap/pm/model')
+  it('chipFromSlice accepts a bare chip or one chip alone in a paragraph — nothing richer', () => {
     const created = renderEditor([MergeFieldFeature])
-    const parse = (html: string) => {
-      const el = document.createElement('div')
-      el.innerHTML = html
-      return DOMParser.fromSchema(created.editor.schema).parseSlice(el)
-    }
+    const parse = (html: string) => parseSliceFromHTML(created.editor, html)
 
     const bare = parse(mergeFieldDragHTML(SAMPLE[0]))
     expect(chipFromSlice(bare)?.attrs.id).toBe('client.name')
@@ -377,26 +359,16 @@ describe('drop → caret to the right of the chip', () => {
 
   /** A mounted editor + the pieces a drop needs: a parsed payload slice and a
    *  stubbed posAtCoords (jsdom has no layout to resolve pixel coordinates). */
-  async function dropRig(text = 'Hello') {
-    const { DOMParser } = await import('@tiptap/pm/model')
+  function dropRig(text = 'Hello') {
     const created = renderEditor([MergeFieldFeature], { content: docWith(text) })
     const view = created.editor.view
-    const parse = (html: string) => {
-      const el = document.createElement('div')
-      el.innerHTML = html
-      return DOMParser.fromSchema(created.editor.schema).parseSlice(el)
-    }
-    // Dispatch exactly like ProseMirror's own drop path does: through the
-    // handleDrop prop chain.
-    const drop = (slice: ReturnType<typeof parse>, moved = false) =>
-      view.someProp('handleDrop', (handler) =>
-        handler(view, new MouseEvent('drop', { clientX: 10, clientY: 10 }) as DragEvent, slice, moved),
-      )
+    const parse = (html: string) => parseSliceFromHTML(created.editor, html)
+    const drop = (slice: ReturnType<typeof parse>, moved = false) => dispatchDrop(view, slice, moved)
     return { created, view, parse, drop }
   }
 
   it('handleDrop inserts the chip + a space and lands the caret right after them', async () => {
-    const { created, view, parse, drop } = await dropRig('Hello')
+    const { created, view, parse, drop } = dropRig('Hello')
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 }) // between "He" and "llo"
     const focus = vi.spyOn(view, 'focus')
 
@@ -416,7 +388,7 @@ describe('drop → caret to the right of the chip', () => {
   })
 
   it('pops the landing animation on the dropped chip and cleans the class up after it runs', async () => {
-    const { view, parse, drop } = await dropRig()
+    const { view, parse, drop } = dropRig()
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 1, inside: 0 })
     drop(parse(mergeFieldDragHTML(SAMPLE[0])))
 
@@ -428,7 +400,7 @@ describe('drop → caret to the right of the chip', () => {
   })
 
   it('an internal drag (moved) falls through to ProseMirror move semantics', async () => {
-    const { created, view, parse, drop } = await dropRig()
+    const { created, view, parse, drop } = dropRig()
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
     const before = created.editor.state
 
@@ -437,7 +409,7 @@ describe('drop → caret to the right of the chip', () => {
   })
 
   it('anything richer than one chip falls through to the default drop', async () => {
-    const { created, view, parse, drop } = await dropRig()
+    const { created, view, parse, drop } = dropRig()
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
     const before = created.editor.state
 
@@ -446,7 +418,7 @@ describe('drop → caret to the right of the chip', () => {
   })
 
   it('falls through to PM default at a BLOCK-level gap — the chip+space math only holds in inline content', async () => {
-    const { created, view, parse, drop } = await dropRig('Hello')
+    const { created, view, parse, drop } = dropRig('Hello')
     // pos 0 = the gap before the first paragraph: dropPoint resolves to a
     // depth-0 position where tr.insert would wrap the chip in a NEW paragraph,
     // landing it at insert+1 and inverting the chip/space order.
@@ -458,7 +430,7 @@ describe('drop → caret to the right of the chip', () => {
   })
 
   it('bails when the drop coordinates do not resolve to a document position', async () => {
-    const { created, view, parse, drop } = await dropRig()
+    const { created, view, parse, drop } = dropRig()
     vi.spyOn(view, 'posAtCoords').mockReturnValue(null)
     const before = created.editor.state
 

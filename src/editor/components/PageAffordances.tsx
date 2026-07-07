@@ -8,23 +8,22 @@ import type { PageRegion } from '../core/types'
  * the region's add command on click. Auto-mounted by {@link DocumentEditor}
  * when a feature contributes page regions.
  */
-export function PageAffordances({
-  api,
-  regions,
-  position,
-}: {
+export interface PageAffordancesProps {
   api: EditorApi
   regions: PageRegion[]
   position: 'top' | 'bottom'
-}) {
+}
+
+export function PageAffordances({ api, regions, position }: PageAffordancesProps) {
   const compute = useCallback(
     () => regions.filter((region) => region.position === position && !api.hasNode(region.nodeName)),
     [api, regions, position],
   )
 
-  // Selector with equality-skip: re-compute presence on every change, but only
-  // re-render when the SET of shown affordances actually changes — not on every
-  // keystroke (which `getJSON`-free is cheap, but the re-render isn't free).
+  // Selector with equality-skip: re-compute presence on every change, but
+  // only re-render when the SET of shown affordances actually changes — not
+  // on every keystroke (the recompute is cheap — hasNode, no getJSON — but a
+  // per-keystroke re-render isn't).
   const [shown, setShown] = useState(compute)
   useEffect(() => {
     const recompute = () =>

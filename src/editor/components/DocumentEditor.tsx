@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
 import { EditorContent } from '@tiptap/react'
+import type { Theme } from '@mui/material/styles'
 import type { EditorApi } from '../core/EditorApi'
 import { BubbleToolbar } from './BubbleToolbar'
 import { EditorContextMenu } from './EditorContextMenu'
@@ -10,6 +11,7 @@ import { useFeatureState } from '../hooks/useFeatureState'
 import type { ResolvedFeatures } from '../core/registry'
 import { useDocumentEditor, type UseDocumentEditorOptions } from '../hooks/useDocumentEditor'
 import { EditorSkin } from '../skin'
+import { EditorThemeProvider } from '../theme'
 
 export interface DocumentEditorRenderContext {
   /** Never null: the context is only built once the editor exists — render
@@ -20,20 +22,22 @@ export interface DocumentEditorRenderContext {
 }
 
 export interface DocumentEditorProps extends UseDocumentEditorOptions {
-  /** Replace the toolbar surface with your own (Level 4). There is no static
+  /** Replace the toolbar surface with your own. There is no static
    *  top bar: the default is {@link BubbleToolbar} — a floating formatting
    *  bar over the text selection. */
   renderToolbar?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Content for the editor HEADER — a fixed-height sticky bar the SDK ships
    *  by default (fill it with your title/actions; the shell's height and look
-   *  come from the skin: `--editor-header-height`). Return `null` to hide the
-   *  header entirely. Omit for the default (an empty bar). */
+   *  come from the skin: `--editor-header-height`). Return `null` (or any
+   *  nothing-to-render value: `undefined`/booleans, e.g. from `cond && <Bar/>`)
+   *  to hide the header entirely. Omit for the default (an empty bar). */
   renderHeader?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Content for the editor FOOTER — the fixed rounded bar over the page
    *  bottom. Defaults to the insert ACTIONS ({@link InsertToolbar}); pass your
-   *  own composition to keep the shell and swap the content. Return `null` to
-   *  hide the footer entirely (e.g. read-only mode) — the page's bottom
-   *  clearance goes with it. */
+   *  own composition to keep the shell and swap the content. Return `null`
+   *  (or `undefined`/booleans — anything React renders as nothing) to hide
+   *  the footer entirely (e.g. read-only mode) — the page's bottom clearance
+   *  goes with it. */
   renderFooter?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** CONSUMER-owned side panel in the LEFT gutter: render anything —
    *  including the insert actions themselves (`<InsertToolbar {...ctx}
@@ -52,6 +56,12 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
   renderEmptyState?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Visual scale of the page (1 = 100%). */
   zoom?: number
+  /** MUI theme for the editor CHROME (menus, popovers, buttons, forms).
+   *  Defaults to `createEditorTheme()` — the product look, with every visible
+   *  knob reading the `--editor-*` tokens. Pass `createEditorTheme(overrides)`
+   *  (or your app's theme) for full-fidelity chrome theming; the tokens keep
+   *  owning the document CONTENT skin either way. */
+  muiTheme?: Theme
 }
 
 /** Screen-centered overlay, visible only while the document is BLANK. Reads
@@ -83,6 +93,7 @@ export function DocumentEditor({
   renderRightPanel,
   renderEmptyState,
   zoom = 1,
+  muiTheme,
   ...options
 }: DocumentEditorProps) {
   const { editor, api, resolved } = useDocumentEditor(options)
@@ -96,9 +107,15 @@ export function DocumentEditor({
 
   // Header/footer semantics: the SHELLS are the SDK's (fixed heights, skin);
   // the render props fill them. Omitted → defaults (empty header, the insert
-  // actions in the footer); returning null hides the bar entirely.
-  const header = ctx && renderHeader ? renderHeader(ctx) : null
-  const showHeader = ctx !== null && (!renderHeader || header !== null)
+  // actions in the footer); returning any nothing-to-render value (null,
+  // undefined, a boolean — the `cond && <Bar/>` idiom) hides the bar entirely,
+  // never an empty floating shell.
+  const hidesShell = (value: ReactNode) => value == null || typeof value === 'boolean'
+  const header = ctx
+    ? renderHeader
+      ? renderHeader(ctx)
+      : <></> /* default: an empty bar — the shell itself is the product */
+    : null
 
   const footer = ctx
     ? renderFooter
@@ -112,41 +129,45 @@ export function DocumentEditor({
   const rightPanel = ctx && renderRightPanel ? renderRightPanel(ctx) : null
 
   return (
-    <div className="document-editor">
-      {/* The skin travels with the component now (Emotion Global) — there is
-          no editor.css to import. Duplicate mounts are harmless. */}
-      <EditorSkin />
-      {showHeader ? <header className="document-editor__header">{header}</header> : null}
-      {/* Fixed over the page bottom (out of flow) — the document scrolls
-          behind it and the shell reserves clearance below the page. */}
-      {footer != null ? <div className="document-editor__footer">{footer}</div> : null}
-      {leftPanel ? (
-        <aside className="document-editor__panel document-editor__panel--left">{leftPanel}</aside>
-      ) : null}
-      <div className="document-editor__column">
-        {toolbar}
-        {/* The page scrolls inside its column when zoomed — the rails stay put. */}
-        <div
-          className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}
-        >
-          <div className="document-editor__scale" style={{ zoom }}>
-            {ctx && resolved.pageRegions.length > 0 ? (
-              <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="top" />
-            ) : null}
-            <EditorContent editor={editor} className="document-editor__surface" />
-            {ctx && resolved.pageRegions.length > 0 ? (
-              <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="bottom" />
-            ) : null}
+    // ONE provider covers every surface: context crosses createPortal AND
+    // TipTap's ReactRenderer, so body-portaled menus/popovers inherit it.
+    <EditorThemeProvider theme={muiTheme}>
+      <div className="document-editor">
+        {/* The skin travels with the component now (Emotion Global) — there is
+            no editor.css to import. Duplicate mounts are harmless. */}
+        <EditorSkin />
+        {!hidesShell(header) ? <header className="document-editor__header">{header}</header> : null}
+        {/* Fixed over the page bottom (out of flow) — the document scrolls
+            behind it and the shell reserves clearance below the page. */}
+        {!hidesShell(footer) ? <div className="document-editor__footer">{footer}</div> : null}
+        {leftPanel ? (
+          <aside className="document-editor__panel document-editor__panel--left">{leftPanel}</aside>
+        ) : null}
+        <div className="document-editor__column">
+          {toolbar}
+          {/* The page scrolls inside its column when zoomed — the rails stay put. */}
+          <div
+            className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}
+          >
+            <div className="document-editor__scale" style={{ zoom }}>
+              {ctx && resolved.pageRegions.length > 0 ? (
+                <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="top" />
+              ) : null}
+              <EditorContent editor={editor} className="document-editor__surface" />
+              {ctx && resolved.pageRegions.length > 0 ? (
+                <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="bottom" />
+              ) : null}
+            </div>
           </div>
         </div>
+        {rightPanel ? (
+          <aside className="document-editor__panel document-editor__panel--right">{rightPanel}</aside>
+        ) : null}
+        {ctx && renderEmptyState ? <EmptyStateOverlay ctx={ctx} render={renderEmptyState} /> : null}
+        {ctx && resolved.contextMenu.length > 0 ? (
+          <EditorContextMenu editor={ctx.editor} api={ctx.api} sections={resolved.contextMenu} />
+        ) : null}
       </div>
-      {rightPanel ? (
-        <aside className="document-editor__panel document-editor__panel--right">{rightPanel}</aside>
-      ) : null}
-      {ctx && renderEmptyState ? <EmptyStateOverlay ctx={ctx} render={renderEmptyState} /> : null}
-      {ctx && resolved.contextMenu.length > 0 ? (
-        <EditorContextMenu editor={ctx.editor} api={ctx.api} sections={resolved.contextMenu} />
-      ) : null}
-    </div>
+    </EditorThemeProvider>
   )
 }

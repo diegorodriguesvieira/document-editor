@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { EditorToolbar, createMockEditor, resolveFeatures } from '../../editor'
@@ -60,28 +60,30 @@ describe('color feature', () => {
     expect(mock.execCalls).toContainEqual({ commandId: 'color.set', payload: '#00c2a8' })
   })
 
-  it('clamps the popover to the viewport when the swatch sits near the right edge', async () => {
+  it('the popover is a body-portaled MUI Popper carrying the region-gate MARKER', async () => {
+    // Positioning (viewport flip/clamp) is Popper's job now — jsdom mounts it
+    // at 0,0, so the pin here is structure: portaled OUTSIDE the toolbar, on
+    // <body>, with the functional 'document-editor-popup' class the
+    // header/footer gate reads to keep regions open for clicks inside it.
     const user = userEvent.setup()
     const mock = createMockEditor()
-    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />)
+    const { container } = render(
+      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
+    )
 
-    const swatch = screen.getByRole('button', { name: 'Text color' })
-    // The swatch rides the BUBBLE, which follows the selection — near the
-    // right edge the ~190px grid must shift left instead of overflowing.
-    swatch.getBoundingClientRect = () =>
-      ({ top: 40, bottom: 76, left: 1000, right: 1036, width: 36, height: 36, x: 1000, y: 40, toJSON: () => ({}) }) as DOMRect
-    await user.click(swatch)
+    await user.click(screen.getByRole('button', { name: 'Text color' }))
 
     const popover = document.querySelector('.color-picker') as HTMLElement
     expect(popover).not.toBeNull()
-    expect(popover.style.left).toBe(`${window.innerWidth - 198}px`)
-    expect(popover.style.top).toBe('82px')
+    expect(popover.classList.contains('document-editor-popup')).toBe(true)
+    expect(container.contains(popover)).toBe(false) // portaled out of the bar
+    expect(popover.closest('body')).toBe(document.body)
   })
 
   it('reflects the current color in the swatch reactively (real editor)', async () => {
     const created = renderEditor([ColorFeature], { content: HELLO })
     render(
-      <EditorToolbar editor={created.editor} api={created.api} resolved={resolveFeatures([ColorFeature])} />,
+      <EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved} />,
     )
 
     // The command re-renders the mounted ColorControl — that's the point of
@@ -95,5 +97,45 @@ describe('color feature', () => {
         backgroundColor: '#d93025',
       }),
     )
+  })
+})
+
+describe('color.set payload validation (the value lands in a style attribute)', () => {
+  it('rejects CSS-injection payloads, non-strings and empties — the HTML contract stays clean', () => {
+    const created = renderEditor([ColorFeature], { content: HELLO })
+    created.editor.commands.selectAll()
+
+    // Declaration smuggling through the exported style attribute.
+    expect(created.api.exec('color.set', 'red;background:url(//evil/x)')).toBe(false)
+    expect(created.api.exec('color.set', '#fff}body{display:none')).toBe(false)
+    // Junk payloads a custom control could send by accident.
+    expect(created.api.exec('color.set', { hex: '#fff' } as never)).toBe(false)
+    expect(created.api.exec('color.set')).toBe(false)
+    expect(created.api.exec('color.set', '   ')).toBe(false)
+
+    expect(created.api.getHTML()).not.toContain('background')
+    expect(created.editor.getAttributes('textStyle').color).toBeFalsy()
+
+    // The legitimate path is untouched.
+    expect(created.api.exec('color.set', '#188038')).toBe(true)
+  })
+})
+
+describe('the native custom picker (the "+" input)', () => {
+  it('live-applies each picked value and the popover STAYS open while picking', async () => {
+    const user = userEvent.setup()
+    const mock = createMockEditor()
+    render(
+      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Text color' }))
+
+    const input = document.querySelector('input[type="color"]') as HTMLInputElement
+    expect(input).not.toBeNull()
+    fireEvent.change(input, { target: { value: '#123456' } })
+
+    expect(mock.execCalls).toContainEqual({ commandId: 'color.set', payload: '#123456' })
+    // Picking is a live preview — the popover must not dismiss mid-drag.
+    expect(document.querySelector('.color-picker')).not.toBeNull()
   })
 })

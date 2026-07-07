@@ -2,12 +2,8 @@ import { css } from '@emotion/react'
 
 /* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>. */
 export const slashMenuStyles = css`
-  /* The caret-popup wrapper createSuggestionPopup mounts on <body>: it must
-     stack above the fixed insert dock (z 900) when the caret sits near it. */
-  .suggestion-popup {
-    z-index: var(--editor-z-popup);
-  }
-
+  /* The card is a MUI Paper; items are MUI MenuItems (hover/selected come
+     from the theme). Only layout + the icon chip + empty state remain. */
   .document-editor-popup .slash-menu {
     display: flex;
     flex-direction: column;
@@ -15,29 +11,12 @@ export const slashMenuStyles = css`
     max-height: 280px;
     overflow-y: auto;
     padding: 4px;
-    background: var(--editor-surface);
     border: 1px solid var(--editor-border);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   }
 
-  .document-editor-popup .slash-menu__item {
-    display: flex;
-    align-items: center;
+  .document-editor-popup .slash-menu__item.slash-menu__item {
     gap: 10px;
-    padding: 8px 10px;
-    border: none;
     border-radius: 6px;
-    background: transparent;
-    font: inherit;
-    font-size: 14px;
-    color: var(--editor-text);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .document-editor-popup .slash-menu__item[data-active='true'] {
-    background: var(--editor-menu-active-bg);
   }
 
   .document-editor-popup .slash-menu__icon {
@@ -55,9 +34,6 @@ export const slashMenuStyles = css`
 
   .document-editor-popup .slash-menu--empty {
     padding: 10px 12px;
-    background: var(--editor-surface);
-    border: 1px solid var(--editor-border);
-    border-radius: 8px;
     color: var(--editor-text-subtle);
     font-size: 13px;
   }

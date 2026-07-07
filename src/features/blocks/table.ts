@@ -1,5 +1,6 @@
 import { TableKit } from '@tiptap/extension-table'
 import { defineFeature } from '../../editor'
+import { icons } from '../icons'
 
 /** Tables (TableKit bundles Table + Row + Header + Cell). `resizable` installs
  *  ProseMirror's columnResizing plugin — drag handles on column borders. (Row
@@ -24,7 +25,7 @@ export const TableFeature = defineFeature({
   // NOT Mod-Shift-t: that's the browser's own "reopen closed tab" (Chrome/
   // Firefox/Safari, both platforms) — the page never sees the keydown.
   keymap: { 'Mod-Alt-t': 'table.insert' },
-  insert: [{ id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' }],
+  insert: [{ id: 'table', label: 'Table', icon: icons.table, commandId: 'table.insert' }],
   // Right-click inside a table → row/column/cell actions. Each item shows only
   // when it currently applies (via `editor.can()`): e.g. Merge needs a multi-cell
   // selection, Split needs a merged cell, Delete row/column hides on the last one.
@@ -39,7 +40,7 @@ export const TableFeature = defineFeature({
           items: [
             { id: 'row-above', label: 'Insert row above', icon: '↑', commandId: 'table.addRowBefore', isAvailable: (e) => e.can().addRowBefore() },
             { id: 'row-below', label: 'Insert row below', icon: '↓', commandId: 'table.addRowAfter', isAvailable: (e) => e.can().addRowAfter() },
-            { id: 'row-delete', label: 'Delete row', icon: '🗑', commandId: 'table.deleteRow', danger: true, isAvailable: (e) => e.can().deleteRow() },
+            { id: 'row-delete', label: 'Delete row', icon: icons.delete, commandId: 'table.deleteRow', danger: true, isAvailable: (e) => e.can().deleteRow() },
           ],
         },
         {
@@ -48,7 +49,7 @@ export const TableFeature = defineFeature({
           items: [
             { id: 'col-left', label: 'Insert column left', icon: '←', commandId: 'table.addColumnBefore', isAvailable: (e) => e.can().addColumnBefore() },
             { id: 'col-right', label: 'Insert column right', icon: '→', commandId: 'table.addColumnAfter', isAvailable: (e) => e.can().addColumnAfter() },
-            { id: 'col-delete', label: 'Delete column', icon: '🗑', commandId: 'table.deleteColumn', danger: true, isAvailable: (e) => e.can().deleteColumn() },
+            { id: 'col-delete', label: 'Delete column', icon: icons.delete, commandId: 'table.deleteColumn', danger: true, isAvailable: (e) => e.can().deleteColumn() },
           ],
         },
         {
@@ -63,7 +64,7 @@ export const TableFeature = defineFeature({
         {
           id: 'table',
           items: [
-            { id: 'delete-table', label: 'Delete table', icon: '🗑', commandId: 'table.delete', danger: true, isAvailable: (e) => e.can().deleteTable() },
+            { id: 'delete-table', label: 'Delete table', icon: icons.delete, commandId: 'table.delete', danger: true, isAvailable: (e) => e.can().deleteTable() },
           ],
         },
       ],

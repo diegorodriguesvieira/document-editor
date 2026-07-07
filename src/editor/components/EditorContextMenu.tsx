@@ -1,13 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
+import Divider from '@mui/material/Divider'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListSubheader from '@mui/material/ListSubheader'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import type { Editor } from '@tiptap/core'
 import type { EditorApi } from '../core/EditorApi'
-import { useDismissable } from '../hooks/useDismissable'
+import { useEscapeSurface } from '../hooks/useDismissable'
+import { POPUP_CLASS } from '../base.styles'
+import { tokenVar } from '../theme'
 import type { ContextMenuGroup, ContextMenuSection } from '../core/types'
 
 /**
- * Pure presentational menu — a card of grouped actions at (x, y). Kept separate
- * from the behaviour below so it's easy to test without a real editor.
+ * Pure presentational menu — grouped actions at (x, y), on MUI's Menu: the
+ * portal, viewport clamping, outside-click, Escape and scroll handling are
+ * all MUI's. Kept separate from the behaviour below so it's easy to test
+ * without a real editor.
  */
 export function ContextMenuView({
   x,
@@ -22,62 +30,67 @@ export function ContextMenuView({
   onRun: (commandId: string) => void
   onClose: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ left: x, top: y })
-
-  // Keep the menu inside the viewport (the page can be zoomed/scrolled).
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    setPos({
-      left: Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)),
-      top: Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)),
-    })
-  }, [x, y])
-
-  // Anchored to fixed click coordinates → also close on scroll/resize (drift).
-  useDismissable(ref, onClose, { closeOnScroll: true })
+  // MUI owns this surface's Escape (onClose 'escapeKeyDown') — older
+  // useDismissable surfaces (an open region, the pinned panel) must yield.
+  useEscapeSurface(true)
 
   return (
-    <div
-      ref={ref}
-      // `document-editor-popup` namespaces the SDK skin on body-portaled
-      // surfaces (a page's own `.context-menu` must not collide).
-      className="document-editor-popup context-menu"
-      role="menu"
-      aria-label="Context menu"
-      // z-index lives in the stylesheet (--editor-z-menu) so consumers can re-stack.
-      style={{ position: 'fixed', left: pos.left, top: pos.top }}
+    <Menu
+      open
+      onClose={onClose}
+      anchorReference="anchorPosition"
+      anchorPosition={{ left: x, top: y }}
+      slotProps={{
+        // The marker class goes on the PAPER only — a marked backdrop would
+        // turn every outside click into "inside a popup" for the region gate.
+        // `document-editor-popup` namespaces the SDK skin on body-portaled
+        // surfaces (a page's own `.context-menu` must not collide).
+        paper: {
+          className: `${POPUP_CLASS} context-menu`,
+          sx: {
+            minWidth: 240,
+            maxHeight: 'min(80vh, 520px)',
+            borderRadius: '12px',
+            boxShadow: tokenVar('--editor-shadow-pop'),
+          },
+        },
+        list: { 'aria-label': 'Context menu', dense: true },
+      }}
     >
-      {groups.map((group, gi) => (
-        <div key={group.id} className="context-menu__group">
-          {/* A divider before an unlabelled group (e.g. "Excluir tabela"). */}
-          {gi > 0 && !group.label ? <div className="context-menu__sep" role="separator" /> : null}
-          {group.label ? <div className="context-menu__heading">{group.label}</div> : null}
-          {group.items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              className={
-                item.danger
-                  ? 'context-menu__item context-menu__item--danger'
-                  : 'context-menu__item'
-              }
-              // mousedown only guards the selection (a click must not collapse
-              // it before the command runs); activation lives on click so the
-              // keyboard path works too — role="menuitem" promises Enter/Space.
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onRun(item.commandId)}
-            >
-              {item.icon ? <span className="context-menu__icon">{item.icon}</span> : null}
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ))}
-    </div>
+      {groups.flatMap((group, gi) => [
+        // A divider before an unlabelled group (e.g. "Delete table").
+        gi > 0 && !group.label ? <Divider key={`${group.id}:sep`} /> : null,
+        group.label ? (
+          <ListSubheader key={`${group.id}:label`} disableSticky>
+            {group.label}
+          </ListSubheader>
+        ) : null,
+        ...group.items.map((item) => (
+          <MenuItem
+            key={item.id}
+            className={
+              item.danger ? 'context-menu__item context-menu__item--danger' : 'context-menu__item'
+            }
+            sx={
+              item.danger
+                ? {
+                    color: tokenVar('--editor-danger'),
+                    // The red hover the CSS skin used to give danger items —
+                    // and the one consumer keeping --editor-danger-bg alive.
+                    '&:hover': { backgroundColor: tokenVar('--editor-danger-bg') },
+                  }
+                : undefined
+            }
+            onClick={() => onRun(item.commandId)}
+          >
+            {item.icon ? (
+              <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>{item.icon}</ListItemIcon>
+            ) : null}
+            {item.label}
+          </MenuItem>
+        )),
+      ])}
+    </Menu>
   )
 }
 
@@ -117,15 +130,13 @@ export function collectContextMenuGroups(
  * ContextMenuView}. Auto-mounted by {@link DocumentEditor} when any feature
  * contributes a context menu.
  */
-export function EditorContextMenu({
-  editor,
-  api,
-  sections,
-}: {
+export interface EditorContextMenuProps {
   editor: Editor | null
   api: EditorApi
   sections: ContextMenuSection[]
-}) {
+}
+
+export function EditorContextMenu({ editor, api, sections }: EditorContextMenuProps) {
   const [open, setOpen] = useState<OpenState | null>(null)
 
   useEffect(() => {
@@ -161,7 +172,8 @@ export function EditorContextMenu({
 
   if (!open) return null
 
-  return createPortal(
+  // No createPortal here — MUI's Menu portals itself.
+  return (
     <ContextMenuView
       x={open.x}
       y={open.y}
@@ -171,7 +183,6 @@ export function EditorContextMenu({
         setOpen(null)
       }}
       onClose={() => setOpen(null)}
-    />,
-    document.body,
+    />
   )
 }

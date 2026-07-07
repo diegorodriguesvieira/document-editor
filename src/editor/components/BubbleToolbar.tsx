@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { BubbleMenu } from '@tiptap/react/menus'
+import { ThemeProvider } from '@mui/material/styles'
 import type { Editor } from '@tiptap/core'
+import { POPUP_CLASS } from '../base.styles'
+import { editorDarkTheme } from '../theme'
 import { NodeSelection } from '@tiptap/pm/state'
 import type { EditorApi } from '../core/EditorApi'
 import { EditorToolbar, type EditorToolbarProps } from './EditorToolbar'
@@ -62,19 +65,30 @@ export function BubbleToolbar({
   return (
     <BubbleMenu
       editor={editor}
-      className={className ?? 'bubble-toolbar'}
+      // Portal to <body>, like every other floating surface: inside the page
+      // subtree the CSS `zoom` would scale the bubble and feed Floating UI
+      // zoom-unaware rects (mispositioned bubble at any zoom ≠ 1).
+      appendTo={() => document.body}
+      // The popup namespace is FUNCTIONAL, not cosmetic: the region-editing
+      // gate keeps an open header/footer open for clicks inside any surface
+      // carrying it — it must survive a consumer-supplied className.
+      className={`${POPUP_CLASS} ${className ?? 'bubble-toolbar'}`}
       shouldShow={({ editor: current }) => bubbleShouldShow(current)}
     >
-      <EditorToolbar
-        editor={editor}
-        api={api}
-        resolved={resolved}
-        filter={filter}
-        renderButton={renderButton}
-        className="bubble-toolbar__inner"
-      >
-        {children}
-      </EditorToolbar>
+      {/* Dark chrome for the pill: the theme (not CSS overrides) recolors the
+          MUI buttons inside. */}
+      <ThemeProvider theme={editorDarkTheme}>
+        <EditorToolbar
+          editor={editor}
+          api={api}
+          resolved={resolved}
+          filter={filter}
+          renderButton={renderButton}
+          className="bubble-toolbar__inner"
+        >
+          {children}
+        </EditorToolbar>
+      </ThemeProvider>
     </BubbleMenu>
   )
 }

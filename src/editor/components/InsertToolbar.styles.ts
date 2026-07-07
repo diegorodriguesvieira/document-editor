@@ -2,7 +2,9 @@ import { css } from '@emotion/react'
 
 /* The insert ACTIONS row — the footer bar's default content (the shell — the
    fixed rounded bar — is .document-editor__footer). Full height so popovers
-   anchored to it (the variables panel) measure from the bar's top edge. */
+   anchored to it (the variables panel) measure from the bar's top edge.
+   Buttons are MUI (IconButton/ToggleButton, 32px theme metrics); the doubled
+   class bumps the dock's larger 36px size above MUI's single-class styles. */
 export const insertToolbarStyles = css`
   .insert-dock {
     height: 100%;
@@ -12,24 +14,15 @@ export const insertToolbarStyles = css`
     gap: 4px;
   }
 
-  .insert-dock__btn {
+  .insert-dock__btn.insert-dock__btn {
     width: 36px;
+    min-width: 36px;
     height: 36px;
-    border: 1px solid transparent;
+    padding: 0;
     border-radius: 8px;
-    background: transparent;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--editor-control-fg);
-    cursor: pointer;
   }
 
-  .insert-dock__btn:hover {
+  .insert-dock__btn.insert-dock__btn:hover {
     background: var(--editor-subtle-bg);
-  }
-
-  .insert-dock__btn:focus-visible {
-    outline: 2px solid var(--editor-accent);
-    outline-offset: 1px;
   }
 `

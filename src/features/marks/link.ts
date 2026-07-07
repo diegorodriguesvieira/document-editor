@@ -1,6 +1,8 @@
 import { Link } from '@tiptap/extension-link'
 import { defineFeature } from '../../editor'
 import { promptOr } from '../promptFallback'
+import { icons } from '../icons'
+import { linkSetActive, linkSetDisabled, renderLinkInsertControl, renderLinkSetControl } from '../promptForms'
 
 /** Link mark. The command accepts an href payload, or prompts as a fallback. */
 export const LinkFeature = defineFeature({
@@ -45,20 +47,27 @@ export const LinkFeature = defineFeature({
       id: 'link',
       group: 'marks',
       label: 'Link',
-      icon: '🔗',
+      icon: icons.link,
+      // The MUI form control collects the href and execs `link.set` with the
+      // payload — the command (and its Mod-k prompt fallback) is unchanged.
       commandId: 'link.set',
-      isActive: (state) => state.isActive('link'),
+      render: renderLinkSetControl,
+      isActive: linkSetActive,
       // Linking needs a selection to apply to (unless editing an existing link).
-      isDisabled: (state) => state.isSelectionEmpty() && !state.isActive('link'),
+      isDisabled: linkSetDisabled,
     },
   ],
   insert: [
     {
       id: 'link',
       label: 'Link',
-      icon: 'L',
+      icon: icons.link,
       commandId: 'link.insert',
-      isActive: (state) => state.isActive('link'),
+      // Text + URL form → exec('link.insert', { text, href }).
+      render: renderLinkInsertControl,
+      // No isActive here: the dock button has no pressed SKIN — announcing
+      // aria-pressed with zero visual state is the "stuck toggle" RegistryBar
+      // warns about. The bubble's toolbar item keeps its (styled) active state.
     },
   ],
 })

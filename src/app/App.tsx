@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Button from '@mui/material/Button'
 import { BubbleToolbar, DocumentEditor, InsertToolbar, useZoom } from '../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { CommentCards } from './CommentCards'
@@ -66,13 +67,13 @@ export default function App() {
                 <span className="empty-state__hint">
                   Start typing — <kbd>/</kbd> inserts blocks, <kbd>@</kbd> inserts variables
                 </span>
-                <button
-                  type="button"
+                <Button
+                  variant="contained"
                   className="empty-state__cta"
                   onClick={() => ctx.api.setJSON(contractTemplate(ctx.editor))}
                 >
                   Start from a template
-                </button>
+                </Button>
               </div>
             )}
             // The right rail is consumer-owned: render anything here. This app
@@ -97,13 +98,13 @@ export default function App() {
                   canZoomOut={canZoomOut}
                 />
                 <InsertToolbar {...ctx} className="app-dock__items" />
-                <button
-                  type="button"
+                <Button
+                  variant="contained"
                   className="app-dock__send"
                   onClick={() => console.log('send → would submit', ctx.api.getJSON())}
                 >
                   Send
-                </button>
+                </Button>
               </div>
             )}
             // The bubble is the ONLY toolbar (plus the footer insert dock).

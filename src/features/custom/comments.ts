@@ -1,10 +1,21 @@
 import { defineFeature, Mark, mergeAttributes } from '../../editor'
-import { getCommentThreads } from './commentsPanel'
 import { promptOr } from '../promptFallback'
+import type { Editor } from '../../editor'
+import { icons } from '../icons'
+import { commentAddActive, commentAddDisabled, renderCommentAddControl } from '../promptForms'
 
 export interface CommentThread {
   id: string
   text: string
+}
+
+/**
+ * The one typed accessor for the comment mark's storage — the single place the
+ * `editor.storage` cast lives, beside the mark that owns that storage.
+ */
+export function getCommentThreads(editor: Editor): Map<string, CommentThread> | undefined {
+  const storage = editor.storage as unknown as { comment?: { threads: Map<string, CommentThread> } }
+  return storage.comment?.threads
 }
 
 /** A unique-ish comment id (browser-side; fine for this demo). */
@@ -59,7 +70,8 @@ export const CommentsFeature = defineFeature({
   extensions: () => [Comment],
   commands: {
     // Anchor a comment to the current selection. Payload `{ text }` skips the
-    // prompt (used in tests). The thread is stored (keyed by id) and shows up
+    // prompt (the bubble's comment form and tests pass it; bare exec falls
+    // back to window.prompt). The thread is stored (keyed by id) and shows up
     // in the comments panel.
     'comment.add': (editor, payload) => {
       const { empty } = editor.state.selection
@@ -82,11 +94,13 @@ export const CommentsFeature = defineFeature({
       id: 'comment',
       group: 'marks',
       label: 'Comment',
-      icon: '💬',
+      icon: icons.comment,
       commandId: 'comment.add',
-      isActive: (state) => state.isActive('comment'),
+      // Comment-text form → exec('comment.add', { text }).
+      render: renderCommentAddControl,
+      isActive: commentAddActive,
       // The anchor is the selected text — nothing selected, nothing to comment.
-      isDisabled: (state) => state.isSelectionEmpty(),
+      isDisabled: commentAddDisabled,
     },
   ],
 })

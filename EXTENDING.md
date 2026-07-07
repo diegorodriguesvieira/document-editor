@@ -93,29 +93,58 @@ toolbar: [{
   payload. For a fixed set of variants, mint one command id per variant (see
   HeadingFeature's `heading.h1/h2/h3`). For arbitrary input (a color, a URL),
   ship a custom control via `render` and call `api.exec(id, payload)` yourself
+  — `exec` THROWS on an id no enabled feature registered (a typo can't silently
+  no-op) and returns `false` only for "registered but didn't apply"; to probe
+  availability, keep your `resolveFeatures(features)` result and check
+  `id in resolved.commands`
   (see ColorFeature) — that's what `CommandFn`'s `payload` argument is for.
 
-## 4. A custom control (`render`) + dismissable popovers
+## 4. A custom control (`render`) + floating surfaces
 
 ```tsx
 toolbar: [{ id: 'my', label: 'My picker', render: ({ editor, api }) => <MyControl api={api} /> }]
 ```
 
-For a popover/panel that must close on outside-click and Escape, use the SDK's
-dismiss hook instead of hand-rolling listeners:
+The chrome is Material UI — `DocumentEditor` mounts a scoped `ThemeProvider`
+(see the `muiTheme` prop / THEMING.md), and React context crosses every portal,
+so your control can use MUI components directly. Two house rules for FLOATING
+surfaces:
+
+1. **Carry the marker class.** Every body-portaled surface must have
+   `document-editor-popup` on its PAPER/root (e.g.
+   `slotProps={{ paper: { className: 'document-editor-popup my-popover' } }}`),
+   never on a backdrop — the header/footer region gate reads it to keep an
+   open region open for clicks inside your popover.
+2. **Pick the right primitive.** MUI's modal surfaces (Menu/Popover/Dialog)
+   trap focus and backdrop-block the page — fine for click-scoped actions (the
+   context menu). Anything that must coexist with typing, selection or chip
+   DRAGGING is NON-modal — use the SDK's `PopupShell`, which owns the whole
+   non-modal contract (Popper portal + Paper, the marker class on the root,
+   `useDismissable` with the trigger counted as "inside"):
 
 ```tsx
-import { useDismissable } from '../editor'
+import { PopupShell, useEscapeSurface } from '../editor'
 
-const ref = useRef<HTMLDivElement>(null)
-useDismissable(ref, () => setOpen(false), { closeOnScroll: true })
+<PopupShell anchorEl={buttonRef.current} open={open} onClose={() => setOpen(false)}
+            surfaceClassName="my-popover" role="dialog" ariaLabel="My popover">
+  …
+</PopupShell>
+
+// Modal MUI surface instead (its own Escape/outside-click): tell the SDK's
+// Escape stack to YIELD while it's open, or an open region closes in its place.
+useEscapeSurface(open)
 ```
 
-(Pass an array of refs to also count the toggle button as "inside".) For caret
-popups triggered by a character (like `/` and `@`), use
+(The color picker, the variables panel and the prompt forms all ride
+`PopupShell`; `useDismissable` stays exported for surfaces that need the raw
+hook.)
+
+For caret popups triggered by a character (like `/` and `@`), use
 `createSuggestionPopup` + `useListKeyboardNav` — see `mergeFieldSuggestion.tsx`
-for a ~20-line example. Note: suggestion popups need a React-mounted editor
-(`useDocumentEditor` + `EditorContent`), not the headless `createEditor`.
+for a ~20-line example (render MUI `Paper`/`MenuItem` inside, but NEVER a
+focusing Menu: focus must stay in ProseMirror so typing keeps filtering).
+Note: suggestion popups need a React-mounted editor (`useDocumentEditor` +
+`EditorContent`), not the headless `createEditor`.
 
 ## 5. Context menu (right-click)
 
@@ -212,7 +241,10 @@ The persisted shape is `{ doc }` (ProseMirror JSON — portable). The `api`
 surface: `getJSON / setJSON / getHTML / hasNode / focus / exec(commandId, payload?)
 / isActive / canUndo / canRedo / isEmpty / isSelectionEmpty
 / on('update' | 'selection')`.
-Loading content whose feature is disabled **throws** (it won't silently wipe
+Loading content whose feature is disabled **throws** — synchronously, from
+`api.setJSON` itself, so try/catch the async-load pattern above
+(`onContentError` covers initial content and insertContent-style flows, not
+`setJSON`). It won't silently wipe
 the document).
 
 Feature commands holding a raw ProseMirror doc can share `api.hasNode`'s

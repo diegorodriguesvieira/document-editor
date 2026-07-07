@@ -1,4 +1,5 @@
 import { defineFeature, mergeAttributes, Node } from '../../editor'
+import { icons } from '../icons'
 
 const DEFAULT_EMOJI = '💡'
 
@@ -76,7 +77,7 @@ export const CalloutFeature = defineFeature({
       id: 'callout',
       group: 'blocks',
       label: 'Callout',
-      icon: '💡',
+      icon: icons.callout,
       commandId: 'callout.toggle',
       isActive: (state) => state.isActive('callout'),
     },

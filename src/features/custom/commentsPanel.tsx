@@ -1,6 +1,10 @@
-import { useEditorState } from '@tiptap/react'
+import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
+import ListItemButton from '@mui/material/ListItemButton'
+import Paper from '@mui/material/Paper'
 import type { Editor } from '@tiptap/core'
-import type { CommentThread } from './comments'
+import { useFeatureState } from '../../editor'
+import { getCommentThreads } from './comments'
 
 export interface AnchoredComment {
   id: string
@@ -8,17 +12,6 @@ export interface AnchoredComment {
   quote: string
   from: number
   to: number
-}
-
-/**
- * The one typed accessor for the comment mark's storage — the single place the
- * `editor.storage` cast lives. (Declared here rather than in comments.ts: the
- * feature file already runtime-imports this module for the panel contribution,
- * so the reverse runtime import would create an eval-order-sensitive cycle.)
- */
-export function getCommentThreads(editor: Editor): Map<string, CommentThread> | undefined {
-  const storage = editor.storage as unknown as { comment?: { threads: Map<string, CommentThread> } }
-  return storage.comment?.threads
 }
 
 /**
@@ -68,11 +61,7 @@ function buildComments(editor: Editor): AnchoredComment[] {
 
 /** The comments currently anchored in the document, reactive to edits. */
 export function useDocumentComments(editor: Editor | null): AnchoredComment[] {
-  const comments = useEditorState({
-    editor,
-    selector: ({ editor }) => (editor ? buildComments(editor) : []),
-  })
-  return comments ?? []
+  return useFeatureState(editor, buildComments) ?? []
 }
 
 /**
@@ -89,14 +78,13 @@ export function CommentsPanel({ editor }: { editor: Editor | null }) {
   if (comments.length === 0) return null
 
   return (
-    <aside className="comments-panel" aria-label="Comments">
+    <Paper component="aside" className="comments-panel" aria-label="Comments" elevation={0}>
       <div className="comments-panel__title">Comments ({comments.length})</div>
-      <ul className="comments-panel__list">
+      <List className="comments-panel__list" dense disablePadding>
         {comments.map((comment) => (
           // Discontiguous reuses of one id are separate entries — key by range.
-          <li key={`${comment.id}:${comment.from}`}>
-            <button
-              type="button"
+          <ListItem key={`${comment.id}:${comment.from}`} disablePadding>
+            <ListItemButton
               className="comments-panel__item"
               onClick={() =>
                 editor
@@ -109,10 +97,10 @@ export function CommentsPanel({ editor }: { editor: Editor | null }) {
             >
               <span className="comments-panel__quote">“{comment.quote}”</span>
               {comment.text ? <span className="comments-panel__text">{comment.text}</span> : null}
-            </button>
-          </li>
+            </ListItemButton>
+          </ListItem>
         ))}
-      </ul>
-    </aside>
+      </List>
+    </Paper>
   )
 }

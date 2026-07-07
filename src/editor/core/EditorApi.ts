@@ -60,7 +60,14 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     },
     exec: (commandId, payload) => {
       const command = resolved.commands[commandId]
-      return command ? command(editor, payload) : false
+      // Unregistered id = a typo or a command outside this preset. The boot
+      // check can't see dynamic exec() calls (custom `render` controls build
+      // ids at runtime) — throwing keeps the "no silent no-op" promise;
+      // `false` stays reserved for "registered but didn't apply".
+      if (!command) {
+        throw new Error(`Command "${commandId}" is not registered by any enabled feature.`)
+      }
+      return command(editor, payload)
     },
     on: (event, callback) => {
       const name = event === 'selection' ? 'selectionUpdate' : 'update'

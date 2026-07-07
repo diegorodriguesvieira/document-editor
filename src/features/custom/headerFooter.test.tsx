@@ -1,15 +1,37 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/core'
-import { DocumentEditor, type CreatedEditor, type EditorApi } from '../../editor'
+import { GapCursor } from '@tiptap/pm/gapcursor'
+import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state'
+import { DocumentEditor, type CreatedEditor, type DocumentJSON, type EditorApi } from '../../editor'
 import { DividerFeature, ImageFeature } from '../../features'
-import { docWith, editorFromDOM, renderEditor } from '../../test/editorHarness'
+import { dispatchDrop, docWith, editorFromDOM, parseSliceFromHTML, renderEditor } from '../../test/editorHarness'
 import { closeRegion, HeaderFooterFeature } from './headerFooter'
+import { MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
 
 const newEditor = () => renderEditor([HeaderFooterFeature])
 const content = (created: CreatedEditor) => created.api.getJSON().doc.content ?? []
 const gate = (editor: Editor) =>
   (editor.storage as unknown as { headerFooterGuard: { editing: string | null } }).headerFooterGuard
+/** Fixture builders — every region/body doc in this file composes these. */
+const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+const region = (type: string, text: string) => ({ type, content: [para(text)] })
+/** The canonical sealed doc: [header 'head', body, footer 'foot']. */
+const regionsDoc = (...body: unknown[]) =>
+  ({
+    doc: {
+      type: 'doc',
+      content: [region('documentHeader', 'head'), ...body, region('documentFooter', 'foot')],
+    },
+  }) as DocumentJSON
+const REGIONS_DOC = regionsDoc(para('body'))
+
+// A REAL keydown (commands.keyboardShortcut replays only captured steps —
+// the Mod-A override must be exercised through the DOM path it ships on).
+const pressModA = (editor: Editor) =>
+  editor.view.dom.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
+  )
 
 describe('header/footer feature', () => {
   it('adds a header as the first node', () => {
@@ -59,8 +81,6 @@ describe('header/footer feature', () => {
 
   it('normalizes a malformed load to one header (first) and one footer (last)', () => {
     const created = newEditor()
-    const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
-    const region = (type: string, text: string) => ({ type, content: [para(text)] })
     created.api.setJSON({
       doc: {
         type: 'doc',
@@ -82,26 +102,14 @@ describe('header/footer feature', () => {
 
   it('Cmd+A from the body selects the body only — header/footer stay out', () => {
     const created = newEditor()
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'body one' }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'body two' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(regionsDoc(para('body one'), para('body two')))
     const doc = created.editor.state.doc
     const headerSize = doc.firstChild!.nodeSize
     const footerSize = doc.lastChild!.nodeSize
 
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(headerSize + 3) // caret in the body
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
 
     const { from, to } = created.editor.state.selection
     expect(from).toBeGreaterThanOrEqual(headerSize) // starts after the header
@@ -120,9 +128,7 @@ describe('header/footer feature', () => {
     created.editor.commands.insertContent('head')
     created.editor.commands.focus()
 
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
 
     const { from, to } = created.editor.state.selection
     const selected = created.editor.state.doc.textBetween(from, to, ' ')
@@ -130,18 +136,8 @@ describe('header/footer feature', () => {
   })
 
   it('keyboard/selection cannot enter a CLOSED region — the caret is clamped back to the body', async () => {
-    const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(REGIONS_DOC)
     const view = created.editor.view
     const headerSize = view.state.doc.firstChild!.nodeSize
 
@@ -153,36 +149,26 @@ describe('header/footer feature', () => {
 
   it('Cmd+A in the body includes a leading IMAGE — Delete removes it and restores an empty body', () => {
     const created = renderEditor([HeaderFooterFeature, ImageFeature])
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'image', attrs: { src: 'data:,logo' } },
-          { type: 'paragraph', content: [{ type: 'text', text: 'texto do corpo' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(
+      regionsDoc({ type: 'image', attrs: { src: 'data:,logo' } }, para('texto do corpo')),
+    )
     const doc = created.editor.state.doc
     const headerSize = doc.firstChild!.nodeSize
     const imageSize = doc.child(1).nodeSize
 
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(headerSize + imageSize + 2) // caret no corpo
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
 
     // A seleção começa ANTES da imagem (TextSelection a pularia).
     expect(created.editor.state.selection.from).toBe(headerSize)
     expect(created.editor.state.selection.from).toBeLessThanOrEqual(headerSize + imageSize - 1)
 
     created.editor.commands.deleteSelection()
-    const content = created.api.getJSON().doc.content ?? []
-    expect(content.some((n) => n.type === 'image')).toBe(false)
+    const nodes = created.api.getJSON().doc.content ?? []
+    expect(nodes.some((n) => n.type === 'image')).toBe(false)
     // Regiões intactas + corpo restaurado com um parágrafo vazio editável.
-    expect(content.map((n) => n.type)).toEqual(['documentHeader', 'paragraph', 'documentFooter'])
+    expect(nodes.map((n) => n.type)).toEqual(['documentHeader', 'paragraph', 'documentFooter'])
     const bounds = created.editor.state.doc.firstChild!.nodeSize
     expect(created.editor.state.selection.from).toBe(bounds + 1) // caret no corpo
   })
@@ -194,9 +180,7 @@ describe('header/footer feature', () => {
 
     // Cmd+A inside the region, then delete everything.
     created.editor.commands.focus()
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
     created.editor.commands.deleteSelection()
 
     // The header is empty but the caret must still be INSIDE it…
@@ -205,12 +189,11 @@ describe('header/footer feature', () => {
 
     // …so typing refills the header, not the body.
     created.editor.commands.insertContent('NOVO')
-    const content = created.api.getJSON().doc.content ?? []
-    expect(content[0]?.content?.[0]?.content?.[0]?.text).toBe('NOVO')
+    const nodes = created.api.getJSON().doc.content ?? []
+    expect(nodes[0]?.content?.[0]?.content?.[0]?.text).toBe('NOVO')
   })
 
   it('an OPEN region admits the caret; closeRegion expels it and seals the region', async () => {
-    const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
     created.api.exec('header.add') // opens the gate, caret inside
     const view = created.editor.view
@@ -231,18 +214,8 @@ describe('header/footer feature', () => {
   })
 
   it('rejects the useless gap cursor above the header / below the footer', async () => {
-    const { GapCursor } = await import('@tiptap/pm/gapcursor')
     const created = newEditor()
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(REGIONS_DOC)
     const view = created.editor.view
     const before = created.editor.state.selection.toJSON()
 
@@ -271,9 +244,7 @@ describe('header/footer guard — edge paths', () => {
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(3)
 
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
 
     // The whole document, node boundaries included (PM's AllSelection).
     expect(created.editor.state.selection.from).toBe(0)
@@ -281,23 +252,11 @@ describe('header/footer guard — edge paths', () => {
   })
 
   it('the body select-all survives a JSON round-trip (RangeSelection is serializable)', async () => {
-    const { Selection } = await import('@tiptap/pm/state')
     const created = newEditor()
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: 'corpo' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(regionsDoc(para('corpo')))
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(created.editor.state.doc.firstChild!.nodeSize + 2)
-    created.editor.view.dom.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }),
-    )
+    pressModA(created.editor)
 
     const selection = created.editor.state.selection
     const json = selection.toJSON() as { type: string }
@@ -331,7 +290,6 @@ describe('header/footer guard — edge paths', () => {
   })
 
   it('an edit that strands the caret outside the OPEN header pulls it back in', async () => {
-    const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
     created.api.exec('header.add') // gate open, caret inside the header
     const view = created.editor.view
@@ -350,7 +308,6 @@ describe('header/footer guard — edge paths', () => {
   })
 
   it('an edit that strands the caret outside the OPEN footer pulls it back in (bottom variant)', async () => {
-    const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
     created.api.exec('footer.add') // gate open, caret inside the footer
     const view = created.editor.view
@@ -366,19 +323,7 @@ describe('header/footer guard — edge paths', () => {
 })
 
 describe('header/footer guard — closed regions are sealed on EVERY path', () => {
-  const REGIONS_DOC = {
-    doc: {
-      type: 'doc',
-      content: [
-        { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-        { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
-        { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-      ],
-    },
-  }
-
   it('a selection anchored in the OPEN header cannot reach into the closed footer', async () => {
-    const { TextSelection } = await import('@tiptap/pm/state')
     const created = newEditor()
     created.api.setJSON(REGIONS_DOC)
     gate(created.editor).editing = 'documentHeader' // header open, footer closed
@@ -400,19 +345,10 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
   })
 
   it('clamping prefers the body\'s first TEXT — a leading image must not end up node-selected', async () => {
-    const { TextSelection, NodeSelection } = await import('@tiptap/pm/state')
     const created = renderEditor([HeaderFooterFeature, ImageFeature])
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'image', attrs: { src: 'data:,logo' } }, // template-style leading logo
-          { type: 'paragraph', content: [{ type: 'text', text: 'Contrato' }] },
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(
+      regionsDoc({ type: 'image', attrs: { src: 'data:,logo' } }, para('Contrato')),
+    )
     const view = created.editor.view
 
     // A selection landing in the closed header (what a load's mapped
@@ -428,18 +364,10 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
   })
 
   it('clamping never lands INSIDE a closed region when the body has no text position', async () => {
-    const { TextSelection, NodeSelection } = await import('@tiptap/pm/state')
     const created = renderEditor([HeaderFooterFeature, DividerFeature])
-    created.api.setJSON({
-      doc: {
-        type: 'doc',
-        content: [
-          { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-          { type: 'horizontalRule' }, // leaf-only body: no text position at all
-          { type: 'documentFooter', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'foot' }] }] },
-        ],
-      },
-    })
+    created.api.setJSON(
+      regionsDoc({ type: 'horizontalRule' } /* leaf-only body: no text position at all */),
+    )
     const view = created.editor.view
     const headerSize = view.state.doc.firstChild!.nodeSize
 
@@ -461,9 +389,7 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
     const view = created.editor.view
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 2, inside: 0 }) // inside the header
     const drop = () =>
-      view.someProp('handleDrop', (handler) =>
-        handler(view, new MouseEvent('drop', { clientX: 5, clientY: 5 }) as DragEvent, null as never, false),
-      )
+      dispatchDrop(view, null)
 
     expect(drop()).toBe(true) // closed → swallowed, nothing written
     gate(created.editor).editing = 'documentHeader'
@@ -471,22 +397,15 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
   })
 
   it('outranks feature drop handlers: a chip drop into a closed header is blocked regardless of feature order', async () => {
-    const { DOMParser } = await import('@tiptap/pm/model')
-    const { MergeFieldFeature } = await import('./mergeField')
-    const { mergeFieldDragHTML } = await import('./mergeField')
     // MergeField listed FIRST — only the guard's priority puts it in front.
     const created = renderEditor([MergeFieldFeature, HeaderFooterFeature])
     created.api.setJSON(REGIONS_DOC)
     const view = created.editor.view
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 2, inside: 0 })
-    const el = document.createElement('div')
-    el.innerHTML = mergeFieldDragHTML({ id: 'x', label: 'X' })
-    const slice = DOMParser.fromSchema(created.editor.schema).parseSlice(el)
+    const slice = parseSliceFromHTML(created.editor, mergeFieldDragHTML({ id: 'x', label: 'X' }))
     const before = created.editor.state
 
-    const handled = view.someProp('handleDrop', (handler) =>
-      handler(view, new MouseEvent('drop', { clientX: 5, clientY: 5 }) as DragEvent, slice, false),
-    )
+    const handled = dispatchDrop(view, slice)
 
     expect(handled).toBe(true) // the guard claimed it…
     expect(created.editor.state).toBe(before) // …and nothing was inserted
@@ -494,14 +413,9 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
 })
 
 describe('header/footer node view (the React chrome)', () => {
+  // Header-only (no footer): the node-view tests double-click INTO the header.
   const REGION_DOC = {
-    doc: {
-      type: 'doc',
-      content: [
-        { type: 'documentHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'head' }] }] },
-        { type: 'paragraph', content: [{ type: 'text', text: 'corpo' }] },
-      ],
-    },
+    doc: { type: 'doc', content: [region('documentHeader', 'head'), para('corpo')] },
   }
 
   /** DocumentEditor host (node views need the React mount), plus a toolbar
@@ -597,5 +511,75 @@ describe('header/footer node view (the React chrome)', () => {
     expect(gate(editor).editing).toBe('documentHeader')
     fireEvent.mouseDown(document.body)
     expect(gate(editor).editing).toBeNull()
+  })
+})
+
+describe('closed regions cannot be deleted or entered via NodeSelection paths', () => {
+
+  it('Backspace/Delete at the body edges cannot node-select a closed region (selectable: false)', async () => {
+    // PM's Backspace chain ends in selectNodeBackward: with a selectable
+    // region, TWO plain Backspaces at the body start deleted the whole
+    // header (select, then delete). Non-selectable makes it a no-op.
+    const created = renderEditor([HeaderFooterFeature])
+    created.api.setJSON(REGIONS_DOC)
+    const view = created.editor.view
+    const headerSize = view.state.doc.firstChild!.nodeSize
+
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, headerSize + 1)))
+    expect(created.editor.commands.selectNodeBackward()).toBe(false)
+    expect(created.editor.state.selection instanceof NodeSelection).toBe(false)
+
+    const bodyEnd = view.state.doc.content.size - view.state.doc.lastChild!.nodeSize - 2
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, bodyEnd)))
+    expect(created.editor.commands.selectNodeForward()).toBe(false)
+    expect(created.editor.state.selection instanceof NodeSelection).toBe(false)
+
+    const nodes = created.api.getJSON().doc.content ?? []
+    expect(nodes[0]?.type).toBe('documentHeader')
+    expect(nodes[nodes.length - 1]?.type).toBe('documentFooter')
+  })
+
+  it('a PROGRAMMATIC NodeSelection of a closed region is expelled by the gate', async () => {
+    // NodeSelection.create ignores `selectable` — the gate is the second
+    // seal: the region-wrapping selection (endpoints at depth 0, invisible
+    // to the endpoint walk) must clamp back to the body.
+    const created = renderEditor([HeaderFooterFeature])
+    created.api.setJSON(REGIONS_DOC)
+    const view = created.editor.view
+
+    view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, 0)))
+
+    const selection = created.editor.state.selection
+    expect(selection instanceof NodeSelection).toBe(false)
+    expect(view.state.doc.resolve(selection.from).parent.textContent).toBe('body')
+    expect(created.api.getJSON().doc.content?.[0]?.type).toBe('documentHeader')
+  })
+
+  it('the normalizer clamps its OWN rewrite — a region paste cannot strand the caret in a closed region', async () => {
+    // PM never re-runs appendTransaction on a plugin's own appended tr: the
+    // full-doc rewrite used to park the mapped selection inside the closed
+    // footer, and the NEXT keystroke wrote there before the gate expelled it.
+    const created = renderEditor([HeaderFooterFeature])
+    created.api.setJSON(regionsDoc(para('body one'), para('body two')))
+    const view = created.editor.view
+    const headerSize = view.state.doc.firstChild!.nodeSize
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, headerSize + 5)))
+
+    // External-HTML paste shape: a duplicate header lands mid-body and the
+    // normalizer rewrites the whole doc.
+    created.editor.commands.insertContent('<div data-document-header><p>PASTED</p></div>')
+
+    const { doc, selection } = created.editor.state
+    const bounds = { from: doc.firstChild!.nodeSize, to: doc.content.size - doc.lastChild!.nodeSize }
+    expect(selection.from).toBeGreaterThanOrEqual(bounds.from)
+    expect(selection.to).toBeLessThanOrEqual(bounds.to)
+
+    // The next keystroke must land in the BODY, never the sealed regions.
+    created.editor.commands.insertContent('X')
+    const nodes = created.api.getJSON().doc.content ?? []
+    const text = (node: any) => JSON.stringify(node)
+    expect(text(nodes[0])).not.toContain('X')
+    expect(text(nodes[nodes.length - 1])).not.toContain('X')
+    expect(text(nodes)).toContain('X')
   })
 })

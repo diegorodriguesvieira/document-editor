@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { useListKeyboardNav, type SuggestionPopupRef } from '../hooks/createSuggestionPopup'
+import { SuggestionList } from './SuggestionList'
 import type { ToolbarItem } from '../core/types'
 
 interface SlashMenuProps {
@@ -8,8 +9,9 @@ interface SlashMenuProps {
 }
 
 /**
- * The floating `/` command list. Navigation is driven by the shared
- * {@link useListKeyboardNav} (exposed through the popup ref).
+ * The floating `/` command list: the shared {@link SuggestionList} visuals
+ * driven by the shared {@link useListKeyboardNav} (keys arrive through the
+ * popup ref — focus never leaves ProseMirror).
  */
 export const SlashMenu = forwardRef<SuggestionPopupRef, SlashMenuProps>(function SlashMenu(
   { items, command },
@@ -17,30 +19,17 @@ export const SlashMenu = forwardRef<SuggestionPopupRef, SlashMenuProps>(function
 ) {
   const { index, setIndex } = useListKeyboardNav(ref, items, command)
 
-  if (items.length === 0) {
-    return <div className="slash-menu slash-menu--empty">No results</div>
-  }
-
   return (
-    <div className="slash-menu" role="listbox" aria-label="Commands">
-      {items.map((item, i) => (
-        <button
-          key={item.id}
-          type="button"
-          role="option"
-          aria-selected={i === index}
-          className="slash-menu__item"
-          data-active={i === index}
-          onMouseEnter={() => setIndex(i)}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            command(item)
-          }}
-        >
-          {item.icon ? <span className="slash-menu__icon">{item.icon}</span> : null}
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <SuggestionList
+      items={items}
+      index={index}
+      setIndex={setIndex}
+      onPick={command}
+      ariaLabel="Commands"
+      emptyText="No results"
+      itemKey={(item) => item.id}
+      icon={(item) => item.icon}
+      label={(item) => item.label}
+    />
   )
 })

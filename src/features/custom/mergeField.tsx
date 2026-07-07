@@ -1,9 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { defineFeature, mergeAttributes, Node, useDismissable, type EditorApi } from '../../editor'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Close from '@mui/icons-material/Close'
+import PushPinOutlined from '@mui/icons-material/PushPinOutlined'
+import IconButton from '@mui/material/IconButton'
+import TextField from '@mui/material/TextField'
+import { defineFeature, mergeAttributes, Node, PopupShell, tokenVar, type EditorApi } from '../../editor'
 import type { Node as PMNode, Slice } from '@tiptap/pm/model'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { dropPoint } from '@tiptap/pm/transform'
+import { icons } from '../icons'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
 import { createMergeFieldSuggestion, mergeFieldInsertContent } from './mergeFieldSuggestion'
 
@@ -148,8 +152,20 @@ function groupVariables(variables: DocumentVariable[]): Array<[string, DocumentV
 }
 
 /**
+ * Which container the panel anchors to: the SDK's own actions row, else the
+ * nearest toolbar (a consumer-composed bar via renderFooter / a side panel),
+ * else the bare button (item rendered loose, or tests). The panel clears the
+ * WHOLE bar, whatever bar the button lives in.
+ */
+export function panelAnchorFor(button: HTMLElement | null): HTMLElement | null {
+  return (button?.closest('.insert-dock') ??
+    button?.closest('[role="toolbar"]') ??
+    button) as HTMLElement | null
+}
+
+/**
  * Variables panel — opens ABOVE the insert dock, left-aligned with the `@`
- * button that toggled it. Clicking outside closes it — unless PINNED (the P
+ * button that toggled it. Clicking outside closes it — unless PINNED (the pin
  * button), which turns it into a persistent surface: move the caret around
  * and keep inserting. Escape and the x always close.
  */
@@ -164,7 +180,6 @@ function MergeFieldPanel({
   onPick: (variable: DocumentVariable) => void
   onClose: () => void
 }) {
-  const cardRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [pinned, setPinned] = useState(false)
   // While a chip drag is in flight, the panel steps aside: see-through AND
@@ -196,52 +211,25 @@ function MergeFieldPanel({
       document.removeEventListener('drop', reset, true)
     }
   }, [dragging])
-  const [position, setPosition] = useState<{ bottom: number; left: number } | null>(null)
-
-  // The anchor (@ button) counts as "inside" so toggling it doesn't
-  // close-then-instantly-reopen. Pinned: outside clicks stop closing
-  // (Escape and the x still do).
-  const anchorRef = useRef<HTMLElement | null>(anchor)
-  anchorRef.current = anchor
-  useDismissable([cardRef, anchorRef], onClose, {
-    isOutsideClick: pinned ? () => false : undefined,
-  })
-
-  // Opens ABOVE the fixed insert dock, left-aligned with the @ button. The
-  // dock is position:fixed, so its rect is viewport-stable — scroll never
-  // moves the panel; only a resize re-places it (bottom-anchored, so the
-  // panel grows upward and never covers the dock).
-  useLayoutEffect(() => {
-    // The @ button may live in the SDK's own actions row OR in a
-    // consumer-composed bar (renderFooter / a side panel) — anchor to the
-    // nearest toolbar container either way. Last resort: the bare button
-    // (item rendered loose, or tests).
-    const dock = anchor?.closest('.insert-dock') ?? anchor?.closest('[role="toolbar"]') ?? anchor
-    const place = () => {
-      if (!dock || !anchor) {
-        setPosition({ bottom: 16, left: 16 })
-        return
-      }
-      const dockRect = dock.getBoundingClientRect()
-      const buttonRect = anchor.getBoundingClientRect()
-      const bottom = window.innerHeight - dockRect.top + 12
-      // Clamp so the panel (min(340px, 80vw) wide) never leaves the viewport.
-      const left = Math.max(8, Math.min(buttonRect.left, window.innerWidth - 348))
-      // Equality-skip: the capture-phase scroll listener below fires for EVERY
-      // scroller on the page, and with the fixed dock nothing actually moves.
-      setPosition((prev) =>
-        prev && prev.bottom === bottom && prev.left === left ? prev : { bottom, left },
-      )
-    }
-    place()
-    // The SDK dock is fixed (scroll never moves it), but the documented
-    // [role="toolbar"] fallback can sit in normal flow — track scroll too
-    // (capture phase catches inner scrollers), plus resize for both.
-    window.addEventListener('scroll', place, true)
-    window.addEventListener('resize', place)
-    return () => {
-      window.removeEventListener('scroll', place, true)
-      window.removeEventListener('resize', place)
+  // Popper owns positioning (its own scroll/resize listeners + viewport
+  // clamping — the old ~40-line place() block). The VIRTUAL anchor mixes the
+  // two rects the design needs: horizontal from the @ BUTTON (left-aligned),
+  // vertical from the CONTAINER bar (the panel clears the whole bar and,
+  // bottom-anchored via placement "top-*", grows UPWARD without covering it).
+  const virtualAnchor = useMemo(() => {
+    const container = panelAnchorFor(anchor)
+    if (!anchor || !container) return null
+    return {
+      getBoundingClientRect: () => {
+        const containerRect = container.getBoundingClientRect()
+        const buttonRect = anchor.getBoundingClientRect()
+        return new DOMRect(
+          buttonRect.left,
+          containerRect.top,
+          buttonRect.width,
+          containerRect.height,
+        )
+      },
     }
   }, [anchor])
 
@@ -253,39 +241,52 @@ function MergeFieldPanel({
       )
     : variables
 
-  if (!position) return null
   return (
-    <div
-      ref={cardRef}
-      className={`document-editor-popup mf-panel${dragging ? ' mf-panel--drag-through' : ''}`}
+    // Pinned = outside clicks stop closing (Escape and the x still do); the
+    // @ button is the dismissEl so toggling it doesn't close-then-reopen.
+    // The drag step-aside class toggles the whole surface (the shell root).
+    <PopupShell
+      anchorEl={virtualAnchor}
+      dismissEl={anchor}
+      open
+      onClose={onClose}
+      surfaceClassName={`mf-panel${dragging ? ' mf-panel--drag-through' : ''}`}
       role="dialog"
-      aria-label="Variables"
-      style={{ bottom: position.bottom, left: position.left }}
+      ariaLabel="Variables"
+      placement="top-start"
+      offset={[0, 12]}
+      isOutsideClick={pinned ? () => false : undefined}
+      paperProps={{
+        className: 'mf-panel__card',
+        sx: { border: `1px solid ${tokenVar('--editor-border')}` },
+      }}
     >
       <div className="mf-panel__header">
         <strong>Variables</strong>
         <div className="mf-panel__header-actions">
-          <button
-            type="button"
+          <IconButton
             className="mf-panel__pin"
+            size="small"
             aria-label="Pin panel"
             aria-pressed={pinned}
             title={pinned ? 'Unpin (outside clicks close again)' : 'Pin (keep open while editing)'}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setPinned((value) => !value)}
           >
-            P
-          </button>
-          <button type="button" className="mf-panel__close" aria-label="Close" onClick={onClose}>
-            x
-          </button>
+            <PushPinOutlined fontSize="inherit" />
+          </IconButton>
+          <IconButton className="mf-panel__close" size="small" aria-label="Close" onClick={onClose}>
+            <Close fontSize="inherit" />
+          </IconButton>
         </div>
       </div>
-      <input
+      <TextField
         type="search"
         className="mf-panel__search"
         placeholder="Search"
+        fullWidth
         value={query}
+        slotProps={{ htmlInput: { 'aria-label': 'Search variables' } }}
         onChange={(event) => setQuery(event.target.value)}
       />
       <div className="mf-panel__body">
@@ -359,7 +360,7 @@ function MergeFieldPanel({
           ))
         )}
       </div>
-    </div>
+    </PopupShell>
   )
 }
 
@@ -369,9 +370,8 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
   const variables = useDocumentVariables()
   return (
     <>
-      <button
+      <IconButton
         ref={buttonRef}
-        type="button"
         className="insert-dock__btn"
         title="Variables"
         aria-label="Variables"
@@ -380,25 +380,22 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((value) => !value)}
       >
-        @
-      </button>
-      {open
-        ? // Portal to <body> so the fixed panel escapes the dock's stacking
-          // context (otherwise it paints behind the page).
-          createPortal(
-            <MergeFieldPanel
-              anchor={buttonRef.current}
-              variables={variables}
-              onClose={() => {
-                setOpen(false)
-                api.focus() // keep the editor focused after the panel closes
-              }}
-              // Picking closes unless the panel is pinned (handled inside).
-              onPick={(variable) => api.exec('mergeField.insert', variable)}
-            />,
-            document.body,
-          )
-        : null}
+        {icons.mergeField}
+      </IconButton>
+      {open ? (
+        // The Popper portals itself to <body> (escaping the dock's stacking
+        // context) — no createPortal needed here.
+        <MergeFieldPanel
+          anchor={buttonRef.current}
+          variables={variables}
+          onClose={() => {
+            setOpen(false)
+            api.focus() // keep the editor focused after the panel closes
+          }}
+          // Picking closes unless the panel is pinned (handled inside).
+          onPick={(variable) => api.exec('mergeField.insert', variable)}
+        />
+      ) : null}
     </>
   )
 }
@@ -427,7 +424,7 @@ export const MergeFieldFeature = defineFeature({
     {
       id: 'mergeField',
       label: 'Variable',
-      icon: '@',
+      icon: icons.mergeField,
       render: ({ api }) => <MergeFieldInsert api={api} />,
     },
   ],

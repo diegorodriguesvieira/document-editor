@@ -93,6 +93,28 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     throw new Error(`Command id(s) referenced but never registered: ${missing.join(', ')}.`)
   }
 
+  // Per-channel item ids must be unique ACROSS features: every registry-driven
+  // surface keys React children by them (RegistryBar, SlashMenu,
+  // PageAffordances) and the context menu namespaces groups by section id —
+  // a collision composes without error and mis-reconciles the bars. Same
+  // fail-fast policy as commands/keymaps.
+  const duplicates: string[] = []
+  const channel = (name: string, ids: Array<string | undefined>) => {
+    const seen = new Set<string>()
+    for (const id of ids) {
+      if (!id) continue
+      if (seen.has(id)) duplicates.push(`${name} "${id}"`)
+      seen.add(id)
+    }
+  }
+  channel('toolbar', features.flatMap((f) => (f.toolbar ?? []).map((item) => item.id)))
+  channel('insert', features.flatMap((f) => (f.insert ?? []).map((item) => item.id)))
+  channel('pageRegion', features.flatMap((f) => (f.pageRegions ?? []).map((region) => region.id)))
+  channel('contextMenu section', features.flatMap((f) => (f.contextMenu ?? []).map((s) => s.id)))
+  if (duplicates.length > 0) {
+    throw new Error(`Duplicate item id(s) across features: ${duplicates.join(', ')}.`)
+  }
+
 
   return {
     features,

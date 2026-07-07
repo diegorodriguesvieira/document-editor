@@ -30,29 +30,21 @@ export const mergeFieldStyles = css`
     user-select: none;
   }
 
+  /* Positioning/portal is MUI Popper's; bg/border/shadow are the Paper's.
+     The root keeps the fade the drag step-aside animates. */
   .document-editor-popup.mf-panel {
-    position: fixed;
+    transition: opacity 0.15s ease;
+  }
+
+  .mf-panel .mf-panel__card {
     width: min(340px, 80vw);
     max-height: calc(100vh - 120px);
     display: flex;
     flex-direction: column;
-    background: var(--editor-surface);
-    border: 1px solid var(--editor-border);
-    border-radius: 12px;
-    box-shadow: var(--editor-shadow-pop);
     padding: 14px;
-    z-index: var(--editor-z-popup);
-    transition: opacity 0.15s ease; /* the drag step-aside fade below */
   }
 
   .document-editor-popup .mf-panel__search {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 7px 10px;
-    border: 1px solid var(--editor-border-muted);
-    border-radius: 8px;
-    font: inherit;
-    font-size: 13px;
     margin-bottom: 10px;
   }
 
@@ -85,32 +77,11 @@ export const mergeFieldStyles = css`
     gap: 6px;
   }
 
-  .document-editor-popup .mf-panel__pin {
-    width: 24px;
-    height: 24px;
-    border: 1px solid var(--editor-border-muted);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--editor-text-muted);
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .document-editor-popup .mf-panel__pin[aria-pressed='true'] {
+  /* Pin/close are MUI IconButtons; only the PRESSED pin state needs skin
+     (doubled class outweighs MUI's single-class styles). */
+  .mf-panel__pin.mf-panel__pin[aria-pressed='true'] {
     background: var(--editor-accent-bg);
-    border-color: var(--editor-accent);
     color: var(--editor-accent-ink);
-  }
-
-  .document-editor-popup .mf-panel__close {
-    border: none;
-    background: transparent;
-    font-size: 20px;
-    line-height: 1;
-    color: var(--editor-text-muted);
-    cursor: pointer;
   }
 
   .document-editor-popup .mf-panel__chips {

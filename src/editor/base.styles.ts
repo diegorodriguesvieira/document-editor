@@ -1,5 +1,11 @@
 import { css } from '@emotion/react'
 
+/** The FUNCTIONAL marker every body-portaled surface carries — the
+ *  header/footer region gate keeps an open region open for clicks inside any
+ *  element with this class. Producers interpolate the constant; the
+ *  *.styles.ts partials keep literal selectors (pure CSS, fails visibly). */
+export const POPUP_CLASS = 'document-editor-popup'
+
 /**
  * Base tokens + reset for the editor SDK skin. Every other partial builds on
  * these '--editor-*' custom properties — override them to theme.
@@ -65,12 +71,12 @@ export const baseStyles = css`
     --editor-dock-height: 66px;
     --editor-dock-gap: 8px;
 
-    /* Stacking of floating surfaces (caret popups / colour picker vs menus).
-       Header and footer sit below them all — popups must float above both. */
+    /* Stacking of floating surfaces. Header and footer sit below them all —
+       popups must float above both; MUI-owned surfaces (the context menu)
+       stack via the MUI theme's zIndex (1300) higher still. */
     --editor-z-header: 900;
     --editor-z-dock: 900;
     --editor-z-popup: 1000;
-    --editor-z-menu: 1100;
 
     /* Shadows */
     --editor-shadow-sm: 0 1px 3px rgba(60, 64, 67, 0.15);
@@ -92,23 +98,23 @@ export const baseStyles = css`
   /* Self-contained base so the SDK doesn't rely on a global reset. Two roots:
    * '.document-editor' (the shell) and '.document-editor-popup' (the namespace
    * class every body-portaled surface carries — context menu, '/' and '@'
-   * menus, colour picker, merge-field modal). ':where()' keeps specificity 0,
+   * menus, colour picker, variables panel). ':where()' keeps specificity 0,
    * so consumers override effortlessly. */
-  :where(.document-editor, .document-editor-popup) {
+  :where(.document-editor, .${POPUP_CLASS}) {
     box-sizing: border-box;
     font-family: var(--editor-font);
     color: var(--editor-text);
     line-height: 1.5;
   }
-  :where(.document-editor, .document-editor-popup) *,
-  :where(.document-editor, .document-editor-popup) *::before,
-  :where(.document-editor, .document-editor-popup) *::after {
+  :where(.document-editor, .${POPUP_CLASS}) *,
+  :where(.document-editor, .${POPUP_CLASS}) *::before,
+  :where(.document-editor, .${POPUP_CLASS}) *::after {
     box-sizing: border-box;
   }
 
-  /* Every body-portaled surface stacks at the popup level by default; the
-     context menu overrides with --editor-z-menu. */
-  .document-editor-popup {
+  /* Every body-portaled surface stacks at the popup level; MUI-owned
+     surfaces (the context menu) ride the MUI theme's zIndex instead. */
+  .${POPUP_CLASS} {
     z-index: var(--editor-z-popup);
   }
 `

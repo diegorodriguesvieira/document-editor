@@ -89,3 +89,40 @@ describe('resolveFeatures', () => {
     expect(resolved.toolbar.map((t) => t.id)).toEqual(['b', 'a'])
   })
 })
+
+describe('per-channel item-id uniqueness (boot fail-fast)', () => {
+  it('throws when two features contribute the SAME toolbar/insert item id', () => {
+    // Every registry surface keys React children by item id — a collision
+    // composes without error and mis-reconciles the bars.
+    const a = feature({ id: 'a', commands: { 'a.run': () => true },
+      toolbar: [{ id: 'dup', label: 'A', commandId: 'a.run' }] })
+    const b = feature({ id: 'b', commands: { 'b.run': () => true },
+      toolbar: [{ id: 'dup', label: 'B', commandId: 'b.run' }] })
+    expect(() => resolveFeatures([a, b])).toThrow(/duplicate.*toolbar "dup"/i)
+
+    const c = feature({ id: 'c', commands: { 'c.run': () => true },
+      insert: [{ id: 'image', label: 'C', commandId: 'c.run' }] })
+    const d = feature({ id: 'd', commands: { 'd.run': () => true },
+      insert: [{ id: 'image', label: 'D', commandId: 'd.run' }] })
+    expect(() => resolveFeatures([c, d])).toThrow(/duplicate.*insert "image"/i)
+  })
+
+  it('throws on duplicate pageRegion and contextMenu SECTION ids across features', () => {
+    const r1 = feature({ id: 'r1', commands: { 'r1.add': () => true },
+      pageRegions: [{ id: 'header', position: 'top', label: 'H', nodeName: 'x', addCommandId: 'r1.add' }] })
+    const r2 = feature({ id: 'r2', commands: { 'r2.add': () => true },
+      pageRegions: [{ id: 'header', position: 'top', label: 'H2', nodeName: 'y', addCommandId: 'r2.add' }] })
+    expect(() => resolveFeatures([r1, r2])).toThrow(/duplicate.*pageRegion "header"/i)
+
+    // Group/item keys are namespaced BY section id — reuse collapses that.
+    const s1 = feature({ id: 's1', contextMenu: [{ id: 'sec', when: () => true, groups: [] }] })
+    const s2 = feature({ id: 's2', contextMenu: [{ id: 'sec', when: () => true, groups: [] }] })
+    expect(() => resolveFeatures([s1, s2])).toThrow(/duplicate.*contextMenu section "sec"/i)
+  })
+
+  it('a feature listed twice (dedup path) is NOT a duplicate-id error', () => {
+    const a = feature({ id: 'a', commands: { 'a.run': () => true },
+      toolbar: [{ id: 'a', label: 'A', commandId: 'a.run' }] })
+    expect(() => resolveFeatures([a, a])).not.toThrow()
+  })
+})

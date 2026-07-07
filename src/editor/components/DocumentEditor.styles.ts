@@ -139,6 +139,11 @@ export const documentEditorStyles = css`
 
   .document-editor__scale {
     width: var(--editor-page-width);
+    /* Zoomed OUT the page's layout footprint shrinks below the column track —
+       auto margins absorb the free space so it stays viewport-centered; with
+       negative free space (zoom > 1) they resolve to 0, keeping today's
+       scroll-right overflow byte-identical. */
+    margin: 0 auto;
     transition: zoom 0.1s ease;
   }
 

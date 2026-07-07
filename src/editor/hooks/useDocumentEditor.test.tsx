@@ -1,7 +1,8 @@
+import { StrictMode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useDocumentEditor } from './useDocumentEditor'
-import { BoldFeature, ItalicFeature } from '../../features'
+import { BoldFeature, ItalicFeature, createColorFeature } from '../../features'
 
 describe('useDocumentEditor', () => {
   it('does NOT recreate the editor when given a fresh-but-equivalent features array', () => {
@@ -19,6 +20,24 @@ describe('useDocumentEditor', () => {
     // Changing the set of feature ids DOES recreate.
     rerender({ features: [BoldFeature] })
     expect(result.current.resolved).not.toBe(firstResolved)
+  })
+
+  it('options are COMPOSITION-time config: a same-id, different-instance swap is ignored', () => {
+    // Identity tracks feature IDS — swapping createColorFeature({palette A})
+    // for ({palette B}) at runtime must neither recreate the editor nor adopt
+    // the new options (the documented contract: pick options when you build
+    // the array).
+    const paletteA = createColorFeature({ palette: ['#111111'] })
+    const paletteB = createColorFeature({ palette: ['#222222'] })
+    const { result, rerender } = renderHook((props) => useDocumentEditor(props), {
+      initialProps: { features: [paletteA] },
+    })
+    const firstResolved = result.current.resolved
+    const firstEditor = result.current.editor
+
+    rerender({ features: [paletteB] })
+    expect(result.current.resolved).toBe(firstResolved)
+    expect(result.current.editor).toBe(firstEditor)
   })
 
   it('calls onReady once with the api', async () => {
@@ -128,5 +147,39 @@ describe('useDocumentEditor', () => {
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledTimes(1)
     expect(second).toHaveBeenCalledWith(error)
+  })
+})
+
+describe('contract edges (StrictMode, setJSON errors)', () => {
+  it('onReady fires ONCE per editor instance under React.StrictMode', async () => {
+    // StrictMode re-runs mount effects with unchanged deps; without the
+    // api-identity guard a dev-mode consumer double-fetches/double-loads.
+    const onReady = vi.fn()
+    renderHook(() => useDocumentEditor({ features: [BoldFeature], onReady }), {
+      wrapper: StrictMode,
+    })
+    await waitFor(() => expect(onReady).toHaveBeenCalled())
+    // Drain a beat: the double-invoked effect would fire on the next tick.
+    await act(async () => {})
+    expect(onReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('api.setJSON of invalid content THROWS synchronously — it does NOT route to onContentError', async () => {
+    // TipTap 3.17: setContent's JSON path has no contentError plumbing —
+    // the docs tell consumers to try/catch their async load. Pin both halves
+    // so an upgrade that changes the routing is caught.
+    const onContentError = vi.fn()
+    const { result } = renderHook(() =>
+      useDocumentEditor({ features: [BoldFeature], onContentError }),
+    )
+    await waitFor(() => expect(result.current.api).not.toBeNull())
+
+    const bad = { doc: { type: 'doc', content: [{ type: 'notAFeatureNode' }] } }
+    expect(() =>
+      act(() => {
+        result.current.api!.setJSON(bad as never)
+      }),
+    ).toThrow()
+    expect(onContentError).not.toHaveBeenCalled()
   })
 })

@@ -2,7 +2,9 @@ import { Extension } from '@tiptap/core'
 import type { Editor, Range } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
 import { ReactRenderer } from '@tiptap/react'
-import Suggestion from '@tiptap/suggestion'
+import Suggestion, { type SuggestionProps } from '@tiptap/suggestion'
+import { POPUP_CLASS } from '../base.styles'
+import { registerEscapeSurface } from './useDismissable'
 import {
   useEffect,
   useImperativeHandle,
@@ -23,7 +25,7 @@ interface SuggestionPopupConfig<I, S> {
   char: string
   /** A `forwardRef<SuggestionPopupRef, …>` floating list. It receives the raw
    *  suggestion props (query, items, command, …) and forwards the ref. */
-  component: ComponentType<any>
+  component: ComponentType<SuggestionProps<I, S>>
   items: (props: { query: string; editor: Editor }) => I[]
   command: (props: { editor: Editor; range: Range; props: S }) => void
 }
@@ -51,6 +53,7 @@ export function createSuggestionPopup<I = unknown, S = I>(
           render: () => {
             let component: ReactRenderer<SuggestionPopupRef> | null = null
             let popup: HTMLElement | null = null
+            let unregisterEscape: (() => void) | null = null
 
             const place = (clientRect?: (() => DOMRect | null) | null) => {
               const rect = clientRect?.()
@@ -58,20 +61,27 @@ export function createSuggestionPopup<I = unknown, S = I>(
               popup.style.position = 'fixed'
               popup.style.left = `${rect.left}px`
               popup.style.top = `${rect.bottom + 6}px`
-              // z-index comes from the .suggestion-popup class (--editor-z-popup).
+              // z-index comes from the .document-editor-popup base rule (it must
+              // stack above the fixed footer when the caret sits near it).
             }
 
             return {
               onStart: (props) => {
-                component = new ReactRenderer<SuggestionPopupRef>(config.component, {
+                component = new ReactRenderer<SuggestionPopupRef, SuggestionProps<I, S>>(config.component, {
                   props,
                   editor: props.editor,
                 })
                 popup = document.createElement('div')
-                popup.className = 'document-editor-popup suggestion-popup'
+                popup.className = `${POPUP_CLASS} suggestion-popup`
                 popup.appendChild(component.element)
                 document.body.appendChild(popup)
                 place(props.clientRect)
+                // The popup is now the INNERMOST surface: top the Escape stack
+                // so longer-lived useDismissable surfaces (the pinned variables
+                // panel, an open page region) don't close in its place while
+                // Suggestion handles the actual exit.
+                unregisterEscape?.()
+                unregisterEscape = registerEscapeSurface()
               },
               onUpdate: (props) => {
                 component?.updateProps(props)
@@ -85,6 +95,8 @@ export function createSuggestionPopup<I = unknown, S = I>(
                 return component?.ref?.onKeyDown({ event: props.event }) ?? false
               },
               onExit: () => {
+                unregisterEscape?.()
+                unregisterEscape = null
                 popup?.remove()
                 component?.destroy()
                 popup = null

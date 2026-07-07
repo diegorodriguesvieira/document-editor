@@ -32,14 +32,17 @@ const LOGO_SRC =
  * every rich block the ACTIVE preset offers. Built against the SCHEMA (which
  * nodes the enabled features registered — NOT `api.hasNode`, which asks the
  * current document) so it degrades gracefully: on a minimal preset the same
- * call produces just headings and paragraphs (the SDK's content check rejects
- * unknown nodes by design, so a template must ask the schema, not assume it).
+ * call produces just paragraphs (the SDK's content check rejects unknown
+ * nodes by design, so a template must ask the schema, not assume it).
  */
 export function contractTemplate(editor: SchemaSource): DocJSON {
   const has = (name: string) => Boolean(editor.schema.nodes[name])
   // Merge fields degrade to visible {placeholders} on presets without them.
   const field = (id: string, label: string): Node =>
     has('mergeField') ? { type: 'mergeField', attrs: { id, label } } : text(`{${label}}`)
+  // Headings are a feature too — a heading-less preset gets plain paragraphs.
+  const h = (level: number, value: string): Node =>
+    has('heading') ? heading(level, value) : paragraph(text(value))
 
   const cell = (type: 'tableHeader' | 'tableCell', ...content: Node[]): Node => ({
     type,
@@ -62,7 +65,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
   if (has('image')) content.push({ type: 'image', attrs: { src: LOGO_SRC, alt: 'ACME logo' } })
 
   content.push(
-    heading(1, 'Service agreement'),
+    h(1, 'Service agreement'),
     paragraph(
       text('This agreement is made between ACME Services Ltd. and '),
       field('cliente.nome', 'Client name'),
@@ -72,7 +75,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
       field('contrato.numero', 'Contract number'),
       text('.'),
     ),
-    heading(2, 'Parties & terms'),
+    h(2, 'Parties & terms'),
   )
 
   if (has('table')) {
@@ -97,7 +100,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
   }
 
   if (has('bulletList')) {
-    content.push(heading(2, 'Deliverables'), {
+    content.push(h(2, 'Deliverables'), {
       type: 'bulletList',
       content: [
         'Monthly progress report',
@@ -109,7 +112,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
 
   if (has('conditionalBlock')) {
     content.push(
-      heading(2, 'Conditional clauses'),
+      h(2, 'Conditional clauses'),
       {
         type: 'conditionalBlock',
         attrs: {

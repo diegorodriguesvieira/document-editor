@@ -1,3 +1,4 @@
+import ButtonBase from '@mui/material/ButtonBase'
 import type { Editor } from '../editor'
 import { useDocumentComments } from '../features'
 
@@ -21,9 +22,8 @@ export function CommentCards({ editor }: { editor: Editor | null }) {
         Review notes <span className="comment-cards__badge">{comments.length}</span>
       </div>
       {comments.map((comment, index) => (
-        <button
+        <ButtonBase
           key={`${comment.id}:${comment.from}`}
-          type="button"
           className="comment-cards__card"
           onClick={() =>
             editor
@@ -39,7 +39,7 @@ export function CommentCards({ editor }: { editor: Editor | null }) {
             <span className="comment-cards__text">{comment.text || '(no text)'}</span>
             <span className="comment-cards__quote">on “{comment.quote}”</span>
           </span>
-        </button>
+        </ButtonBase>
       ))}
     </aside>
   )

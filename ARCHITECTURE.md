@@ -144,6 +144,17 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
   lands at the bottom for any app-header height. `--editor-page-min-height` is
   only the fallback for unsized parents. Breaking ONE link strands the page
   height — the chain is grouped under a single CSS selector on purpose.
+- **MUI chrome layer**: interactive chrome (menus, popovers, buttons, forms)
+  is Material UI 7 under a scoped `ThemeProvider` (`src/editor/theme.tsx`;
+  `muiTheme` prop). The theme's palette literals mirror the `--editor-*` token
+  defaults (pinned by `theme.contract.test.ts`) and every visible knob reads
+  `var(--editor-x, <default>)`, so token overrides keep restyling MUI chrome.
+  Portal/dismiss split: the context menu is a fully MUI-owned Menu (it joins
+  the Escape stack via `useEscapeSurface`); the color picker and variables
+  panel are NON-modal Poppers with `useDismissable` as dismiss owner (no
+  backdrop — chip dragging and the region gate depend on it); suggestion
+  popups keep their TipTap-owned lifecycle with MUI visuals only. Every
+  portaled surface carries `document-editor-popup` on its paper/root.
 - **Render-prop ladder**: `renderToolbar`, `renderHeader` / `renderFooter`
   (fixed-height SDK shells, consumer content; returning null HIDES the bar —
   the footer defaults to the insert actions), `renderLeftPanel` /
@@ -162,8 +173,9 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
 ## 6. Reactivity and state rules
 
 - **`useFeatureState(editor, selector)`** (`hooks/useFeatureState.ts`) is the
-  only place that touches TipTap's `useEditorState`. Every reactive read goes
-  through it — same selector+equality optimization, single point of coupling.
+  seam feature UI reads editor state through (only it and `useToolbar`, which
+  predates it, touch TipTap's `useEditorState` directly). Same
+  selector+equality optimization, single point of coupling.
 - **Extension `storage`** is for feature-internal shared state (e.g. which
   region is open for editing). Rules learned the hard way: keep ONE source of
   truth (derive React state from storage via `useFeatureState`, never mirror
@@ -179,7 +191,7 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
 ## 7. Interaction machinery
 
 - **`useDismissable(refs, onClose, opts)`** owns the dismiss contract for every
-  floating surface (context menu, color picker, merge-field modal, open
+  floating surface (context menu, color picker, variables panel, open
   header/footer regions). Three hard-won details live inside it:
   - *Capture-phase listeners.* ProseMirror `preventDefault`s Escape inside the
     editable — a bubble-phase listener starves. Mousedown is capture for the

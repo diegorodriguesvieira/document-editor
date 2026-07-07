@@ -1,5 +1,4 @@
 /* QuoteFeature — blockquote inside the page. */
-/* */
 import { css } from '@emotion/react'
 
 export const blockquoteStyles = css`

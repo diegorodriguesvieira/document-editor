@@ -43,30 +43,41 @@ describe('<ContextMenuView />', () => {
     )
   })
 
-  it('activates on plain click without the mousedown collapsing anything (keyboard-compatible)', () => {
+  it('activates on CLICK, not on mousedown (keyboard path stays intact)', () => {
     const onRun = vi.fn()
     render(<ContextMenuView x={0} y={0} groups={GROUPS} onRun={onRun} onClose={() => {}} />)
     const item = screen.getByRole('menuitem', { name: /Insert row above/ })
 
-    // mousedown alone must NOT run the command (it only preserves the
-    // selection); the CLICK — which Enter/Space also produce on a <button> —
-    // is the activation.
-    expect(fireEvent.mouseDown(item)).toBe(false) // preventDefault'ed
+    // mousedown alone must NOT run the command; the CLICK — which
+    // Enter/Space also produce on a menuitem — is the activation. (The
+    // selection survives regardless: MUI's Menu is modal, the press lands
+    // above the editor.)
+    fireEvent.mouseDown(item)
     expect(onRun).not.toHaveBeenCalled()
     fireEvent.click(item)
     expect(onRun).toHaveBeenCalledWith('table.addRowBefore')
   })
 
-  it('closes on Escape and on outside click', async () => {
+  it('closes on Escape and on outside (backdrop) click — MUI owns both', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
     render(<ContextMenuView x={0} y={0} groups={GROUPS} onRun={() => {}} onClose={onClose} />)
 
+    // The menu autofocuses its list, so the key lands on the surface.
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
 
-    await user.click(document.body)
+    // jsdom has no hit-testing: the "outside click" is a click on the
+    // backdrop element MUI mounts under the paper.
+    fireEvent.click(document.querySelector('.MuiBackdrop-root')!)
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('carries the popup MARKER on the paper only — never the backdrop (the region gate reads it)', () => {
+    render(<ContextMenuView x={0} y={0} groups={GROUPS} onRun={() => {}} onClose={() => {}} />)
+    const paper = document.querySelector('.context-menu')!
+    expect(paper.classList.contains('document-editor-popup')).toBe(true)
+    expect(document.querySelector('.MuiBackdrop-root')!.classList.contains('document-editor-popup')).toBe(false)
   })
 })
 

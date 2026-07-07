@@ -6,7 +6,7 @@
  * re-exported here (ProseMirror plugins, model types, …) is normal and fine.
  */
 export { Extension, Mark, Node, mergeAttributes } from '@tiptap/core'
-export type { AnyExtension, ChainedCommands, CommandProps, Editor } from '@tiptap/core'
+export type { AnyExtension, Editor } from '@tiptap/core'
 export {
   NodeViewContent,
   NodeViewWrapper,

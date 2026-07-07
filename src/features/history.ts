@@ -1,5 +1,6 @@
 import { UndoRedo } from '@tiptap/extensions'
 import { defineFeature } from '../editor'
+import { icons } from './icons'
 
 /** Undo/redo (TipTap v3 renamed History → UndoRedo, now in @tiptap/extensions). */
 export const HistoryFeature = defineFeature({
@@ -14,7 +15,7 @@ export const HistoryFeature = defineFeature({
       id: 'undo',
       group: 'history',
       label: 'Undo',
-      icon: '↶',
+      icon: icons.undo,
       commandId: 'history.undo',
       isDisabled: (state) => !state.canUndo(),
     },
@@ -22,7 +23,7 @@ export const HistoryFeature = defineFeature({
       id: 'redo',
       group: 'history',
       label: 'Redo',
-      icon: '↷',
+      icon: icons.redo,
       commandId: 'history.redo',
       isDisabled: (state) => !state.canRedo(),
     },

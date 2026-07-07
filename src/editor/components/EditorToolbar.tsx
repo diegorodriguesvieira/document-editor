@@ -10,13 +10,13 @@ export interface EditorToolbarProps {
   editor: Editor | null
   api: EditorApi
   resolved: ResolvedFeatures
-  /** Override the container class — restyle without forking (Level 1/2). */
+  /** Override the container class — restyle without forking. */
   className?: string
   /** Show only a subset of contributions (e.g. a marks-only bubble menu). */
   filter?: (item: ToolbarItem) => boolean
-  /** Override how each button renders, keeping the live state (Level 2). */
+  /** Override how each button renders, keeping the live state. */
   renderButton?: (button: ToolbarButton) => ReactNode
-  /** Arbitrary custom controls appended at the end (Level 2 slot). */
+  /** Arbitrary custom controls appended at the end. */
   children?: ReactNode
 }
 

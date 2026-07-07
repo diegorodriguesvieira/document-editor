@@ -85,14 +85,15 @@ const paragraph = (text: string) => ({
   content: [{ type: 'text', text }],
 })
 
-/** Starter content for stories with a REDUCED feature set: no custom nodes,
- *  so it loads under any schema. (Loading content whose feature is disabled
- *  THROWS by design — the SDK never silently wipes a document.) */
+/** Starter content for stories with a REDUCED feature set: PARAGRAPHS ONLY —
+ *  the one shape the kernel guarantees. Even a heading or a bold mark is
+ *  opt-in, and loading content whose feature is disabled THROWS by design
+ *  (the SDK never silently wipes a document). */
 export const BASIC_DOC: DocumentJSON = {
   doc: {
     type: 'doc',
     content: [
-      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Service agreement' }] },
+      paragraph('Service agreement'),
       paragraph('This document is rendered by the SDK with the feature set this story opts into.'),
       paragraph('Select any text to see the bubble toolbar.'),
     ],

@@ -42,7 +42,7 @@ function useApiRevision(api: EditorApi, enabled: boolean): number {
 
 /**
  * Core headless engine for any registry-driven bar (toolbar, bubble, insert
- * rail). Given a list of contributions, returns the live buttons.
+ * dock). Given a list of contributions, returns the live buttons.
  *
  * State is read through the {@link EditorApi} seam, so it works with a real
  * editor *or* `createMockEditor`. With a real editor it rides `useEditorState`

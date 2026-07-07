@@ -2,12 +2,11 @@ import { css } from '@emotion/react'
 
 /* Right-side comments panel. */
 export const commentsPanelStyles = css`
-  .comments-panel {
+  .comments-panel.comments-panel {
     width: 260px;
     max-height: 70vh;
     overflow-y: auto;
     padding: 10px 12px;
-    background: var(--editor-surface);
     border: 1px solid var(--editor-border);
     border-radius: 10px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -29,7 +28,7 @@ export const commentsPanelStyles = css`
     list-style: none;
   }
 
-  .comments-panel__item {
+  .comments-panel__item.comments-panel__item {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -43,7 +42,7 @@ export const commentsPanelStyles = css`
     cursor: pointer;
   }
 
-  .comments-panel__item:hover {
+  .comments-panel__item.comments-panel__item:hover {
     background: color-mix(in srgb, var(--editor-comment-bg) 55%, var(--editor-surface));
     border-color: var(--editor-comment-accent);
   }

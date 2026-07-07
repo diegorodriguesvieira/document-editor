@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { docWith, renderEditor } from '../../test/editorHarness'
 import { CommentsFeature } from './comments'
-import { getCommentThreads } from './commentsPanel'
+import { getCommentThreads } from './comments'
 
 afterEach(() => {
   vi.unstubAllGlobals()

@@ -1,7 +1,6 @@
 import { css } from '@emotion/react'
 
 /* CalloutFeature — pure-DOM node view. */
-/* */
 export const calloutStyles = css`
   .document-editor__surface .callout {
     display: flex;

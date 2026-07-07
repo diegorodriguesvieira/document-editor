@@ -1,5 +1,6 @@
 import { Bold } from '@tiptap/extension-bold'
 import { defineFeature } from '../../editor'
+import { icons } from '../icons'
 
 /** Bold mark. Its own Mod-b shortcut comes from the extension. */
 export const BoldFeature = defineFeature({
@@ -13,7 +14,7 @@ export const BoldFeature = defineFeature({
       id: 'bold',
       group: 'marks',
       label: 'Bold',
-      icon: 'B',
+      icon: icons.bold,
       commandId: 'bold.toggle',
       isActive: (state) => state.isActive('bold'),
     },
