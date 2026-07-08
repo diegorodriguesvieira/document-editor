@@ -11,7 +11,7 @@ export { ListsFeature } from './blocks/lists'
 export { QuoteFeature } from './blocks/blockquote'
 export { CodeBlockFeature } from './blocks/codeBlock'
 export { DividerFeature } from './blocks/divider'
-export { TableFeature } from './blocks/table'
+export { TableFeature, TableColumnsFeature } from './blocks/table'
 export { ImageFeature } from './blocks/image'
 
 // Example "team" features

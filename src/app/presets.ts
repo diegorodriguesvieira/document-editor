@@ -17,6 +17,7 @@ import {
   MergeFieldFeature,
   QuoteFeature,
   TableFeature,
+  TableColumnsFeature,
 } from '../features'
 import { AppExtrasFeature } from './appExtras'
 
@@ -32,6 +33,7 @@ export const fullFeatures: FeatureDefinition[] = [
   ItalicFeature,
   HeadingFeature,
   ListsFeature,
+  TableColumnsFeature,
   LinkFeature,
   ColorFeature,
   CalloutFeature,

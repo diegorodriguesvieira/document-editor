@@ -52,4 +52,34 @@ export const tableStyles = css`
     font-weight: 600;
     text-align: left;
   }
+
+  .document-editor-popup .table-columns-picker__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    min-width: 140px;
+  }
+
+  .document-editor-popup .table-columns-picker__option {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--editor-control-fg);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .document-editor-popup .table-columns-picker__option:hover {
+    background: var(--editor-subtle-bg);
+  }
+
+  .document-editor-popup .table-columns-picker__option:focus-visible {
+    outline: 2px solid var(--editor-accent-ink);
+    outline-offset: -2px;
+  }
 `

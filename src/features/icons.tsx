@@ -15,6 +15,7 @@ import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined'
 import LinkIcon from '@mui/icons-material/Link'
 import Redo from '@mui/icons-material/Redo'
 import Undo from '@mui/icons-material/Undo'
+import ViewColumn from '@mui/icons-material/ViewColumn'
 
 /**
  * The SDK defaults' icon set, prebuilt as elements so plain .ts feature files
@@ -32,6 +33,7 @@ export const icons = {
   divider: <HorizontalRule />,
   image: <ImageOutlined />,
   table: <GridOn />,
+  tableColumns: <ViewColumn />,
   comment: <AddCommentOutlined />,
   conditional: <CallSplit />,
   callout: <LightbulbOutlined />,
