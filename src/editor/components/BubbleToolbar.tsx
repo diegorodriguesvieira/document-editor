@@ -4,11 +4,31 @@ import { ThemeProvider } from '@mui/material/styles'
 import type { Editor } from '@tiptap/core'
 import { POPUP_CLASS } from '../base.styles'
 import { editorDarkTheme } from '../theme'
+import type { Fragment } from '@tiptap/pm/model'
 import { NodeSelection } from '@tiptap/pm/state'
 import type { EditorApi } from '../core/EditorApi'
 import { EditorToolbar, type EditorToolbarProps } from './EditorToolbar'
 import type { ResolvedFeatures } from '../core/registry'
 import type { ToolbarItem } from '../core/types'
+
+/**
+ * Whether `fragment` is, once whitespace-only text is ignored, nothing but a
+ * single atomic node — drilling through the "open" wrapper(s) a selection's
+ * `Slice` adds (e.g. `Selection.content()` for a range fully inside one
+ * paragraph wraps it in a same-type paragraph so it can merge back into
+ * context; the atom sits one level deeper, not at the fragment's own top).
+ */
+function isAtomOnlyContent(fragment: Fragment): boolean {
+  const significant = fragment.content.filter((node) => !(node.isText && !node.text?.trim()))
+  if (significant.length !== 1) return false
+  const [only] = significant
+  // Plain text nodes are technically "atoms" too (leaf, no content) — that is
+  // not the case this guards against; only a genuinely atomic NODE
+  // (mergeField, image…) makes the selection unformattable.
+  if (only.isText) return false
+  if (only.isAtom) return true
+  return only.content.childCount > 0 && isAtomOnlyContent(only.content)
+}
 
 export interface BubbleToolbarProps {
   editor: Editor | null
@@ -32,12 +52,24 @@ export interface BubbleToolbarProps {
  * handles); the TEXT formatting bubble would be noise on top of it.
  */
 export function bubbleShouldShow(editor: Editor): boolean {
-  return (
-    editor.isEditable &&
-    !editor.state.selection.empty &&
-    !editor.isEmpty &&
-    !(editor.state.selection instanceof NodeSelection)
-  )
+  const { selection } = editor.state
+  if (
+    !editor.isEditable ||
+    selection.empty ||
+    editor.isEmpty ||
+    selection instanceof NodeSelection
+  ) {
+    return false
+  }
+  // A TEXT selection that amounts to nothing but a single atomic inline node
+  // (e.g. a merge-field chip) has nothing formattable in it — same reason the
+  // NodeSelection case above is excluded, just reached a different way: a
+  // drop's default handling can leave a lone atom text-selected instead of
+  // node-selected (ProseMirror opens externally-sourced HTML slices as wide
+  // as they'll go, which skips the NodeSelection branch in its own drop
+  // handler). Whitespace alongside the atom (a trailing space from a chip
+  // insert) doesn't count against it.
+  return !isAtomOnlyContent(selection.content().content)
 }
 
 /**
