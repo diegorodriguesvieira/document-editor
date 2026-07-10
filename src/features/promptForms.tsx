@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
@@ -107,16 +107,34 @@ function LinkInsertControl({ editor, api }: FeatureRenderContext) {
   const [href, setHref] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // Let the Mod-k shortcut (the `link.openInsert` command) pop THIS same form:
-  // park an opener in the bridge storage while mounted, clear it on unmount.
+  // Open with the current selection pre-filled: the selected run becomes the
+  // link text, and when it's ALREADY a link its href pre-fills the URL — so
+  // selecting a link opens the form ready to edit both fields. When only PART
+  // (or none) of a link is selected, extend to the mark's full range first, so
+  // `link.insert`'s replace rewrites the whole link in place instead of
+  // splitting it. Empty, non-link selection → blank fields (you type both).
+  const openWithSelection = useCallback(() => {
+    if (editor) {
+      const href = editor.getAttributes('link').href
+      if (typeof href === 'string') editor.commands.extendMarkRange('link')
+      const { from, to, empty } = editor.state.selection
+      setText(empty ? '' : editor.state.doc.textBetween(from, to, ' '))
+      setHref(typeof href === 'string' ? href : '')
+    }
+    setOpen(true)
+  }, [editor])
+
+  // Let the Mod-k shortcut (the `link.openInsert` command) pop THIS same form,
+  // pre-filled the same way: park an opener in the bridge storage while
+  // mounted, clear it on unmount.
   useEffect(() => {
     if (!editor) return
     const bridge = linkInsertBridge(editor)
-    bridge.open = () => setOpen(true)
+    bridge.open = openWithSelection
     return () => {
       bridge.open = null
     }
-  }, [editor])
+  }, [editor, openWithSelection])
 
   const reset = () => {
     setOpen(false)
@@ -128,7 +146,7 @@ function LinkInsertControl({ editor, api }: FeatureRenderContext) {
       <IconButton
         ref={buttonRef}
         className="insert-dock__btn"
-        {...popupTriggerProps('Link', open, () => setOpen((value) => !value))}
+        {...popupTriggerProps('Link', open, () => (open ? reset() : openWithSelection()))}
       >
         {icons.link}
       </IconButton>
@@ -145,13 +163,14 @@ function LinkInsertControl({ editor, api }: FeatureRenderContext) {
         <TextField
           label="Text"
           value={text}
-          autoFocus
+          autoFocus={!text}
           slotProps={{ htmlInput: { 'aria-label': 'Link text' } }}
           onChange={(event) => setText(event.target.value)}
         />
         <TextField
           label="URL"
           value={href}
+          autoFocus={!!text}
           slotProps={{ htmlInput: { 'aria-label': 'Link URL' } }}
           onChange={(event) => setHref(event.target.value)}
         />
