@@ -136,9 +136,8 @@ export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOp
       'color.set': (editor, payload) => {
         // The value lands in a style attribute (`color: <value>`) of the
         // backend/PDF HTML contract — validate like every payload sibling
-        // (link.set, image.insert). The regex is the injection gate (no
-        // declaration smuggling); CSS.supports refines it in real browsers
-        // (jsdom lacks it).
+        // (image.insert). The regex is the injection gate (no declaration
+        // smuggling); CSS.supports refines it in real browsers (jsdom lacks it).
         const color = typeof payload === 'string' ? payload.trim() : ''
         if (!color || /[;{}<>]/.test(color)) return false
         if (typeof CSS !== 'undefined' && CSS.supports && !CSS.supports('color', color)) {

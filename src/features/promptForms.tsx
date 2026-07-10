@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
@@ -11,15 +11,13 @@ import {
   type FeatureRenderContext,
 } from '../editor'
 import { icons } from './icons'
+import { linkInsertBridge } from './marks/linkInsertBridge'
 
 /**
  * Shared button-state predicates — the ONE definition each rule has. The
  * feature's ToolbarItem (`isActive`/`isDisabled`, driving the default-button
  * path and the mock seam) and the custom controls below both read these.
  */
-export const linkSetActive = (state: EditorStateView) => state.isActive('link')
-export const linkSetDisabled = (state: EditorStateView) =>
-  state.isSelectionEmpty() && !state.isActive('link')
 export const commentAddActive = (state: EditorStateView) => state.isActive('comment')
 export const commentAddDisabled = (state: EditorStateView) => state.isSelectionEmpty()
 
@@ -102,59 +100,23 @@ function FormPopover({
   )
 }
 
-/** Edit/set the link on the current selection (the bubble's Link button). */
-function LinkSetControl({ editor, api }: FeatureRenderContext) {
-  const [open, setOpen] = useState(false)
-  const [href, setHref] = useState('')
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const active = useFeatureState(editor, () => linkSetActive(api)) ?? false
-  const disabled = useFeatureState(editor, () => linkSetDisabled(api)) ?? true
-
-  return (
-    <>
-      <ToggleButton
-        ref={buttonRef}
-        value="link"
-        selected={active}
-        disabled={disabled}
-        {...popupTriggerProps('Link', open, () => {
-          // Prefill with the mark under the caret — the "edit link" flow.
-          setHref((editor?.getAttributes('link').href as string | undefined) ?? '')
-          setOpen((value) => !value)
-        })}
-      >
-        {icons.link}
-      </ToggleButton>
-      <FormPopover
-        anchor={buttonRef.current}
-        open={open}
-        label="Link"
-        onClose={() => setOpen(false)}
-        onSubmit={() => {
-          // '' on purpose = remove the link (the command's documented contract).
-          api.exec('link.set', href)
-          setOpen(false)
-        }}
-      >
-        <TextField
-          label="URL"
-          value={href}
-          autoFocus
-          helperText="Leave empty to remove the link"
-          slotProps={{ htmlInput: { 'aria-label': 'Link URL' } }}
-          onChange={(event) => setHref(event.target.value)}
-        />
-      </FormPopover>
-    </>
-  )
-}
-
 /** Insert a brand-new linked text run (the dock's Link action). */
-function LinkInsertControl({ api }: FeatureRenderContext) {
+function LinkInsertControl({ editor, api }: FeatureRenderContext) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [href, setHref] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // Let the Mod-k shortcut (the `link.openInsert` command) pop THIS same form:
+  // park an opener in the bridge storage while mounted, clear it on unmount.
+  useEffect(() => {
+    if (!editor) return
+    const bridge = linkInsertBridge(editor)
+    bridge.open = () => setOpen(true)
+    return () => {
+      bridge.open = null
+    }
+  }, [editor])
 
   const reset = () => {
     setOpen(false)
@@ -288,7 +250,6 @@ function CommentAddControl({ editor, api }: FeatureRenderContext) {
 }
 
 /* Plain-function faces so .ts feature files can wire `render` without JSX. */
-export const renderLinkSetControl = (ctx: FeatureRenderContext) => <LinkSetControl {...ctx} />
 export const renderLinkInsertControl = (ctx: FeatureRenderContext) => (
   <LinkInsertControl {...ctx} />
 )

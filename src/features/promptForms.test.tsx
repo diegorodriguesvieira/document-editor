@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { EditorToolbar, InsertToolbar } from '../editor'
@@ -15,52 +15,6 @@ import { LinkFeature } from './marks/link'
  */
 
 describe('link forms', () => {
-  it('bubble Link button opens a form; submitting the URL links the selection', async () => {
-    const user = userEvent.setup()
-    const created = renderEditor([LinkFeature], { content: docWith('anchor me') })
-    created.editor.commands.setTextSelection({ from: 1, to: 7 })
-    render(
-      <EditorToolbar
-        editor={created.editor}
-        api={created.api}
-        resolved={created.resolved}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Link' }))
-    const dialog = screen.getByRole('dialog', { name: 'Link' })
-    // Portaled form with the region-gate marker (never a backdrop).
-    expect(dialog.classList.contains('document-editor-popup')).toBe(true)
-
-    await user.type(screen.getByRole('textbox', { name: 'Link URL' }), 'https://example.com')
-    await user.click(screen.getByRole('button', { name: 'Apply' }))
-
-    expect(created.api.getHTML()).toContain('href="https://example.com"')
-    expect(screen.queryByRole('dialog', { name: 'Link' })).toBeNull()
-  })
-
-  it('prefills the existing href and clears the link when submitted EMPTY', async () => {
-    const user = userEvent.setup()
-    const created = renderEditor([LinkFeature], { content: docWith('linked') })
-    created.editor.commands.setTextSelection({ from: 1, to: 7 })
-    created.api.exec('link.set', 'https://old.example')
-    render(
-      <EditorToolbar
-        editor={created.editor}
-        api={created.api}
-        resolved={created.resolved}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Link' }))
-    const input = screen.getByRole('textbox', { name: 'Link URL' })
-    expect(input).toHaveValue('https://old.example')
-
-    await user.clear(input)
-    await user.click(screen.getByRole('button', { name: 'Apply' }))
-    expect(created.api.getHTML()).not.toContain('href=')
-  })
-
   it('dock Link action collects text + URL and inserts the linked run', async () => {
     const user = userEvent.setup()
     const created = renderEditor([LinkFeature])
@@ -98,6 +52,25 @@ describe('link forms', () => {
     await user.click(screen.getByRole('button', { name: 'Insert' }))
 
     expect(created.api.getHTML()).not.toContain('javascript:')
+    expect(screen.getByRole('dialog', { name: 'Insert link' })).toBeInTheDocument()
+  })
+
+  it('Mod-k opens the SAME insert-link form (the keyboard shortcut, no bubble bar)', () => {
+    const created = renderEditor([LinkFeature])
+    render(
+      <InsertToolbar
+        editor={created.editor}
+        api={created.api}
+        resolved={created.resolved}
+      />,
+    )
+    created.editor.commands.focus()
+    expect(screen.queryByRole('dialog', { name: 'Insert link' })).toBeNull()
+
+    // Mod = Ctrl in jsdom (non-mac); the registryKeymap routes it to
+    // link.openInsert, which pops the mounted dock control's form.
+    fireEvent.keyDown(created.editor.view.dom, { key: 'k', ctrlKey: true })
+
     expect(screen.getByRole('dialog', { name: 'Insert link' })).toBeInTheDocument()
   })
 })

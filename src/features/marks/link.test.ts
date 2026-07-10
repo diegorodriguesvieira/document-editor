@@ -1,81 +1,36 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { docWith, renderEditor } from '../../test/editorHarness'
 import { LinkFeature } from './link'
 
-/** The commands fall back to window.prompt when no payload is given (the
- *  placeholder UI). jsdom has no prompt — stub it per test. */
-function stubPrompt(...answers: Array<string | null>) {
-  const prompt = vi.fn()
-  for (const answer of answers) prompt.mockReturnValueOnce(answer)
-  vi.stubGlobal('prompt', prompt)
-  return prompt
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
-
 describe('link commands', () => {
-  const linked = () => {
-    const created = renderEditor([LinkFeature], { content: docWith('hello world') })
-    created.editor.commands.setTextSelection({ from: 1, to: 6 }) // "hello"
-    expect(created.api.exec('link.set', 'https://old.example')).toBe(true)
-    return created
-  }
-
-  it('link.set with a payload wraps the selection', () => {
-    const created = linked()
-    expect(created.api.getHTML()).toContain('href="https://old.example"')
-    expect(created.api.getHTML()).toMatch(/<a [^>]*>hello<\/a>/)
+  it('link.insert with a text+href payload inserts a linked run', () => {
+    const created = renderEditor([LinkFeature], { content: docWith('base') })
+    expect(created.api.exec('link.insert', { text: 'Docs', href: 'https://docs.example' })).toBe(
+      true,
+    )
+    expect(created.api.getHTML()).toMatch(
+      /<a [^>]*href="https:\/\/docs\.example"[^>]*>Docs<\/a>/,
+    )
   })
 
-  it('link.set from a CARET inside a link retargets the WHOLE mark (the edit-link flow)', () => {
-    const created = linked()
-    created.editor.commands.setTextSelection(3) // caret inside "hello", nothing selected
-
-    expect(created.api.exec('link.set', 'https://new.example')).toBe(true)
-
-    // extendMarkRange: the entire linked run moved to the new URL — not just
-    // an empty caret-width mark.
-    const html = created.api.getHTML()
-    expect(html).toMatch(/<a [^>]*href="https:\/\/new\.example"[^>]*>hello<\/a>/)
-    expect(html).not.toContain('https://old.example')
-  })
-
-  it('link.set: CANCELLING the prompt preserves the existing link (never an implicit unset)', () => {
-    const created = linked()
-    const prompt = stubPrompt(null) // Escape on the dialog
-    created.editor.commands.setTextSelection({ from: 1, to: 6 })
-
-    expect(created.api.exec('link.set')).toBe(false) // aborted
-
-    expect(prompt).toHaveBeenCalledTimes(1)
-    expect(created.api.getHTML()).toContain('href="https://old.example"') // intact
-  })
-
-  it('link.set with a deliberately EMPTIED prompt clears the link instead of linking to ""', () => {
-    const created = linked()
-    stubPrompt('') // user erased the URL and hit OK
-    created.editor.commands.setTextSelection({ from: 1, to: 6 })
-
-    expect(created.api.exec('link.set')).toBe(true) // ran as an unset
-
-    expect(created.api.getHTML()).not.toContain('<a ')
-  })
-
-  it('link.unset removes the mark from the selection', () => {
-    const created = linked()
-    created.editor.commands.setTextSelection({ from: 1, to: 6 })
-    expect(created.api.exec('link.unset')).toBe(true)
-    expect(created.api.getHTML()).not.toContain('<a ')
-  })
-
-  it('link.insert enforces the SAME href validation as link.set — script URLs never persist', () => {
+  it('link.insert needs BOTH text and href — a missing field aborts cleanly', () => {
     const created = renderEditor([LinkFeature], { content: docWith('base') })
     const before = created.api.getHTML()
 
-    // link.set already rejects these via the extension's isAllowedUri; the
-    // raw-JSON insert path must not be a bypass into the document JSON.
+    expect(created.api.exec('link.insert', { text: 'Docs' })).toBe(false) // no href
+    expect(created.api.exec('link.insert', { href: 'https://docs.example' })).toBe(false) // no text
+    expect(created.api.exec('link.insert', {})).toBe(false)
+
+    expect(created.api.getHTML()).toBe(before)
+  })
+
+  it('link.insert enforces href validation — script URLs never persist', () => {
+    const created = renderEditor([LinkFeature], { content: docWith('base') })
+    const before = created.api.getHTML()
+
+    // insertContent applies mark attrs unchecked; the command routes href
+    // through the Link extension's isAllowedUri gate so the raw-JSON insert
+    // path is never a bypass into the document JSON.
     expect(created.api.exec('link.insert', { text: 'x', href: 'javascript:alert(1)' })).toBe(false)
     expect(created.api.exec('link.insert', { text: 'x', href: 'vbscript:msgbox' })).toBe(false)
 
@@ -83,22 +38,10 @@ describe('link commands', () => {
     expect(JSON.stringify(created.api.getJSON())).not.toContain('javascript:')
   })
 
-  it('link.insert prompts for text AND url — cancelling either aborts cleanly', () => {
-    const created = renderEditor([LinkFeature], { content: docWith('base') })
-    const before = created.api.getHTML()
-
-    stubPrompt(null) // cancelled at the text prompt
-    expect(created.api.exec('link.insert')).toBe(false)
-    expect(created.api.getHTML()).toBe(before)
-
-    stubPrompt('click here', null) // cancelled at the URL prompt
-    expect(created.api.exec('link.insert')).toBe(false)
-    expect(created.api.getHTML()).toBe(before)
-
-    stubPrompt('click here', 'https://docs.example')
-    expect(created.api.exec('link.insert')).toBe(true)
-    expect(created.api.getHTML()).toMatch(
-      /<a [^>]*href="https:\/\/docs\.example"[^>]*>click here<\/a>/,
-    )
+  it('link.openInsert no-ops (returns false) when no insert dock is mounted to open', () => {
+    // The command is a UI bridge: with no LinkInsertControl mounted, the bridge
+    // has no opener, so Mod-k is left unhandled rather than silently swallowed.
+    const created = renderEditor([LinkFeature], { content: docWith('x') })
+    expect(created.api.exec('link.openInsert')).toBe(false)
   })
 })

@@ -36,7 +36,7 @@ describe('insert shortcuts (the insert-dock features)', () => {
     expect(resolved.keymap["Mod-Shift-'"]).toBe('quote.toggle')
     expect(resolved.keymap['Mod-"']).toBe('quote.toggle') // layout alias
     expect(resolved.keymap['Mod-Shift-c']).toBe('codeBlock.toggle')
-    expect(resolved.keymap['Mod-k']).toBe('link.set')
+    expect(resolved.keymap['Mod-k']).toBe('link.openInsert') // opens the insert-link form
     expect(resolved.keymap['Mod-Alt-p']).toBe('image.insert') // Mod-Shift-i = Safari Mail Contents
     expect(resolved.keymap['Mod-Alt-b']).toBe('conditional.wrap') // Mod-Shift-k = Firefox Web Console
   })
