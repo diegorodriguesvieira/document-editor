@@ -1,13 +1,58 @@
 import { useRef, useState } from 'react'
 import IconButton from '@mui/material/IconButton'
 import { getHTMLFromFragment, type Editor } from '@tiptap/core'
-import { TableKit } from '@tiptap/extension-table'
-import { TextSelection } from '@tiptap/pm/state'
+import { Table, TableKit, TableView } from '@tiptap/extension-table'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { defineFeature, PopupShell, useFeatureState, type FeatureRenderContext } from '../../editor'
 import { popupTriggerProps } from '../promptForms'
 import { icons } from '../icons'
 
 const TABLE_COLUMN_OPTIONS = [1, 2, 3, 4]
+
+/**
+ * A `<table>` NodeView that mirrors the node's `borderless` attribute onto the
+ * live DOM as an `is-borderless` class. In the editor, resizable tables render
+ * through prosemirror-tables' TableView, which builds its own `<table>` element
+ * and ignores node attributes — so the class emitted by `renderHTML` never
+ * reaches the editable DOM. This subclass re-applies it. (Read-only rendering
+ * has no NodeView and picks the class up from `renderHTML` directly.)
+ */
+class BorderlessTableView extends TableView {
+  constructor(node: ProseMirrorNode, cellMinWidth: number) {
+    super(node, cellMinWidth)
+    this.syncBorderless(node)
+  }
+
+  update(node: ProseMirrorNode): boolean {
+    const kept = super.update(node)
+    if (kept) this.syncBorderless(node)
+    return kept
+  }
+
+  private syncBorderless(node: ProseMirrorNode) {
+    this.table.classList.toggle('is-borderless', Boolean(node.attrs.borderless))
+  }
+}
+
+/**
+ * Our `table` node, extended with a persistent `borderless` boolean. The
+ * bubble's "Table columns" quick-insert sets it (a borderless columns layout);
+ * the footer's "Table" insert leaves it `false` (a normal bordered grid). It
+ * round-trips through HTML as an `is-borderless` class so copy/paste and export
+ * preserve it, and {@link BorderlessTableView} mirrors it inside the editor.
+ */
+const BorderlessTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      borderless: {
+        default: false,
+        parseHTML: (element) => element.classList.contains('is-borderless'),
+        renderHTML: (attributes) => (attributes.borderless ? { class: 'is-borderless' } : {}),
+      },
+    }
+  },
+})
 
 /**
  * True when converting the current selection into a table would nest a table
@@ -30,11 +75,11 @@ function selectionBlocksTableColumns(editor: Editor): boolean {
 }
 
 /**
- * The bubble's "Table columns" button: pick 1–4 and a table of that width
- * replaces the selection — a blank header row on top, and the selected text
- * (formatting intact) in the first cell of the data row below it. A
- * `PopupShell` menu of plain options — same shape as `ColorControl`'s swatch
- * grid, just a vertical list of labels instead of colors.
+ * The bubble's "Table columns" button: pick 1–4 and a borderless columns
+ * layout of that width replaces the selection — a single header-less row with
+ * the selected text (formatting intact) in the first cell. A `PopupShell` menu
+ * of plain options — same shape as `ColorControl`'s swatch grid, just a
+ * vertical list of labels instead of colors.
  */
 function TableColumnsControl({ editor, api }: FeatureRenderContext) {
   const [open, setOpen] = useState(false)
@@ -83,18 +128,25 @@ function TableColumnsControl({ editor, api }: FeatureRenderContext) {
   )
 }
 
-/** Tables (TableKit bundles Table + Row + Header + Cell). `resizable` installs
- *  ProseMirror's columnResizing plugin — drag handles on column borders. (Row
- *  height isn't resizable in ProseMirror tables; it follows the cell content.) */
+/** Tables (TableKit bundles Row + Header + Cell; we swap its Table for the
+ *  {@link BorderlessTable} variant so the "Table columns" insert can be
+ *  borderless). `resizable` installs ProseMirror's columnResizing plugin —
+ *  drag handles on column borders — with `BorderlessTableView` as its node
+ *  view. (Row height isn't resizable in ProseMirror tables; it follows the
+ *  cell content.) */
 export const TableFeature = defineFeature({
   id: 'table',
-  extensions: () => [TableKit.configure({ table: { resizable: true } })],
+  extensions: () => [
+    TableKit.configure({ table: false }),
+    BorderlessTable.configure({ resizable: true, View: BorderlessTableView }),
+  ],
   commands: {
     'table.insert': (editor) =>
       editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
-    // Replaces the selection with a 2-row table of the chosen width (1–4
-    // cols): a blank header row on top, and the selected content (marks
-    // intact) in the first cell of a plain data row underneath.
+    // Replaces the selection with a borderless columns layout of the chosen
+    // width (1–4 cols): a single header-less row, with the selected content
+    // (marks intact) in the first cell and the rest empty. The bordered,
+    // header-topped grid is the footer's "Table" insert instead.
     'table.insertColumns': (editor, payload) => {
       const cols = Number((payload as { cols?: number } | undefined)?.cols)
       if (!Number.isInteger(cols) || cols < 1 || cols > 4) return false
@@ -105,35 +157,28 @@ export const TableFeature = defineFeature({
         ? null
         : getHTMLFromFragment(selection.content().content, schema)
 
-      const chain = editor.chain().focus().insertTable({ rows: 2, cols, withHeaderRow: true })
-      if (!html) return chain.run()
-
-      return chain
+      const chain = editor
+        .chain()
+        .focus()
+        .insertTable({ rows: 1, cols, withHeaderRow: false })
+        // insertTable can't set node attrs, so flip the table we just created
+        // to borderless in the same transaction: walk up from the caret (which
+        // insertTable parked in the first cell) to the enclosing table node.
+        // setNodeMarkup keeps the cell content and the caret, so `insertContent`
+        // below still lands in that first cell.
         .command(({ tr }) => {
-          // insertTable's own selection lands inside the (blank) header row —
-          // walk up to the table node we just created and move the caret
-          // into the data row below it, so `insertContent` lands there
-          // instead and the header stays empty.
-          const $from = tr.selection.$from
-          let tablePos = -1
+          const { $from } = tr.selection
           for (let depth = $from.depth; depth >= 0; depth -= 1) {
-            if ($from.node(depth).type.name === 'table') {
-              tablePos = $from.before(depth)
+            const node = $from.node(depth)
+            if (node.type.name === 'table') {
+              tr.setNodeMarkup($from.before(depth), undefined, { ...node.attrs, borderless: true })
               break
             }
           }
-          const table = tablePos >= 0 ? tr.doc.nodeAt(tablePos) : null
-          if (!table) return true
-
-          let dataRowPos = -1
-          table.forEach((_row, offset, index) => {
-            if (index === 1) dataRowPos = tablePos + 1 + offset
-          })
-          if (dataRowPos >= 0) tr.setSelection(TextSelection.near(tr.doc.resolve(dataRowPos)))
           return true
         })
-        .insertContent(html)
-        .run()
+
+      return html ? chain.insertContent(html).run() : chain.run()
     },
     'table.addRowBefore': (editor) => editor.chain().focus().addRowBefore().run(),
     'table.addRowAfter': (editor) => editor.chain().focus().addRowAfter().run(),

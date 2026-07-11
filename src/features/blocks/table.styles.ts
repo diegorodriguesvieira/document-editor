@@ -53,6 +53,14 @@ export const tableStyles = css`
     text-align: left;
   }
 
+  /* Borderless "columns layout" tables (the bubble's "Table columns" insert).
+     Transparent (not removed) keeps the cell box geometry — and so the resize
+     handles — aligned with a normal grid; the borders just go invisible. */
+  .document-editor__surface table.is-borderless th,
+  .document-editor__surface table.is-borderless td {
+    border-color: transparent;
+  }
+
   .document-editor-popup .table-columns-picker__list {
     display: flex;
     flex-direction: column;

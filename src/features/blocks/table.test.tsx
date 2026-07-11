@@ -33,8 +33,10 @@ function withTable() {
 describe('table feature', () => {
   it('inserts a 3x3 table', () => {
     const { api } = withTable()
+    const table = jsonFindNode(api.getJSON().doc, 'table')
     expect(rows(api)).toBe(3)
     expect(cols(api)).toBe(3)
+    expect(table?.attrs?.borderless).toBe(false) // the plain "Table" insert keeps its borders
   })
 
   it('adds and removes rows', () => {
@@ -148,7 +150,7 @@ describe('table feature', () => {
 })
 
 describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
-  it('replaces the selection with a blank header row + a data row, text (with marks) in the first data cell', () => {
+  it('replaces the selection with a single borderless row, text (with marks) in the first cell', () => {
     const created = renderEditor([TableFeature, BoldFeature], { content: docWith('hello') })
     const { api, editor } = created
     editor.commands.selectAll()
@@ -157,27 +159,24 @@ describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
     expect(api.exec('table.insertColumns', { cols: 3 })).toBe(true)
 
     const table = jsonFindNode(api.getJSON().doc, 'table')
-    expect(table?.content?.length).toBe(2) // header row + data row
+    expect(table?.attrs?.borderless).toBe(true) // a columns layout: no cell borders
+    expect(table?.content?.length).toBe(1) // a single row, no header
 
-    const headerRow = table!.content![0]
-    expect(headerRow.content?.map((cell) => cell.type)).toEqual([
-      'tableHeader',
-      'tableHeader',
-      'tableHeader',
-    ])
-    // The header row is entirely blank.
-    for (const cell of headerRow.content!) expect(cell.content?.[0]?.content).toBeUndefined()
+    // The NodeView mirrors the attribute onto the live `<table>` so the CSS can
+    // strip its borders (resizable tables ignore renderHTML's class otherwise).
+    expect(editor.view.dom.querySelector('table')?.classList.contains('is-borderless')).toBe(true)
 
-    const dataRow = table!.content![1]
-    expect(dataRow.content?.map((cell) => cell.type)).toEqual(['tableCell', 'tableCell', 'tableCell'])
+    const row = table!.content![0]
+    // Plain data cells only — no header cells.
+    expect(row.content?.map((cell) => cell.type)).toEqual(['tableCell', 'tableCell', 'tableCell'])
 
-    const firstCellText = dataRow.content![0].content?.[0]?.content?.[0]
+    const firstCellText = row.content![0].content?.[0]?.content?.[0]
     expect(firstCellText?.text).toBe('hello')
     expect(firstCellText?.marks?.[0]?.type).toBe('bold')
 
-    // The other data cells stay empty.
-    expect(dataRow.content![1].content?.[0]?.content).toBeUndefined()
-    expect(dataRow.content![2].content?.[0]?.content).toBeUndefined()
+    // The other cells stay empty.
+    expect(row.content![1].content?.[0]?.content).toBeUndefined()
+    expect(row.content![2].content?.[0]?.content).toBeUndefined()
   })
 
   it('rejects out-of-range or missing column counts, leaving the doc unchanged', () => {
