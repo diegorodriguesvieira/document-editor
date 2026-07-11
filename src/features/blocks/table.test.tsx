@@ -235,6 +235,31 @@ describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
     expect(api.getJSON().doc.content![2].content![0].text).toBe(' CCC')
   })
 
+  it('a normal table nested inside a column stays bordered — only the columns table is borderless', () => {
+    const created = renderEditor([TableFeature], { content: docWith('x') })
+    const { api, editor } = created
+    editor.commands.setTextSelection({ from: 1, to: 2 })
+    api.exec('table.insertColumns', { cols: 2 }) // borderless columns, caret in first cell
+    api.exec('table.insert') // a normal 3x3 table INSIDE the first column
+
+    // Node level: the columns table is borderless, the nested one is not.
+    const borderless: boolean[] = []
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'table') borderless.push(Boolean(node.attrs.borderless))
+    })
+    expect(borderless).toEqual([true, false]) // [outer columns, inner table]
+
+    // CSS scoping: the nested table's cells must NOT be reachable by the
+    // borderless rule. A descendant selector (the old bug) hit them; the
+    // child-combinator selector (the fix) stops at the columns table's own row.
+    const innerCell = editor.view.dom.querySelector('table:not(.is-borderless) td')!
+    expect(innerCell.matches('table.is-borderless td')).toBe(true) // why it used to break
+    expect(innerCell.matches('table.is-borderless > tbody > tr > td')).toBe(false) // the fix
+    // The columns table's own cell IS zeroed by the fixed selector.
+    const columnCell = editor.view.dom.querySelector('table.is-borderless > tbody > tr > td')!
+    expect(columnCell.matches('table.is-borderless > tbody > tr > td')).toBe(true)
+  })
+
   it('rejects out-of-range or missing column counts, leaving the doc unchanged', () => {
     const created = renderEditor([TableFeature], { content: docWith('hello') })
     const { api, editor } = created

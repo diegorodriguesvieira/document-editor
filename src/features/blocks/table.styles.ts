@@ -55,9 +55,14 @@ export const tableStyles = css`
 
   /* Borderless "columns layout" tables (the bubble's "Table columns" insert).
      Transparent (not removed) keeps the cell box geometry — and so the resize
-     handles — aligned with a normal grid; the borders just go invisible. */
-  .document-editor__surface table.is-borderless th,
-  .document-editor__surface table.is-borderless td {
+     handles — aligned with a normal grid; the borders just go invisible.
+     Scoped with the child combinator to the columns table's OWN cells
+     (table > tbody > tr > cell) so a normal, bordered table NESTED inside a
+     column keeps its borders — a descendant selector would zero those too.
+     Nested borderless tables still work: each carries its own is-borderless
+     class and matches on its own. */
+  .document-editor__surface table.is-borderless > tbody > tr > th,
+  .document-editor__surface table.is-borderless > tbody > tr > td {
     border-color: transparent;
   }
 
