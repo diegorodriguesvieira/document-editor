@@ -10,6 +10,7 @@ import {
 } from '../../editor'
 import { docWith, jsonFindNode, renderEditor } from '../../test/editorHarness'
 import { BoldFeature } from '../marks/bold'
+import { ColorFeature } from '../custom/color'
 import { TableColumnsFeature, TableFeature } from './table'
 
 /** Minimal EditorStateView for testing a context-menu `when` predicate. */
@@ -177,6 +178,61 @@ describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
     // The other cells stay empty.
     expect(row.content![1].content?.[0]?.content).toBeUndefined()
     expect(row.content![2].content?.[0]?.content).toBeUndefined()
+  })
+
+  it('carries ANY selection into the first cell as nodes — mixed marks (color) survive, no HTML re-parse', () => {
+    // The reported crash: the old path serialized the selection to HTML and
+    // re-parsed it, throwing "Invalid HTML content" on the bare inline
+    // `<span style="color">` a textStyle mark produces. Reproduce that exact
+    // shape — bold run + colored run — and prove it lands intact.
+    const created = renderEditor([TableFeature, BoldFeature, ColorFeature], {
+      content: {
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', marks: [{ type: 'bold' }], text: 'Lorem Ipsum' },
+                {
+                  type: 'text',
+                  marks: [{ type: 'textStyle', attrs: { color: 'rgb(0, 0, 0)' } }],
+                  text: ' is dummy text.',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
+    const { api, editor } = created
+    editor.commands.selectAll()
+
+    expect(() => api.exec('table.insertColumns', { cols: 2 })).not.toThrow()
+
+    const table = jsonFindNode(api.getJSON().doc, 'table')
+    expect(table?.attrs?.borderless).toBe(true)
+    const inline = table!.content![0].content![0].content![0].content // first cell paragraph
+    expect(inline?.map((run) => run.text)).toEqual(['Lorem Ipsum', ' is dummy text.'])
+    expect(inline?.[0]?.marks?.[0]?.type).toBe('bold')
+    expect(inline?.[1]?.marks?.[0]?.type).toBe('textStyle')
+    expect(inline?.[1]?.marks?.[0]?.attrs?.color).toBe('rgb(0, 0, 0)')
+  })
+
+  it('replaces just the selected range — surrounding text is kept and split around the table', () => {
+    const created = renderEditor([TableFeature], { content: docWith('AAA BBB CCC') })
+    const { api, editor } = created
+    // Select "BBB" (the bubble-bar path is a plain TextSelection, not selectAll).
+    editor.commands.setTextSelection({ from: 5, to: 8 })
+
+    expect(api.exec('table.insertColumns', { cols: 2 })).toBe(true)
+
+    const top = api.getJSON().doc.content!.map((n) => n.type)
+    expect(top).toEqual(['paragraph', 'table', 'paragraph']) // AAA · [BBB] · CCC
+    const table = jsonFindNode(api.getJSON().doc, 'table')
+    expect(table!.content![0].content![0].content![0].content![0].text).toBe('BBB')
+    expect(api.getJSON().doc.content![0].content![0].text).toBe('AAA ')
+    expect(api.getJSON().doc.content![2].content![0].text).toBe(' CCC')
   })
 
   it('rejects out-of-range or missing column counts, leaving the doc unchanged', () => {

@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import IconButton from '@mui/material/IconButton'
-import { getHTMLFromFragment, type Editor } from '@tiptap/core'
+import type { Editor } from '@tiptap/core'
 import { Table, TableKit, TableView } from '@tiptap/extension-table'
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { TextSelection } from '@tiptap/pm/state'
 import { defineFeature, PopupShell, useFeatureState, type FeatureRenderContext } from '../../editor'
 import { popupTriggerProps } from '../promptForms'
 import { icons } from '../icons'
@@ -144,41 +145,53 @@ export const TableFeature = defineFeature({
     'table.insert': (editor) =>
       editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
     // Replaces the selection with a borderless columns layout of the chosen
-    // width (1–4 cols): a single header-less row, with the selected content
-    // (marks intact) in the first cell and the rest empty. The bordered,
-    // header-topped grid is the footer's "Table" insert instead.
+    // width (1–4 cols): a single header-less row, with the selected content in
+    // the first cell and the rest empty. The bordered, header-topped grid is
+    // the footer's "Table" insert instead.
+    //
+    // The selected content is carried over as ProseMirror NODES, not an HTML
+    // string: a table cell is `block+`, so whatever was selected fits, and the
+    // marks (colours, links, bold…) survive verbatim. The old HTML round-trip
+    // re-parsed the selection and blew up on bare inline content such as a lone
+    // `<span style="color">`.
     'table.insertColumns': (editor, payload) => {
       const cols = Number((payload as { cols?: number } | undefined)?.cols)
       if (!Number.isInteger(cols) || cols < 1 || cols > 4) return false
       if (selectionBlocksTableColumns(editor)) return false
 
       const { selection, schema } = editor.state
-      const html = selection.empty
-        ? null
-        : getHTMLFromFragment(selection.content().content, schema)
+      const { paragraph, table, tableRow, tableCell } = schema.nodes
+      if (!paragraph || !table || !tableRow || !tableCell) return false
 
-      const chain = editor
+      // The selection's own slice becomes the first cell's body — an inline
+      // selection arrives wrapped in its paragraph, so this is always `block+`.
+      const selected = selection.empty ? Fragment.empty : selection.content().content
+      let node: ProseMirrorNode
+      try {
+        const cells = [
+          tableCell.createChecked(null, selected.childCount ? selected : paragraph.create()),
+        ]
+        for (let i = 1; i < cols; i += 1) cells.push(tableCell.createChecked(null, paragraph.create()))
+        node = table.createChecked({ borderless: true }, tableRow.createChecked(null, cells))
+      } catch {
+        // The selection can't legally live in a cell — leave the doc untouched
+        // rather than throw (which would strand the content mid-command).
+        return false
+      }
+
+      return editor
         .chain()
         .focus()
-        .insertTable({ rows: 1, cols, withHeaderRow: false })
-        // insertTable can't set node attrs, so flip the table we just created
-        // to borderless in the same transaction: walk up from the caret (which
-        // insertTable parked in the first cell) to the enclosing table node.
-        // setNodeMarkup keeps the cell content and the caret, so `insertContent`
-        // below still lands in that first cell.
-        .command(({ tr }) => {
-          const { $from } = tr.selection
-          for (let depth = $from.depth; depth >= 0; depth -= 1) {
-            const node = $from.node(depth)
-            if (node.type.name === 'table') {
-              tr.setNodeMarkup($from.before(depth), undefined, { ...node.attrs, borderless: true })
-              break
-            }
+        .command(({ tr, dispatch }) => {
+          if (dispatch) {
+            const from = tr.selection.from
+            tr.replaceSelectionWith(node)
+              .setSelection(TextSelection.near(tr.doc.resolve(from + 1)))
+              .scrollIntoView()
           }
           return true
         })
-
-      return html ? chain.insertContent(html).run() : chain.run()
+        .run()
     },
     'table.addRowBefore': (editor) => editor.chain().focus().addRowBefore().run(),
     'table.addRowAfter': (editor) => editor.chain().focus().addRowAfter().run(),
