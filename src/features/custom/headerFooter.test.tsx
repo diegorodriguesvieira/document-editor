@@ -363,24 +363,29 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
     expect(view.dom.querySelector('.image-resizer--selected')).toBeNull()
   })
 
-  it('clamping never lands INSIDE a closed region when the body has no text position', async () => {
+  it('a leaf-only body cannot strand the caret in the closed footer — the kernel keeps a trailing line', async () => {
     const created = renderEditor([HeaderFooterFeature, DividerFeature])
-    created.api.setJSON(
-      regionsDoc({ type: 'horizontalRule' } /* leaf-only body: no text position at all */),
-    )
+    // A divider alone has no text position of its own. The kernel's body-aware
+    // trailing node (BodyTrailingNode) appends a paragraph right ABOVE the
+    // footer, so the body is never text-less — which also means clicking below
+    // an invisible/leaf last block always has a real caret to land on.
+    created.api.setJSON(regionsDoc({ type: 'horizontalRule' }))
     const view = created.editor.view
     const headerSize = view.state.doc.firstChild!.nodeSize
+    expect(view.state.doc.nodeAt(headerSize)?.type.name).toBe('horizontalRule')
+    const bodyTo = view.state.doc.content.size - view.state.doc.lastChild!.nodeSize - 1
 
-    // A selection aimed into the closed footer: the naive body clamp inverts
-    // (bodyTo < bodyFrom over a leaf-only body) and used to walk the caret
-    // INTO the footer. It must land on the body's node instead.
+    // A selection aimed into the closed footer: it must clamp back to the body.
+    // With a real text position now present (the trailing paragraph), it lands
+    // there — a plain caret before the footer, never inside it.
     view.dispatch(
       view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 2)),
     )
     const selection = created.editor.state.selection
-    expect(selection instanceof NodeSelection).toBe(true)
-    expect(selection.from).toBe(headerSize)
-    expect(view.state.doc.nodeAt(headerSize)?.type.name).toBe('horizontalRule')
+    expect(selection instanceof NodeSelection).toBe(false)
+    expect(selection.empty).toBe(true)
+    expect(selection.from).toBeLessThanOrEqual(bodyTo) // clamped before the footer
+    expect(view.state.doc.resolve(selection.from).parent.type.name).toBe('paragraph')
   })
 
   it('drops into a CLOSED region are swallowed; an OPEN region accepts them', async () => {

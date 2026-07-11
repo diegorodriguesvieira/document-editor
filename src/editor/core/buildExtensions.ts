@@ -3,17 +3,20 @@ import type { AnyExtension } from '@tiptap/core'
 import { Document as DocumentNode } from '@tiptap/extension-document'
 import { Paragraph } from '@tiptap/extension-paragraph'
 import { Text as TextNode } from '@tiptap/extension-text'
-import { Dropcursor, Gapcursor, TrailingNode } from '@tiptap/extensions'
+import { Dropcursor, Gapcursor } from '@tiptap/extensions'
+import { BodyTrailingNode } from './bodyTrailingNode'
 import type { ResolvedFeatures } from './registry'
 
 /**
  * The always-on schema kernel. You can't have a document without a top node,
  * paragraphs and text, so these are never opt-in — features build on top.
- * TrailingNode keeps an empty paragraph after the last block (table, code,
- * conditional block…) so you can always click below it and keep typing —
- * except after a bottom-pinned page region (e.g. a document footer), which is
- * meant to stay last. Those region node names come from the enabled features'
- * `pageRegions` metadata, so the kernel never hardcodes a feature's node name.
+ * BodyTrailingNode keeps an empty paragraph after the last BODY block (table,
+ * code, conditional block…) so you can always click below it and keep typing —
+ * kept just above a bottom-pinned page region (e.g. a document footer), which
+ * is meant to stay last. Those region node names come from the enabled
+ * features' `pageRegions` metadata, so the kernel never hardcodes a feature's
+ * node name. (Stock TrailingNode only guards the document's last child, so a
+ * footer would defeat it — hence the body-aware variant.)
  * Gapcursor lets you place a caret in the gaps around isolating/atom blocks
  * (a conditional block, a table…) — e.g. to type *after* a nested conditional
  * but still inside its parent, which `isolating` otherwise traps you out of.
@@ -31,7 +34,7 @@ function kernelExtensions(resolved: ResolvedFeatures): AnyExtension[] {
     TextNode,
     Gapcursor,
     Dropcursor,
-    TrailingNode.configure({ notAfter: bottomRegions }),
+    BodyTrailingNode.configure({ notAfter: bottomRegions }),
   ]
 }
 
