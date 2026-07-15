@@ -7,7 +7,7 @@ import { DocumentEditor, type CreatedEditor, type DocumentJSON, type EditorApi }
 import { DividerFeature, ImageFeature } from '../../features'
 import { dispatchDrop, docWith, editorFromDOM, parseSliceFromHTML, renderEditor } from '../../test/editorHarness'
 import { closeRegion, HeaderFooterFeature } from './headerFooter'
-import { MergeFieldFeature, mergeFieldDragHTML } from './mergeField'
+import { VariableFeature, variableDragHTML } from './variable'
 
 const newEditor = () => renderEditor([HeaderFooterFeature])
 const content = (created: CreatedEditor) => created.api.getJSON().doc.content ?? []
@@ -402,12 +402,12 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
   })
 
   it('outranks feature drop handlers: a chip drop into a closed header is blocked regardless of feature order', async () => {
-    // MergeField listed FIRST — only the guard's priority puts it in front.
-    const created = renderEditor([MergeFieldFeature, HeaderFooterFeature])
+    // VariableNode listed FIRST — only the guard's priority puts it in front.
+    const created = renderEditor([VariableFeature, HeaderFooterFeature])
     created.api.setJSON(REGIONS_DOC)
     const view = created.editor.view
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 2, inside: 0 })
-    const slice = parseSliceFromHTML(created.editor, mergeFieldDragHTML({ id: 'x', label: 'X' }))
+    const slice = parseSliceFromHTML(created.editor, variableDragHTML({ id: 'x', label: 'X' }))
     const before = created.editor.state
 
     const handled = dispatchDrop(view, slice)

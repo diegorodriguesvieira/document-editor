@@ -28,7 +28,7 @@ describe('contractTemplate', () => {
       'callout',
       'blockquote',
       'documentFooter',
-      'mergeField',
+      'variable',
     ]) {
       expect(jsonHasNode(template.doc as never, type), type).toBe(true)
     }

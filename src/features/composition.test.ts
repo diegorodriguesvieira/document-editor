@@ -14,7 +14,7 @@ import {
   ItalicFeature,
   LinkFeature,
   ListsFeature,
-  MergeFieldFeature,
+  VariableFeature,
   QuoteFeature,
   TableFeature,
 } from './index'
@@ -34,7 +34,7 @@ const ALL_FEATURES = [
   TableFeature,
   ImageFeature,
   CalloutFeature,
-  MergeFieldFeature,
+  VariableFeature,
   ConditionalBlockFeature,
   HeaderFooterFeature,
   CommentsFeature,
@@ -55,7 +55,7 @@ const KITCHEN_SINK = {
           { type: 'text', text: ' link', marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] },
           { type: 'text', text: ' colored', marks: [{ type: 'textStyle', attrs: { color: '#188038' } }] },
           { type: 'text', text: ' noted', marks: [{ type: 'comment', attrs: { commentId: 'c-1' } }] },
-          { type: 'mergeField', attrs: { id: 'client.name', label: 'Client name' } },
+          { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
         ],
       },
       { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'item' }] }] }] },
@@ -127,7 +127,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'table',
       'callout',
       'conditionalBlock',
-      'mergeField',
+      'variable',
       'documentFooter',
     ]) {
       expect(JSON.stringify(once.doc)).toContain(`"type":"${type}"`)
@@ -147,7 +147,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-document-footer',
       'data-conditional-block',
       '&quot;ref&quot;:&quot;pais&quot;', // condition JSON inside data-condition, entity-escaped
-      'data-merge-field="client.name"',
+      'data-variable="client.name"',
       'data-comment-id="c-1"',
       'data-type="callout"',
       '<strong', '<em', 'href="https://example.com"',

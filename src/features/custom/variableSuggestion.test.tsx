@@ -2,7 +2,7 @@ import { createRef, type Ref } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { MergeFieldMenu } from './mergeFieldSuggestion'
+import { VariableMenu } from './variableSuggestion'
 import type { SuggestionPopupRef } from '../../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
@@ -19,12 +19,12 @@ function renderMenu(
 ) {
   return render(
     <DocumentVariablesProvider variables={VARS}>
-      <MergeFieldMenu ref={ref} query={query} command={onPick} />
+      <VariableMenu ref={ref} query={query} command={onPick} />
     </DocumentVariablesProvider>,
   )
 }
 
-describe('<MergeFieldMenu />', () => {
+describe('<VariableMenu />', () => {
   it('lists every variable from context when the query is empty', () => {
     renderMenu('')
     expect(screen.getAllByRole('option')).toHaveLength(3)

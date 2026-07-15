@@ -16,7 +16,7 @@ export { ImageFeature } from './blocks/image'
 
 // Example "team" features
 export { CalloutFeature } from './custom/callout'
-export { MergeFieldFeature } from './custom/mergeField'
+export { VariableFeature } from './custom/variable'
 export {
   CONDITION_SIGNATURES,
   ConditionalBlockFeature,

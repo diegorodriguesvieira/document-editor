@@ -140,7 +140,7 @@ useEscapeSurface(open)
 hook.)
 
 For caret popups triggered by a character (like `/` and `@`), use
-`createSuggestionPopup` + `useListKeyboardNav` — see `mergeFieldSuggestion.tsx`
+`createSuggestionPopup` + `useListKeyboardNav` — see `variableSuggestion.tsx`
 for a ~20-line example (render MUI `Paper`/`MenuItem` inside, but NEVER a
 focusing Menu: focus must stay in ProseMirror so typing keeps filtering).
 Note: suggestion popups need a React-mounted editor (`useDocumentEditor` +
@@ -291,7 +291,7 @@ concurrency (a `rev`/ETag with `If-Match` → conflicts become a 409 instead of
 a silent clobber). Real-time co-editing is a different animal (CRDT/Yjs) and
 out of scope here.
 
-## 8. Runtime data (merge-field / conditional variables)
+## 8. Runtime data (variable-chip / conditional variables)
 
 Variables come from **you** via context, not the `features` list — so loading
 them async doesn't recreate the editor:

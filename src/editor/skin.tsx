@@ -19,7 +19,7 @@ import { imageStyles } from '../features/blocks/image.styles'
 
 /* Custom node views */
 import { calloutStyles } from '../features/custom/callout.styles'
-import { mergeFieldStyles } from '../features/custom/mergeField.styles'
+import { variableStyles } from '../features/custom/variable.styles'
 import { conditionalBlockStyles } from '../features/custom/conditionalBlock.styles'
 
 /* Floating surfaces (portal to <body>) */
@@ -61,7 +61,7 @@ const SKIN = [
   dividerStyles,
   imageStyles,
   calloutStyles,
-  mergeFieldStyles,
+  variableStyles,
   conditionalBlockStyles,
   slashMenuStyles,
   pageAffordancesStyles,

@@ -14,7 +14,7 @@ import {
   ItalicFeature,
   LinkFeature,
   ListsFeature,
-  MergeFieldFeature,
+  VariableFeature,
   QuoteFeature,
   TableFeature,
   TableColumnsFeature,
@@ -46,7 +46,7 @@ export const fullFeatures: FeatureDefinition[] = [
   DividerFeature,
   ImageFeature,
   // Static feature — its variables come from DocumentVariablesProvider (the app).
-  MergeFieldFeature,
+  VariableFeature,
   ConditionalBlockFeature,
   HeaderFooterFeature,
   CommentsFeature,

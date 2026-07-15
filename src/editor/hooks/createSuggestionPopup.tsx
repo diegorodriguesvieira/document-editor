@@ -34,7 +34,7 @@ interface SuggestionPopupConfig<I, S> {
  * The single owner of the `@tiptap/suggestion` + `ReactRenderer` lifecycle:
  * mount a floating popup at the caret, keep it positioned, route keys to it,
  * tear it down. A feature declares only its trigger, filter and command — the
- * `/` command menu and the `@` merge-field menu are both built from this, so
+ * `/` command menu and the `@` variable-chip menu are both built from this, so
  * fixes (positioning, escape, a11y) land once instead of per trigger.
  */
 export function createSuggestionPopup<I = unknown, S = I>(

@@ -334,7 +334,7 @@ const HeaderFooterGuard = Extension.create({
   name: 'headerFooterGuard',
   // Plugin precedence follows extension priority, not consumer feature order —
   // the guard's handleDrop must run BEFORE any feature's own drop handler
-  // (e.g. the merge-field chip drop), or content lands in closed regions.
+  // (e.g. the variable chip drop), or content lands in closed regions.
   priority: 1000,
 
   addStorage() {
@@ -499,7 +499,7 @@ function addRegion(editor: Editor, name: string, position: number, focusAt: 'sta
 
 /**
  * "Team" feature: a page header and footer. Each is a singleton block at the
- * top/bottom of the document (so it can hold rich content — text, merge fields…
+ * top/bottom of the document (so it can hold rich content — text, variables…
  * — and the backend repeats it per PDF page). The hover "add" affordance is
  * page chrome contributed via `pageRegions`; the editor only stores the nodes.
  *

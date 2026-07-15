@@ -40,9 +40,9 @@ const ROOT_TOKENS = `
     --editor-accent-bg: #ede9fe;
     --editor-menu-active-bg: #f5f3ff;
     --editor-inverse-accent: #c4b5fd;
-    --editor-mergefield-bg: #f3e8ff;
-    --editor-mergefield-border: #ddd6fe;
-    --editor-mergefield-fg: #6d28d9;
+    --editor-variable-bg: #f3e8ff;
+    --editor-variable-border: #ddd6fe;
+    --editor-variable-fg: #6d28d9;
   }
 `
 

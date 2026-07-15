@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DocumentEditor, InsertToolbar, createMockEditor, resolveFeatures } from '../../editor'
 import { dispatchDrop, docWith, jsonHasNode, parseSliceFromHTML, renderEditor } from '../../test/editorHarness'
-import { chipFromSlice, MergeFieldFeature, mergeFieldDragHTML, panelAnchorFor } from './mergeField'
+import { chipFromSlice, VariableFeature, variableDragHTML, panelAnchorFor } from './variable'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const SAMPLE: DocumentVariable[] = [
@@ -15,12 +15,12 @@ const SAMPLE: DocumentVariable[] = [
 function renderRail(variables: DocumentVariable[], api = createMockEditor().api) {
   return render(
     <DocumentVariablesProvider variables={variables}>
-      <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
+      <InsertToolbar editor={null} api={api} resolved={resolveFeatures([VariableFeature])} />
     </DocumentVariablesProvider>,
   )
 }
 
-describe('mergeField', () => {
+describe('variable', () => {
   it('opens the @ modal and dispatches insert for the picked variable (no real editor)', async () => {
     const user = userEvent.setup()
     const mock = createMockEditor()
@@ -36,21 +36,21 @@ describe('mergeField', () => {
 
     await user.click(screen.getByRole('button', { name: 'Client name' }))
     expect(mock.execCalls).toContainEqual({
-      commandId: 'mergeField.insert',
+      commandId: 'variable.insert',
       payload: { id: 'client.name', label: 'Client name' },
     })
   })
 
-  it('inserts a mergeField node (+ trailing space) into the document (real editor)', () => {
-    const created = renderEditor([MergeFieldFeature], {
+  it('inserts a variable node (+ trailing space) into the document (real editor)', () => {
+    const created = renderEditor([VariableFeature], {
       content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
 
     expect(
-      created.api.exec('mergeField.insert', { id: 'client.name', label: 'Client name' }),
+      created.api.exec('variable.insert', { id: 'client.name', label: 'Client name' }),
     ).toBe(true)
-    expect(jsonHasNode(created.api.getJSON().doc, 'mergeField')).toBe(true)
-    expect(created.api.getHTML()).toContain('data-merge-field="client.name"')
+    expect(jsonHasNode(created.api.getJSON().doc, 'variable')).toBe(true)
+    expect(created.api.getHTML()).toContain('data-variable="client.name"')
 
     const paragraph = created.api.getJSON().doc.content?.[0]
     expect(paragraph?.content?.at(-1)).toMatchObject({ type: 'text', text: ' ' })
@@ -125,7 +125,7 @@ describe('mergeField', () => {
     await user.click(screen.getByRole('button', { name: 'Client name' }))
     await user.click(screen.getByRole('button', { name: 'Company' }))
     expect(screen.getByRole('dialog', { name: 'Variables' })).toBeInTheDocument()
-    expect(mock.execCalls.filter((call) => call.commandId === 'mergeField.insert')).toHaveLength(3)
+    expect(mock.execCalls.filter((call) => call.commandId === 'variable.insert')).toHaveLength(3)
   })
 
   it('outside click closes — unless pinned; Escape closes even pinned', async () => {
@@ -165,24 +165,24 @@ describe('mergeField', () => {
     }
     fireEvent.dragStart(chip, { dataTransfer })
 
-    expect(staged['text/html']).toBe(mergeFieldDragHTML(SAMPLE[0]))
-    expect(staged['text/html']).toContain('data-merge-field="client.name"')
+    expect(staged['text/html']).toBe(variableDragHTML(SAMPLE[0]))
+    expect(staged['text/html']).toContain('data-variable="client.name"')
     expect(staged['text/plain']).toBe('{{Client name}}')
     expect(dataTransfer.effectAllowed).toBe('copy')
 
     // "Lift" feedback: the source chip fades right away…
-    expect(chip.classList.contains('mf-chip--dragging')).toBe(true)
+    expect(chip.classList.contains('var-chip--dragging')).toBe(true)
     // …but the panel's step-aside MUST be deferred past the dragstart task:
     // restyling the source's ancestor (pointer-events: none) while Chromium is
     // still initiating the drag ABORTS it (the "can't drag anymore" bug).
-    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
+    expect(screen.getByRole('dialog').classList.contains('var-panel--drag-through')).toBe(false)
     await waitFor(() =>
-      expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true),
+      expect(screen.getByRole('dialog').classList.contains('var-panel--drag-through')).toBe(true),
     )
     fireEvent.dragEnd(chip)
     // Both recover when the drag ends (dropped or cancelled).
-    expect(chip.classList.contains('mf-chip--dragging')).toBe(false)
-    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
+    expect(chip.classList.contains('var-chip--dragging')).toBe(false)
+    expect(screen.getByRole('dialog').classList.contains('var-panel--drag-through')).toBe(false)
   })
 
   it('carries the DOCUMENT chip as the drag image, and the ghost leaves the DOM after snapshot', async () => {
@@ -201,7 +201,7 @@ describe('mergeField', () => {
     expect(setDragImage).toHaveBeenCalledTimes(1)
     const [ghost, offsetX, offsetY] = setDragImage.mock.calls[0] as [HTMLElement, number, number]
     // You drag what you are about to drop: the {{label}} chip, not the button.
-    expect(ghost.className).toBe('mf-drag-ghost')
+    expect(ghost.className).toBe('var-drag-ghost')
     expect(ghost.textContent).toBe('{{Client name}}')
     expect([offsetX, offsetY]).toEqual([12, 12])
     // The browser snapshots the ghost at dragstart; it must be IN the document
@@ -212,40 +212,40 @@ describe('mergeField', () => {
     fireEvent.dragEnd(chip)
   })
 
-  it('the drag payload parses back into a mergeField chip (what PM does on drop)', () => {
-    const created = renderEditor([MergeFieldFeature], {
+  it('the drag payload parses back into a variable chip (what PM does on drop)', () => {
+    const created = renderEditor([VariableFeature], {
       content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
     // PM's native drop = parse text/html through the schema; insertContent
     // exercises that same parse pipeline.
     created.editor.commands.insertContent(
-      mergeFieldDragHTML({ id: 'client.name', label: 'Client name' }),
+      variableDragHTML({ id: 'client.name', label: 'Client name' }),
     )
     const paragraph = created.api.getJSON().doc.content?.[0]
     expect(paragraph?.content?.[0]).toMatchObject({
-      type: 'mergeField',
+      type: 'variable',
       attrs: { id: 'client.name', label: 'Client name' },
     })
   })
 
   it('attribute-escapes hostile ids/labels in the drag payload and round-trips them', () => {
     const hostile = { id: 'a"b', label: 'x" onmouseover="alert(1)' }
-    const html = mergeFieldDragHTML(hostile)
-    expect(html).toContain('data-merge-field="a&quot;b"')
+    const html = variableDragHTML(hostile)
+    expect(html).toContain('data-variable="a&quot;b"')
     // The quotes must not break out of attribute position: re-parsing the
     // payload yields ONLY the two data-* attributes, values intact.
     const host = document.createElement('div')
     host.innerHTML = html
     const span = host.firstElementChild!
-    expect(span.getAttributeNames().sort()).toEqual(['data-label', 'data-merge-field'])
+    expect(span.getAttributeNames().sort()).toEqual(['data-label', 'data-variable'])
     expect(span.getAttribute('data-label')).toBe(hostile.label)
 
-    const created = renderEditor([MergeFieldFeature], {
+    const created = renderEditor([VariableFeature], {
       content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
     })
     created.editor.commands.insertContent(html)
     const paragraph = created.api.getJSON().doc.content?.[0]
-    expect(paragraph?.content?.[0]).toMatchObject({ type: 'mergeField', attrs: hostile })
+    expect(paragraph?.content?.[0]).toMatchObject({ type: 'variable', attrs: hostile })
   })
 
   it('recovers the panel even if the dragged chip unmounts mid-drag (document-level reset)', async () => {
@@ -253,7 +253,7 @@ describe('mergeField', () => {
     const api = createMockEditor().api
     const ui = (variables: DocumentVariable[]) => (
       <DocumentVariablesProvider variables={variables}>
-        <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
+        <InsertToolbar editor={null} api={api} resolved={resolveFeatures([VariableFeature])} />
       </DocumentVariablesProvider>
     )
     const { rerender } = render(ui(SAMPLE))
@@ -264,7 +264,7 @@ describe('mergeField', () => {
       dataTransfer: { setData: () => {}, effectAllowed: 'none' },
     })
     await waitFor(() =>
-      expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(true),
+      expect(screen.getByRole('dialog').classList.contains('var-panel--drag-through')).toBe(true),
     )
 
     // The consumer's variable list updates mid-drag: the dragged chip unmounts,
@@ -275,7 +275,7 @@ describe('mergeField', () => {
     // The drag still ends SOMEWHERE (drop on the page, dragend on <body>) —
     // the document-level capture listener restores the panel.
     fireEvent.drop(document.body)
-    expect(screen.getByRole('dialog').classList.contains('mf-panel--drag-through')).toBe(false)
+    expect(screen.getByRole('dialog').classList.contains('var-panel--drag-through')).toBe(false)
   })
 
   it('opens as a body-portaled Popper above the dock, carrying the region-gate MARKER', async () => {
@@ -287,17 +287,17 @@ describe('mergeField', () => {
     const user = userEvent.setup()
     const { container } = render(
       <DocumentVariablesProvider variables={SAMPLE}>
-        <DocumentEditor features={[MergeFieldFeature]} />
+        <DocumentEditor features={[VariableFeature]} />
       </DocumentVariablesProvider>,
     )
     await user.click(screen.getByRole('button', { name: 'Variables' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Variables' })
     expect(dialog.classList.contains('document-editor-popup')).toBe(true)
-    expect(dialog.classList.contains('mf-panel')).toBe(true)
+    expect(dialog.classList.contains('var-panel')).toBe(true)
     expect(container.querySelector('.insert-dock')!.contains(dialog)).toBe(false)
     expect(dialog.closest('body')).toBe(document.body)
-    expect(dialog.querySelector('.mf-panel__card')).not.toBeNull()
+    expect(dialog.querySelector('.var-panel__card')).not.toBeNull()
   })
 
   it('panelAnchorFor: the SDK dock wins, a consumer toolbar is the fallback, a loose button anchors itself', () => {
@@ -326,7 +326,7 @@ describe('mergeField', () => {
     const api = createMockEditor().api
     const ui = (variables: DocumentVariable[]) => (
       <DocumentVariablesProvider variables={variables}>
-        <InsertToolbar editor={null} api={api} resolved={resolveFeatures([MergeFieldFeature])} />
+        <InsertToolbar editor={null} api={api} resolved={resolveFeatures([VariableFeature])} />
       </DocumentVariablesProvider>
     )
 
@@ -344,23 +344,23 @@ describe('mergeField', () => {
 
 describe('drop → caret to the right of the chip', () => {
   it('chipFromSlice accepts a bare chip or one chip alone in a paragraph — nothing richer', () => {
-    const created = renderEditor([MergeFieldFeature])
+    const created = renderEditor([VariableFeature])
     const parse = (html: string) => parseSliceFromHTML(created.editor, html)
 
-    const bare = parse(mergeFieldDragHTML(SAMPLE[0]))
+    const bare = parse(variableDragHTML(SAMPLE[0]))
     expect(chipFromSlice(bare)?.attrs.id).toBe('client.name')
 
-    const inParagraph = parse(`<p>${mergeFieldDragHTML(SAMPLE[0])}</p>`)
+    const inParagraph = parse(`<p>${variableDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(inParagraph)?.attrs.id).toBe('client.name')
 
-    const richer = parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`)
+    const richer = parse(`<p>texto ${variableDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(richer)).toBeNull()
   })
 
   /** A mounted editor + the pieces a drop needs: a parsed payload slice and a
    *  stubbed posAtCoords (jsdom has no layout to resolve pixel coordinates). */
   function dropRig(text = 'Hello') {
-    const created = renderEditor([MergeFieldFeature], { content: docWith(text) })
+    const created = renderEditor([VariableFeature], { content: docWith(text) })
     const view = created.editor.view
     const parse = (html: string) => parseSliceFromHTML(created.editor, html)
     const drop = (slice: ReturnType<typeof parse>, moved = false) => dispatchDrop(view, slice, moved)
@@ -372,12 +372,12 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 }) // between "He" and "llo"
     const focus = vi.spyOn(view, 'focus')
 
-    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])))).toBe(true)
+    expect(drop(parse(variableDragHTML(SAMPLE[0])))).toBe(true)
 
     const paragraph = created.api.getJSON().doc.content?.[0]
     expect(paragraph?.content).toMatchObject([
       { type: 'text', text: 'He' },
-      { type: 'mergeField', attrs: { id: 'client.name', label: 'Client name' } },
+      { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
       { type: 'text', text: ' llo' }, // the trailing space rides with the rest
     ])
     // Caret: insert(3) + chip(1) + space(1) → typing continues after the gap,
@@ -390,13 +390,13 @@ describe('drop → caret to the right of the chip', () => {
   it('pops the landing animation on the dropped chip and cleans the class up after it runs', async () => {
     const { view, parse, drop } = dropRig()
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 1, inside: 0 })
-    drop(parse(mergeFieldDragHTML(SAMPLE[0])))
+    drop(parse(variableDragHTML(SAMPLE[0])))
 
     // Scoped to THIS drop — a load/undo recreating node views must not animate.
-    const chip = view.dom.querySelector('.merge-field--dropped')
+    const chip = view.dom.querySelector('.variable-chip--dropped')
     expect(chip).not.toBeNull()
     fireEvent.animationEnd(chip!)
-    expect(view.dom.querySelector('.merge-field--dropped')).toBeNull()
+    expect(view.dom.querySelector('.variable-chip--dropped')).toBeNull()
   })
 
   it('an internal drag (moved) falls through to ProseMirror move semantics', async () => {
@@ -404,7 +404,7 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
     const before = created.editor.state
 
-    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])), true)).toBeFalsy()
+    expect(drop(parse(variableDragHTML(SAMPLE[0])), true)).toBeFalsy()
     expect(created.editor.state).toBe(before) // untouched — PM does the move
   })
 
@@ -413,7 +413,7 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
     const before = created.editor.state
 
-    expect(drop(parse(`<p>texto ${mergeFieldDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
+    expect(drop(parse(`<p>texto ${variableDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
     expect(created.editor.state).toBe(before)
   })
 
@@ -425,7 +425,7 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 0, inside: -1 })
     const before = created.editor.state
 
-    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])), false)).toBeFalsy()
+    expect(drop(parse(variableDragHTML(SAMPLE[0])), false)).toBeFalsy()
     expect(created.editor.state).toBe(before) // PM's default drop takes over
   })
 
@@ -434,7 +434,7 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue(null)
     const before = created.editor.state
 
-    expect(drop(parse(mergeFieldDragHTML(SAMPLE[0])))).toBeFalsy()
+    expect(drop(parse(variableDragHTML(SAMPLE[0])))).toBeFalsy()
     expect(created.editor.state).toBe(before)
   })
 })

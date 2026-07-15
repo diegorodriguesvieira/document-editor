@@ -102,7 +102,7 @@ so importing the file changes nothing until you override.
 | `--editor-shadow-sm` | `0 1px 3px …` | Footer-bar shadow |
 | `--editor-shadow-pop` | `0 6px 24px …` | Context menu + colour picker shadow |
 | `--editor-callout-*` | amber set | Callout block |
-| `--editor-mergefield-*` | blue set | Merge-field chip + variables-panel chips |
+| `--editor-variable-*` | blue set | Variable chip + variables-panel chips |
 | `--editor-cond-*` | purple set + neutral greys | Conditional block: condition pill (`bg`/`border`/`fg`), card (`block-bg`) and grouped bar (`bar-bg`) |
 | `--editor-comment-*` | amber set | Commented-text highlight |
 
@@ -115,7 +115,7 @@ For anything tokens can't express, target the classes directly. These class
 names are a **stable public contract** — they're emitted by the components and
 node views, and every MUI swap kept them riding along as `className` hooks.
 Note: on MUI-rendered chrome your rule competes with MUI's own single-class
-styles — double the class (`.mf-chip.mf-chip { … }`) when you need to win
+styles — double the class (`.var-chip.var-chip { … }`) when you need to win
 deterministically. Chrome LOOK is better changed via `muiTheme` (see intro);
 the classes are best for selection/tests/layout.
 
@@ -140,7 +140,7 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[aria-selected="true"]`; the selected LOOK comes from the MUI theme — double the class to override), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`), `.form-popover`, `.form-popover__card`
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
 - **Empty state:** `.document-editor__empty-state` — a viewport-spanning `position: fixed` overlay (`pointer-events: none`, children clickable). Embedding the editor in a split pane? Restyle it (e.g. `position: absolute` under a positioned wrapper) so it centers over the editor, not the app.
-- **Features:** `.callout`, `.merge-field` (`--dropped` landing animation), `.mf-panel*`/`.mf-chip` (`--dragging`), `.mf-drag-ghost` (custom drag image), `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
+- **Features:** `.callout`, `.variable-chip` (`--dropped` landing animation), `.var-panel*`/`.var-chip` (`--dragging`), `.var-drag-ghost` (custom drag image), `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
 
 ## 4. Skipping the default entirely
 

@@ -24,7 +24,7 @@ function isAtomOnlyContent(fragment: Fragment): boolean {
   const [only] = significant
   // Plain text nodes are technically "atoms" too (leaf, no content) — that is
   // not the case this guards against; only a genuinely atomic NODE
-  // (mergeField, image…) makes the selection unformattable.
+  // (variable, image…) makes the selection unformattable.
   if (only.isText) return false
   if (only.isAtom) return true
   return only.content.childCount > 0 && isAtomOnlyContent(only.content)
@@ -62,7 +62,7 @@ export function bubbleShouldShow(editor: Editor): boolean {
     return false
   }
   // A TEXT selection that amounts to nothing but a single atomic inline node
-  // (e.g. a merge-field chip) has nothing formattable in it — same reason the
+  // (e.g. a variable chip) has nothing formattable in it — same reason the
   // NodeSelection case above is excluded, just reached a different way: a
   // drop's default handling can leave a lone atom text-selected instead of
   // node-selected (ProseMirror opens externally-sourced HTML slices as wide

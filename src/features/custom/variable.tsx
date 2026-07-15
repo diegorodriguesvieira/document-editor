@@ -9,14 +9,14 @@ import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { dropPoint } from '@tiptap/pm/transform'
 import { icons } from '../icons'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
-import { createMergeFieldSuggestion, mergeFieldInsertContent } from './mergeFieldSuggestion'
+import { createVariableNodeSuggestion, variableInsertContent } from './variableSuggestion'
 
 /**
  * Inline atomic node — the "chip". Pure-DOM node view (lighter than React for
  * many chips). Doesn't depend on the variable list — only the panel does.
  */
-const MergeField = Node.create({
-  name: 'mergeField',
+const VariableNode = Node.create({
+  name: 'variable',
   group: 'inline',
   inline: true,
   atom: true,
@@ -26,9 +26,9 @@ const MergeField = Node.create({
     return {
       id: {
         default: null,
-        parseHTML: (element) => element.getAttribute('data-merge-field'),
+        parseHTML: (element) => element.getAttribute('data-variable'),
         renderHTML: (attributes) =>
-          attributes.id ? { 'data-merge-field': attributes.id as string } : {},
+          attributes.id ? { 'data-variable': attributes.id as string } : {},
       },
       label: {
         default: null,
@@ -40,22 +40,22 @@ const MergeField = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: 'span[data-merge-field]' }]
+    return [{ tag: 'span[data-variable]' }]
   },
 
   renderHTML({ node, HTMLAttributes }) {
     const label = (node.attrs.label ?? node.attrs.id ?? '') as string
-    return ['span', mergeAttributes(HTMLAttributes, { class: 'merge-field' }), `{{${label}}}`]
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'variable-chip' }), `{{${label}}}`]
   },
 
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('span')
-      dom.className = 'merge-field'
+      dom.className = 'variable-chip'
       dom.contentEditable = 'false'
       const id = (node.attrs.id ?? '') as string
       const label = (node.attrs.label ?? node.attrs.id ?? '') as string
-      if (id) dom.setAttribute('data-merge-field', id)
+      if (id) dom.setAttribute('data-variable', id)
       dom.textContent = `{{${label}}}`
       return { dom }
     }
@@ -94,10 +94,10 @@ const MergeField = Node.create({
             // spuriously.
             const dom = view.nodeDOM(insert)
             if (dom instanceof HTMLElement) {
-              dom.classList.add('merge-field--dropped')
+              dom.classList.add('variable-chip--dropped')
               dom.addEventListener(
                 'animationend',
-                () => dom.classList.remove('merge-field--dropped'),
+                () => dom.classList.remove('variable-chip--dropped'),
                 { once: true },
               )
             }
@@ -110,7 +110,7 @@ const MergeField = Node.create({
 })
 
 /**
- * The single mergeField chip inside a drop payload, if that's ALL the payload
+ * The single variable chip inside a drop payload, if that's ALL the payload
  * is (a bare chip, or a chip alone inside one paragraph — both shapes come out
  * of parsing the panel's text/html). Anything richer falls back to PM's
  * default drop. Exported for tests.
@@ -118,10 +118,10 @@ const MergeField = Node.create({
 export function chipFromSlice(slice: Slice): PMNode | null {
   const first = slice.content.firstChild
   if (!first || slice.content.childCount !== 1) return null
-  if (first.type.name === 'mergeField') return first
+  if (first.type.name === 'variable') return first
   if (first.type.name === 'paragraph' && first.childCount === 1) {
     const inner = first.firstChild
-    if (inner?.type.name === 'mergeField') return inner
+    if (inner?.type.name === 'variable') return inner
   }
   return null
 }
@@ -129,13 +129,13 @@ export function chipFromSlice(slice: Slice): PMNode | null {
 /**
  * The drag payload IS the chip's HTML serialization: ProseMirror handles
  * `text/html` drops natively (position mapping + schema parse — the same
- * pipeline as paste), and `span[data-merge-field]` already has a parse rule.
+ * pipeline as paste), and `span[data-variable]` already has a parse rule.
  * So dragging a variable from the panel onto the page needs NO drop handler
  * anywhere. Built via DOM so ids/labels are attribute-escaped correctly.
  */
-export function mergeFieldDragHTML(variable: DocumentVariable): string {
+export function variableDragHTML(variable: DocumentVariable): string {
   const span = document.createElement('span')
-  span.setAttribute('data-merge-field', variable.id)
+  span.setAttribute('data-variable', variable.id)
   span.setAttribute('data-label', variable.label)
   span.textContent = `{{${variable.label}}}`
   return span.outerHTML
@@ -169,7 +169,7 @@ export function panelAnchorFor(button: HTMLElement | null): HTMLElement | null {
  * button), which turns it into a persistent surface: move the caret around
  * and keep inserting. Escape and the x always close.
  */
-function MergeFieldPanel({
+function VariablePanel({
   anchor,
   variables,
   onPick,
@@ -250,22 +250,22 @@ function MergeFieldPanel({
       dismissEl={anchor}
       open
       onClose={onClose}
-      surfaceClassName={`mf-panel${dragging ? ' mf-panel--drag-through' : ''}`}
+      surfaceClassName={`var-panel${dragging ? ' var-panel--drag-through' : ''}`}
       role="dialog"
       ariaLabel="Variables"
       placement="top-start"
       offset={[0, 12]}
       isOutsideClick={pinned ? () => false : undefined}
       paperProps={{
-        className: 'mf-panel__card',
+        className: 'var-panel__card',
         sx: { border: `1px solid ${tokenVar('--editor-border')}` },
       }}
     >
-      <div className="mf-panel__header">
+      <div className="var-panel__header">
         <strong>Variables</strong>
-        <div className="mf-panel__header-actions">
+        <div className="var-panel__header-actions">
           <IconButton
-            className="mf-panel__pin"
+            className="var-panel__pin"
             size="small"
             aria-label="Pin panel"
             aria-pressed={pinned}
@@ -275,40 +275,40 @@ function MergeFieldPanel({
           >
             <PushPinOutlined fontSize="inherit" />
           </IconButton>
-          <IconButton className="mf-panel__close" size="small" aria-label="Close" onClick={onClose}>
+          <IconButton className="var-panel__close" size="small" aria-label="Close" onClick={onClose}>
             <Close fontSize="inherit" />
           </IconButton>
         </div>
       </div>
       <TextField
         type="search"
-        className="mf-panel__search"
+        className="var-panel__search"
         placeholder="Search"
         fullWidth
         value={query}
         slotProps={{ htmlInput: { 'aria-label': 'Search variables' } }}
         onChange={(event) => setQuery(event.target.value)}
       />
-      <div className="mf-panel__body">
+      <div className="var-panel__body">
         {variables.length === 0 ? (
-          <span className="mf-panel__empty">Loading variables…</span>
+          <span className="var-panel__empty">Loading variables…</span>
         ) : filtered.length === 0 ? (
-          <span className="mf-panel__empty">No variable matches “{query}”</span>
+          <span className="var-panel__empty">No variable matches “{query}”</span>
         ) : (
           groupVariables(filtered).map(([group, items]) => (
-            <div key={group || 'ungrouped'} className="mf-panel__group">
-              {group ? <div className="mf-panel__group-label">{group}</div> : null}
-              <div className="mf-panel__chips">
+            <div key={group || 'ungrouped'} className="var-panel__group">
+              {group ? <div className="var-panel__group-label">{group}</div> : null}
+              <div className="var-panel__chips">
                 {items.map((variable) => (
                   <button
                     key={variable.id}
                     type="button"
-                    className="mf-chip"
+                    className="var-chip"
                     // Drag onto the page: PM parses the text/html payload
                     // natively, so this is the whole drag side of the story.
                     draggable
                     onDragStart={(event) => {
-                      event.dataTransfer.setData('text/html', mergeFieldDragHTML(variable))
+                      event.dataTransfer.setData('text/html', variableDragHTML(variable))
                       event.dataTransfer.setData('text/plain', `{{${variable.label}}}`)
                       event.dataTransfer.effectAllowed = 'copy' // dragging never "spends" the chip
                       // The whole panel steps aside (fade + click-through) —
@@ -316,13 +316,13 @@ function MergeFieldPanel({
                       // it's still initiating (see dragAsideTimer above).
                       dragAsideTimer.current = window.setTimeout(() => setDragging(true), 0)
                       // The source chip "lifts" while the drag is in flight.
-                      event.currentTarget.classList.add('mf-chip--dragging')
+                      event.currentTarget.classList.add('var-chip--dragging')
                       // Carry the DOCUMENT chip ({{label}}) as the drag image,
                       // not a screenshot of the panel button — you drag what
                       // you're about to drop. jsdom has no setDragImage: guard.
                       if (typeof event.dataTransfer.setDragImage === 'function') {
                         const ghost = document.createElement('span')
-                        ghost.className = 'mf-drag-ghost'
+                        ghost.className = 'var-drag-ghost'
                         ghost.textContent = `{{${variable.label}}}`
                         document.body.appendChild(ghost)
                         event.dataTransfer.setDragImage(ghost, 12, 12)
@@ -338,7 +338,7 @@ function MergeFieldPanel({
                       // ghosted after dragend already ran.
                       window.clearTimeout(dragAsideTimer.current)
                       setDragging(false)
-                      event.currentTarget.classList.remove('mf-chip--dragging')
+                      event.currentTarget.classList.remove('var-chip--dragging')
                     }}
                     // NO onMouseDown preventDefault here: in Chromium that
                     // BLOCKS native drag initiation (dragstart never fires).
@@ -364,7 +364,7 @@ function MergeFieldPanel({
   )
 }
 
-function MergeFieldInsert({ api }: { api: EditorApi }) {
+function VariableInsert({ api }: { api: EditorApi }) {
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const variables = useDocumentVariables()
@@ -380,12 +380,12 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((value) => !value)}
       >
-        {icons.mergeField}
+        {icons.variable}
       </IconButton>
       {open ? (
         // The Popper portals itself to <body> (escaping the dock's stacking
         // context) — no createPortal needed here.
-        <MergeFieldPanel
+        <VariablePanel
           anchor={buttonRef.current}
           variables={variables}
           onClose={() => {
@@ -393,7 +393,7 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
             api.focus() // keep the editor focused after the panel closes
           }}
           // Picking closes unless the panel is pinned (handled inside).
-          onPick={(variable) => api.exec('mergeField.insert', variable)}
+          onPick={(variable) => api.exec('variable.insert', variable)}
         />
       ) : null}
     </>
@@ -401,34 +401,34 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
 }
 
 /**
- * Static "team" feature: @-menu that inserts inline merge-field chips. The
+ * Static "team" feature: @-menu that inserts inline variable chips. The
  * variable list comes from {@link DocumentVariablesProvider} (consumer-owned),
  * so it can load async without touching the editor.
  *
  * Contributes — insert: "Variable" (custom control) · command:
- * `mergeField.insert` · the @-mention suggestion popup.
+ * `variable.insert` · the @-mention suggestion popup.
  */
-export const MergeFieldFeature = defineFeature({
-  id: 'mergeField',
+export const VariableFeature = defineFeature({
+  id: 'variable',
   // The node (chip) + the `@` typing trigger that inserts it.
-  extensions: () => [MergeField, createMergeFieldSuggestion()],
+  extensions: () => [VariableNode, createVariableNodeSuggestion()],
   commands: {
-    'mergeField.insert': (editor, payload) => {
+    'variable.insert': (editor, payload) => {
       const field = (payload ?? {}) as { id?: string; label?: string }
       if (!field.id) return false
       return editor
         .chain()
         .focus()
-        .insertContent(mergeFieldInsertContent({ id: field.id, label: field.label }))
+        .insertContent(variableInsertContent({ id: field.id, label: field.label }))
         .run()
     },
   },
   insert: [
     {
-      id: 'mergeField',
+      id: 'variable',
       label: 'Variable',
-      icon: icons.mergeField,
-      render: ({ api }) => <MergeFieldInsert api={api} />,
+      icon: icons.variable,
+      render: ({ api }) => <VariableInsert api={api} />,
     },
   ],
 })

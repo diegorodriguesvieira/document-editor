@@ -1,6 +1,6 @@
 import { css } from '@emotion/react'
 
-/* Slash (/) command menu — reused by the @ merge-field menu. Portals to <body>. */
+/* Slash (/) command menu — reused by the @ variable-chip menu. Portals to <body>. */
 export const slashMenuStyles = css`
   /* The card is a MUI Paper; items are MUI MenuItems (hover/selected come
      from the theme). Only layout + the icon chip + empty state remain. */

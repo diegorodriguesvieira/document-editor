@@ -15,7 +15,7 @@ export interface InsertToolbarProps {
   /** Override how each button renders, keeping the live state. */
   renderButton?: (button: BarButton) => ReactNode
   className?: string
-  /** Domain insert actions appended after the built-ins (e.g. merge field). */
+  /** Domain insert actions appended after the built-ins (e.g. variable). */
   children?: ReactNode
 }
 

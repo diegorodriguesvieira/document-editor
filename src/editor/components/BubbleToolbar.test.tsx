@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { NodeSelection } from '@tiptap/pm/state'
 import { describe, expect, it } from 'vitest'
-import { MergeFieldFeature, TableFeature } from '../../features'
+import { VariableFeature, TableFeature } from '../../features'
 import { BubbleToolbar, bubbleShouldShow } from './BubbleToolbar'
 import { defineFeature } from '../core/defineFeature'
 import { docWith, renderEditor } from '../../test/editorHarness'
@@ -73,20 +73,20 @@ describe('bubbleShouldShow (the presentation contract)', () => {
     expect(bubbleShouldShow(editor)).toBe(false)
   })
 
-  it('never shows over a TEXT selection that is just an atomic chip (a merge-field drop, not a manual node pick)', () => {
+  it('never shows over a TEXT selection that is just an atomic chip (a variable-chip drop, not a manual node pick)', () => {
     // ProseMirror's own default drop handling (input.ts's `handleDrop`) opens
     // externally-sourced HTML slices as wide as it can, which skips the
     // NodeSelection branch and leaves a lone dropped atom TEXT-selected
     // instead — reproduced here directly via setTextSelection rather than a
     // real drag event.
-    const created = renderEditor([bold, MergeFieldFeature], { content: docWith('hello') })
+    const created = renderEditor([bold, VariableFeature], { content: docWith('hello') })
     const { editor, api } = created
     editor.commands.setTextSelection(6) // caret at the end of "hello"
-    expect(api.exec('mergeField.insert', { id: 'client.name', label: 'Client name' })).toBe(true)
+    expect(api.exec('variable.insert', { id: 'client.name', label: 'Client name' })).toBe(true)
 
     let chipPos = -1
     editor.state.doc.descendants((node, pos) => {
-      if (node.type.name === 'mergeField') chipPos = pos
+      if (node.type.name === 'variable') chipPos = pos
     })
     expect(chipPos).toBeGreaterThanOrEqual(0)
     const chipEnd = chipPos + editor.state.doc.nodeAt(chipPos)!.nodeSize

@@ -279,7 +279,7 @@ This is the pattern that replaced the deleted "panels channel".
   path is the `--editor-*` tokens.
 - Performance rules that keep Emotion invisible: every template lives at
   module scope (serialized once); high-frequency values (panel position,
-  resize/zoom) stay in inline `style`; pure-DOM node views (mergeField chip)
+  resize/zoom) stay in inline `style`; pure-DOM node views (variable chip)
   stay pure — they're styled by the Global's descendant selectors, never
   converted to styled/React.
 - Tokens (`--editor-*`) are the theming contract; `THEMING.md` is the

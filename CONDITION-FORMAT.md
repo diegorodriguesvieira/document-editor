@@ -89,7 +89,7 @@ Operador desconhecido ou aridade errada = **erro de validação** (§5), nunca i
 
 ### 2.3 Resolução de operandos
 
-- `{type: 'variable', ref}`: lookup de `ref` no mapa **flat** de variáveis que o backend já usa para merge fields (mesmos ids — ex.: `client.name`, `valor.mensal`). **`ref` é chave opaca**: o `.` faz parte do id, NÃO é traversal de objeto aninhado — não fazer split. Usar lookup de chave própria (`Object.hasOwn` ou equivalente): refs vindas do documento não podem alcançar herança/prototype chain (`"toString"`, `"constructor"`, ...). Variável fora do mapa (ou com valor `null`) resolve para **ausente** — não é erro; avalia pelas regras do §2.4.
+- `{type: 'variable', ref}`: lookup de `ref` no mapa **flat** de variáveis que o backend já usa para variables (mesmos ids — ex.: `client.name`, `valor.mensal`). **`ref` é chave opaca**: o `.` faz parte do id, NÃO é traversal de objeto aninhado — não fazer split. Usar lookup de chave própria (`Object.hasOwn` ou equivalente): refs vindas do documento não podem alcançar herança/prototype chain (`"toString"`, `"constructor"`, ...). Variável fora do mapa (ou com valor `null`) resolve para **ausente** — não é erro; avalia pelas regras do §2.4.
 - `{type: 'literal', value}`: o próprio `value`, já com tipo JSON (string, number ou boolean).
 
 ### 2.4 Coerção e valores ausentes — regras normativas

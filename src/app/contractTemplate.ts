@@ -37,9 +37,9 @@ const LOGO_SRC =
  */
 export function contractTemplate(editor: SchemaSource): DocJSON {
   const has = (name: string) => Boolean(editor.schema.nodes[name])
-  // Merge fields degrade to visible {placeholders} on presets without them.
+  // Variables degrade to visible {placeholders} on presets without them.
   const field = (id: string, label: string): Node =>
-    has('mergeField') ? { type: 'mergeField', attrs: { id, label } } : text(`{${label}}`)
+    has('variable') ? { type: 'variable', attrs: { id, label } } : text(`{${label}}`)
   // Headings are a feature too — a heading-less preset gets plain paragraphs.
   const h = (level: number, value: string): Node =>
     has('heading') ? heading(level, value) : paragraph(text(value))
@@ -158,7 +158,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
       type: 'callout',
       attrs: { emoji: '💡' },
       content: [
-        paragraph(text('Fill in the merge fields via @ — values resolve when the PDF is generated.')),
+        paragraph(text('Fill in the variables via @ — values resolve when the PDF is generated.')),
       ],
     })
   }

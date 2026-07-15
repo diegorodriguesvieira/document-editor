@@ -6,7 +6,7 @@ import { DocumentEditor } from '../../editor'
 import {
   DocumentVariablesProvider,
   LinkFeature,
-  MergeFieldFeature,
+  VariableFeature,
   TableFeature,
 } from '../../features'
 import { editorFromDOM, jsonHasNode } from '../../test/editorHarness'
@@ -16,7 +16,7 @@ import type { SuggestionPopupRef } from './createSuggestionPopup'
 /**
  * End-to-end exercise of the shared suggestion primitive through its two real
  * consumers: the `/` command menu (slashCommands) and the `@` variable menu
- * (mergeFieldSuggestion). Typing goes through the editor so the whole chain
+ * (variableSuggestion). Typing goes through the editor so the whole chain
  * runs: @tiptap/suggestion match → onStart/onUpdate popup lifecycle → keydown
  * routing via the imperative ref → command → onExit teardown.
  */
@@ -131,7 +131,7 @@ describe('createSuggestionPopup (the @ variable menu)', () => {
           { id: 'company.name', label: 'Company' },
         ]}
       >
-        <DocumentEditor features={[MergeFieldFeature]} />
+        <DocumentEditor features={[VariableFeature]} />
       </DocumentVariablesProvider>,
     )
     await type('@')
@@ -146,7 +146,7 @@ describe('createSuggestionPopup (the @ variable menu)', () => {
     await waitFor(() => {
       const paragraph = editor.getJSON().content?.[0]
       expect(paragraph?.content).toMatchObject([
-        { type: 'mergeField', attrs: { id: 'client.name', label: 'Client name' } },
+        { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
         { type: 'text', text: ' ' }, // trailing space so typing is not glued to the chip
       ])
       expect(popup()).toBeNull()
@@ -194,7 +194,7 @@ describe('Escape ordering across surfaces (innermost-first)', () => {
     const user = userEvent.setup()
     const { type, keydown } = await mountEditor(
       <DocumentVariablesProvider variables={[{ id: 'client.name', label: 'Client name' }]}>
-        <DocumentEditor features={[MergeFieldFeature]} />
+        <DocumentEditor features={[VariableFeature]} />
       </DocumentVariablesProvider>,
     )
     await user.click(screen.getByRole('button', { name: 'Variables' }))

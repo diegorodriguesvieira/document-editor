@@ -37,7 +37,7 @@ export const icons = {
   comment: <AddCommentOutlined />,
   conditional: <CallSplit />,
   callout: <LightbulbOutlined />,
-  mergeField: <AlternateEmail />,
+  variable: <AlternateEmail />,
   undo: <Undo />,
   redo: <Redo />,
   delete: <DeleteOutline />,

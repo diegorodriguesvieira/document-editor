@@ -86,9 +86,9 @@ export const baseStyles = css`
     --editor-callout-bg: #fef7e0;
     --editor-callout-border: #feefc3;
     --editor-callout-accent: #f9ab00;
-    --editor-mergefield-bg: #e8f0fe;
-    --editor-mergefield-border: #c6dafc;
-    --editor-mergefield-fg: #1967d2;
+    --editor-variable-bg: #e8f0fe;
+    --editor-variable-border: #c6dafc;
+    --editor-variable-fg: #1967d2;
     --editor-cond-bg: #ece8fd;
     --editor-cond-border: #d5c8f7;
     --editor-cond-fg: #5b3dd4;

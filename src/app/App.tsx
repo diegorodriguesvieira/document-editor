@@ -16,10 +16,10 @@ export default function App() {
   // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
   // context (not the `features` list), the editor mounts immediately and does
   // NOT remount when they arrive — only the @ modal fills in.
-  const [mergeVariables, setMergeVariables] = useState<DocumentVariable[]>([])
+  const [docVariables, setDocVariables] = useState<DocumentVariable[]>([])
   useEffect(() => {
     const timer = setTimeout(() => {
-      setMergeVariables([
+      setDocVariables([
         { id: 'cliente.nome', label: 'Client name', group: 'Client details' },
         { id: 'cliente.cnpj', label: 'Tax ID', group: 'Client details' },
         { id: 'contrato.numero', label: 'Contract number', group: 'Contract details' },
@@ -34,8 +34,8 @@ export default function App() {
     <div className="app">
       <main className="app__canvas">
         {/* Document variables come from here (consumer), via context — shared by
-            merge fields and conditional blocks. */}
-        <DocumentVariablesProvider variables={mergeVariables}>
+            variables and conditional blocks. */}
+        <DocumentVariablesProvider variables={docVariables}>
           {/* The full feature set, presented through the bubble + footer dock. */}
           <DocumentEditor
             features={fullFeatures}
@@ -46,7 +46,7 @@ export default function App() {
               <>
                 <span className="app__title">Untitled document</span>
                 <span className="app__hint">
-                  @ variables: {mergeVariables.length ? `${mergeVariables.length} loaded` : 'loading…'}
+                  @ variables: {docVariables.length ? `${docVariables.length} loaded` : 'loading…'}
                 </span>
               </>
             )}

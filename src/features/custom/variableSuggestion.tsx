@@ -14,10 +14,10 @@ import { useDocumentVariables, type DocumentVariable } from './documentVariables
  * sync with async-loaded variables without rebuilding the editor. Reuses the
  * `.slash-menu` look and the shared {@link useListKeyboardNav}.
  */
-export const MergeFieldMenu = forwardRef<
+export const VariableMenu = forwardRef<
   SuggestionPopupRef,
   { query: string; command: (variable: DocumentVariable) => void }
->(function MergeFieldMenu({ query, command }, ref) {
+>(function VariableMenu({ query, command }, ref) {
   const variables = useDocumentVariables()
   const items = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -50,31 +50,31 @@ export const MergeFieldMenu = forwardRef<
 
 /**
  * The chip + trailing-space payload BOTH insertion paths share (the `@`
- * suggestion here and the `mergeField.insert` command) — one shape, so the
+ * suggestion here and the `variable.insert` command) — one shape, so the
  * "cursor isn't glued to the chip" rule can't drift between them.
  */
-export function mergeFieldInsertContent(field: { id: string; label?: string }) {
+export function variableInsertContent(field: { id: string; label?: string }) {
   return [
-    { type: 'mergeField', attrs: { id: field.id, label: field.label ?? field.id } },
+    { type: 'variable', attrs: { id: field.id, label: field.label ?? field.id } },
     { type: 'text', text: ' ' },
   ]
 }
 
 /**
- * React-coupled `@` trigger: typing `@` opens {@link MergeFieldMenu}; picking a
- * variable replaces the `@query` with an inline merge-field chip (+ a trailing
+ * React-coupled `@` trigger: typing `@` opens {@link VariableMenu}; picking a
+ * variable replaces the `@query` with an inline variable chip (+ a trailing
  * space). Built from the shared {@link createSuggestionPopup} primitive.
  */
-export function createMergeFieldSuggestion(): Extension {
+export function createVariableNodeSuggestion(): Extension {
   return createSuggestionPopup<DocumentVariable, DocumentVariable>({
-    name: 'mergeFieldSuggestion',
+    name: 'variableSuggestion',
     char: '@',
-    component: MergeFieldMenu,
+    component: VariableMenu,
     // The popup owns filtering (it reads variables from context), so the
     // plugin's own item list is unused.
     items: () => [],
     command: ({ editor, range, props }) => {
-      editor.chain().focus().deleteRange(range).insertContent(mergeFieldInsertContent(props)).run()
+      editor.chain().focus().deleteRange(range).insertContent(variableInsertContent(props)).run()
     },
   })
 }

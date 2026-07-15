@@ -660,7 +660,7 @@ const ConditionalDepthGuard = Extension.create({
  * "Team" feature: wrap a block in a conditional block whose condition (an
  * all/any tree of typed comparisons — CONDITION-FORMAT.md) the backend
  * evaluates at render time. Variables come from
- * {@link DocumentVariablesProvider} (shared with merge fields).
+ * {@link DocumentVariablesProvider} (shared with variables).
  *
  * Contributes — insert: "Conditional block" · command: `conditional.wrap` ·
  * keymap: Mod-Alt-b.

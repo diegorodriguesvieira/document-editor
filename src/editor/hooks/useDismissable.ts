@@ -47,7 +47,7 @@ export function useEscapeSurface(enabled: boolean): void {
  * click (so it wins over ProseMirror's own mousedown handling) + Escape, and
  * optionally scroll/resize for surfaces anchored to fixed page coordinates
  * that would drift. One owner, so behavior fixes land once instead of once
- * per popover: the color picker, the variables panel (merge-field), the
+ * per popover: the color picker, the variables panel (variable-chip), the
  * prompt forms and open page regions (header/footer) all sit on this hook —
  * usually through PopupShell — and a feature shipping its own popover should
  * too. A surface whose dismissal MUI already owns (Menu/Popover/Dialog)

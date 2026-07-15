@@ -48,7 +48,7 @@ const HANDLES: Array<{ id: string; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }> = [
 
 /**
  * TipTap's Image + Docs-style resize, in a pure-DOM node view (same idiom as
- * the merge-field chip — no React needed): 8 handles, corners keep the aspect
+ * the variable chip — no React needed): 8 handles, corners keep the aspect
  * ratio, edge handles stretch width OR height and freeze the other. Live
  * feedback is style-only; the document is written ONCE on drop (a single
  * clean undo step). `width`/`height` serialize as standard HTML attributes —
