@@ -103,7 +103,7 @@ so importing the file changes nothing until you override.
 | `--editor-shadow-pop` | `0 6px 24px …` | Context menu + colour picker shadow |
 | `--editor-callout-*` | amber set | Callout block |
 | `--editor-mergefield-*` | blue set | Merge-field chip + variables-panel chips |
-| `--editor-cond-*` | purple set | Conditional-block condition pill |
+| `--editor-cond-*` | purple set + neutral greys | Conditional block: condition pill (`bg`/`border`/`fg`), card (`block-bg`) and grouped bar (`bar-bg`) |
 | `--editor-comment-*` | amber set | Commented-text highlight |
 
 A handful of one-off values (gradients, a few incidental greys/shadows) stay

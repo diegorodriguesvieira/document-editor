@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   defineFeature,
   Extension,
@@ -13,7 +13,9 @@ import { GapCursor } from '@tiptap/pm/gapcursor'
 import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state'
 import { useDocumentVariables, type DocumentVariable } from './documentVariables'
-import Add from '@mui/icons-material/Add'
+import AddCircleOutline from '@mui/icons-material/AddCircleOutline'
+import KeyboardArrowDown from '@mui/icons-material/KeyboardArrowDown'
+import KeyboardArrowUp from '@mui/icons-material/KeyboardArrowUp'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
@@ -208,17 +210,20 @@ function literalFromInput(text: string): ConditionOperand | null {
 function LiteralValueInput({ initial, onCommit }: { initial: string; onCommit: (text: string) => void }) {
   const [text, setText] = useState(initial)
   return (
-    <TextField
-      className="cond-editor__field"
-      label="Value"
-      type="text"
-      value={text}
-      slotProps={{ htmlInput: { 'aria-label': 'Value' } }}
-      onChange={(event) => {
-        setText(event.target.value)
-        onCommit(event.target.value)
-      }}
-    />
+    <div className="cond-editor__group">
+      <span className="cond-editor__label">Value</span>
+      <TextField
+        className="cond-editor__field"
+        size="small"
+        type="text"
+        value={text}
+        slotProps={{ htmlInput: { 'aria-label': 'Value' } }}
+        onChange={(event) => {
+          setText(event.target.value)
+          onCommit(event.target.value)
+        }}
+      />
+    </div>
   )
 }
 
@@ -238,23 +243,26 @@ function VariableSelect({
   onPick: (operand: ConditionOperand | null) => void
 }) {
   return (
-    <TextField
-      select
-      className="cond-editor__field"
-      label="Variable"
-      value={value}
-      slotProps={{ select: { native: true }, htmlInput: { 'aria-label': ariaLabel } }}
-      onChange={(event) =>
-        onPick(event.target.value ? { type: 'variable', ref: event.target.value } : null)
-      }
-    >
-      <option value="">Select a variable *</option>
-      {variables.map((variable) => (
-        <option key={variable.id} value={variable.id}>
-          {variable.label}
-        </option>
-      ))}
-    </TextField>
+    <div className="cond-editor__group">
+      <span className="cond-editor__label">Variable</span>
+      <TextField
+        select
+        className="cond-editor__field"
+        size="small"
+        value={value}
+        slotProps={{ select: { native: true }, htmlInput: { 'aria-label': ariaLabel } }}
+        onChange={(event) =>
+          onPick(event.target.value ? { type: 'variable', ref: event.target.value } : null)
+        }
+      >
+        <option value="">Select a variable *</option>
+        {variables.map((variable) => (
+          <option key={variable.id} value={variable.id}>
+            {variable.label}
+          </option>
+        ))}
+      </TextField>
+    </div>
   )
 }
 
@@ -315,39 +323,45 @@ export function ConditionEditor({
         onPick={(operand) => commit({ ...leaf, params: withParam(leaf.params, 0, operand) })}
       />
 
-      <TextField
-        select
-        className="cond-editor__field"
-        label="Condition"
-        value={leaf.op ?? ''}
-        slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Condition' } }}
-        onChange={(event) => setOp(event.target.value)}
-      >
-        <option value="">Select a condition *</option>
-        {CONDITIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </TextField>
+      <div className="cond-editor__group">
+        <span className="cond-editor__label">Condition</span>
+        <TextField
+          select
+          className="cond-editor__field"
+          size="small"
+          value={leaf.op ?? ''}
+          slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Condition' } }}
+          onChange={(event) => setOp(event.target.value)}
+        >
+          <option value="">Select a condition *</option>
+          {CONDITIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </TextField>
+      </div>
 
       {option?.arity === 2 ? (
         <>
-          <TextField
-            select
-            className="cond-editor__field"
-            label="Compare with"
-            value={rightType}
-            slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Compare with' } }}
-            onChange={(event) => {
-              setDraftRightType(event.target.value as 'literal' | 'variable')
-              // The old operand belongs to the other face — clear it.
-              commit({ ...leaf, params: withParam(leaf.params, 1, null) })
-            }}
-          >
-            <option value="literal">a value</option>
-            <option value="variable">a variable</option>
-          </TextField>
+          <div className="cond-editor__group">
+            <span className="cond-editor__label">Compare with</span>
+            <TextField
+              select
+              className="cond-editor__field"
+              size="small"
+              value={rightType}
+              slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Compare with' } }}
+              onChange={(event) => {
+                setDraftRightType(event.target.value as 'literal' | 'variable')
+                // The old operand belongs to the other face — clear it.
+                commit({ ...leaf, params: withParam(leaf.params, 1, null) })
+              }}
+            >
+              <option value="literal">a value</option>
+              <option value="variable">a variable</option>
+            </TextField>
+          </div>
           {rightType === 'variable' ? (
             <VariableSelect
               variables={variables}
@@ -373,39 +387,58 @@ export function ConditionEditor({
   )
 }
 
-function operandText(operand: ConditionOperand | null, variables: DocumentVariable[]): string {
-  if (!operand) return '…'
-  if (operand.type === 'variable')
-    return variables.find((v) => v.id === operand.ref)?.label ?? operand.ref
-  return String(operand.value)
+/** One piece of the summary line: variables render as chips, the rest as text. */
+interface SummaryPart {
+  kind: 'chip' | 'text'
+  text: string
 }
 
-function conditionText(cond: Condition, variables: DocumentVariable[]): string {
+const NO_CONDITION: SummaryPart[] = [{ kind: 'chip', text: 'no conditions set' }]
+
+function operandPart(operand: ConditionOperand | null, variables: DocumentVariable[]): SummaryPart {
+  if (!operand) return { kind: 'text', text: '…' }
+  if (operand.type === 'variable')
+    return { kind: 'chip', text: variables.find((v) => v.id === operand.ref)?.label ?? operand.ref }
+  return { kind: 'text', text: String(operand.value) }
+}
+
+/** Parts carry no spacing of their own — the renderer joins them with spaces. */
+function conditionParts(cond: Condition, variables: DocumentVariable[]): SummaryPart[] {
   if ('all' in cond || 'any' in cond) {
     const children = 'all' in cond ? cond.all : cond.any
-    const joiner = 'all' in cond ? ' and ' : ' or '
-    return (
-      children
-        .map((child) => {
-          const text = conditionText(child, variables)
-          return 'all' in child || 'any' in child ? `(${text})` : text
-        })
-        .join(joiner) || 'no condition'
-    )
+    const joiner = 'all' in cond ? 'and' : 'or'
+    if (children.length === 0) return NO_CONDITION
+    return children.flatMap((child, index) => {
+      let inner = conditionParts(child, variables)
+      if ('all' in child || 'any' in child)
+        inner = [{ kind: 'text', text: '(' }, ...inner, { kind: 'text', text: ')' }]
+      return index === 0 ? inner : [{ kind: 'text', text: joiner }, ...inner]
+    })
   }
   const option = CONDITIONS.find((c) => c.id === cond.op)
-  if (!option || !cond.params[0]) return 'no condition'
-  const left = operandText(cond.params[0], variables)
-  const rest = option.arity === 2 ? ` ${operandText(cond.params[1] ?? null, variables)}` : ''
-  return `${left} ${option.label}${rest}`
+  if (!option || !cond.params[0]) return NO_CONDITION
+  const parts: SummaryPart[] = [
+    operandPart(cond.params[0], variables),
+    { kind: 'text', text: option.label },
+  ]
+  if (option.arity === 2) parts.push(operandPart(cond.params[1] ?? null, variables))
+  return parts
 }
 
 function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
   const variables = useDocumentVariables()
   const [editing, setEditing] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   // setJSON doesn't go through parseHTML — guard the attr shape here too.
   const raw: unknown = node.attrs.condition
   const cond: Condition = isConditionShape(raw) ? raw : DRAFT_CONDITION
+
+  // Direct nested conditionals drive the "grouped" bar treatment: gray bar,
+  // collapse chevron and the "N nested" count only exist when there are some.
+  let nestedCount = 0
+  node.forEach((child) => {
+    if (child.type.name === 'conditionalBlock') nestedCount++
+  })
 
   // Disable "add nested" once this block is already at the depth cap. getPos can
   // be briefly stale/undefined while the view unmounts, so guard the resolve.
@@ -445,11 +478,31 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
       .run()
   }
 
+  const classes = ['conditional-block']
+  if (nestedCount > 0) classes.push('conditional-block--group')
+  if (collapsed) classes.push('conditional-block--collapsed')
+
   return (
-    <NodeViewWrapper className="conditional-block">
+    <NodeViewWrapper className={classes.join(' ')}>
       {/* Chrome is non-editable so the selects/inputs aren't intercepted by ProseMirror. */}
       <div className="conditional-block__chrome" contentEditable={false}>
-        <div className="conditional-block__bar">
+        <div
+          className={
+            'conditional-block__bar' + (nestedCount > 0 ? ' conditional-block__bar--group' : '')
+          }
+        >
+          {nestedCount > 0 ? (
+            <IconButton
+              size="small"
+              className="conditional-block__toggle"
+              aria-label={collapsed ? 'Expand conditional block' : 'Collapse conditional block'}
+              aria-expanded={!collapsed}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setCollapsed((state) => !state)}
+            >
+              {collapsed ? <KeyboardArrowDown fontSize="inherit" /> : <KeyboardArrowUp fontSize="inherit" />}
+            </IconButton>
+          ) : null}
           <button
             type="button"
             className="conditional-block__summary"
@@ -459,8 +512,22 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
               {icons.conditional}
             </span>
             <span>Show if</span>
-            <span className="conditional-block__cond">{conditionText(cond, variables)}</span>
+            <span className="conditional-block__cond">
+              {conditionParts(cond, variables).map((part, index) => (
+                <Fragment key={index}>
+                  {index > 0 ? ' ' : ''}
+                  {part.kind === 'chip' ? (
+                    <span className="conditional-block__chip">{part.text}</span>
+                  ) : (
+                    part.text
+                  )}
+                </Fragment>
+              ))}
+            </span>
           </button>
+          {nestedCount > 0 ? (
+            <span className="conditional-block__count">{nestedCount} nested</span>
+          ) : null}
           <IconButton
             size="small"
             className="conditional-block__nest"
@@ -470,7 +537,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
             onMouseDown={(event) => event.preventDefault()}
             onClick={addNested}
           >
-            <Add fontSize="inherit" />
+            <AddCircleOutline fontSize="inherit" />
           </IconButton>
           <IconButton
             size="small"

@@ -90,7 +90,10 @@ export const baseStyles = css`
     --editor-mergefield-border: #c6dafc;
     --editor-mergefield-fg: #1967d2;
     --editor-cond-bg: #ece8fd;
+    --editor-cond-border: #d5c8f7;
     --editor-cond-fg: #5b3dd4;
+    --editor-cond-block-bg: #fafafa;
+    --editor-cond-bar-bg: #efefef;
     --editor-comment-bg: #fff3bf;
     --editor-comment-accent: #f59f00;
   }

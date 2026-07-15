@@ -244,7 +244,7 @@ describe('conditional block', () => {
         }}
       />,
     )
-    expect(await screen.findByText('no condition')).toBeInTheDocument()
+    expect(await screen.findByText('no conditions set')).toBeInTheDocument()
   })
 })
 
@@ -754,8 +754,10 @@ describe('conditional block — summary bar text', () => {
     ).toBe('Gross salary is greater than 10000')
   })
 
-  it('renders a draft as "no condition"', async () => {
-    expect(await renderSummary({ all: [{ op: null, params: [null, null] }] })).toBe('no condition')
+  it('renders a draft as "no conditions set"', async () => {
+    expect(await renderSummary({ all: [{ op: null, params: [null, null] }] })).toBe(
+      'no conditions set',
+    )
   })
 
   it('joins an any-tree with "or" (format ahead of the single-row UI)', async () => {
