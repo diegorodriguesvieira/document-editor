@@ -2,7 +2,10 @@ import { Blockquote } from '@tiptap/extension-blockquote'
 import { defineFeature } from '../../editor'
 import { icons } from '../icons'
 
-/** Blockquote ("Quote"). */
+/** Blockquote ("Quote").
+ *
+ *  Contributes — insert: "Quote" · command: `quote.toggle` ·
+ *  keymap: Mod-Shift-' / Mod-". */
 export const QuoteFeature = defineFeature({
   id: 'quote',
   extensions: () => [Blockquote],

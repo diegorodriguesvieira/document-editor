@@ -502,6 +502,9 @@ function addRegion(editor: Editor, name: string, position: number, focusAt: 'sta
  * top/bottom of the document (so it can hold rich content — text, merge fields…
  * — and the backend repeats it per PDF page). The hover "add" affordance is
  * page chrome contributed via `pageRegions`; the editor only stores the nodes.
+ *
+ * Contributes — page regions: header (top) / footer (bottom) · commands:
+ * `header.add`/`footer.add`.
  */
 export const HeaderFooterFeature = defineFeature({
   id: 'headerFooter',

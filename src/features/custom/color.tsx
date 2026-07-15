@@ -127,6 +127,9 @@ function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette
  * when you build the `features` array. (Editor identity is keyed by feature
  * ids, so swapping to a same-id feature with a different palette at runtime is
  * deliberately ignored — remount with `key` if you truly need that.)
+ *
+ * Contributes — bubble: color swatch (custom control, group `marks`) ·
+ * commands: `color.set`/`color.unset`.
  */
 export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOptions = {}) {
   return defineFeature({
@@ -158,5 +161,8 @@ export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOp
   })
 }
 
-/** Zero-config text color with the default (Docs-ish) palette. */
+/** Zero-config text color with the default (Docs-ish) palette.
+ *
+ *  Contributes — bubble: color swatch (custom control) · commands:
+ *  `color.set`/`color.unset`. */
 export const ColorFeature = createColorFeature()

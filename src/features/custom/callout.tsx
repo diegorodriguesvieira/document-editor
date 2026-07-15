@@ -62,6 +62,12 @@ const CalloutNode = Node.create({
   },
 })
 
+/**
+ * Callout block — a toggleable wrap around the current block.
+ *
+ * Contributes — bubble: "Callout" · command: `callout.toggle` ·
+ * keymap: Mod-Shift-e.
+ */
 export const CalloutFeature = defineFeature({
   id: 'callout',
   extensions: () => [CalloutNode],

@@ -2,7 +2,9 @@ import { HorizontalRule } from '@tiptap/extension-horizontal-rule'
 import { defineFeature } from '../../editor'
 import { icons } from '../icons'
 
-/** Horizontal rule / divider. */
+/** Horizontal rule / divider.
+ *
+ *  Contributes — insert: "Divider" · command: `divider.insert`. */
 export const DividerFeature = defineFeature({
   id: 'divider',
   extensions: () => [HorizontalRule],

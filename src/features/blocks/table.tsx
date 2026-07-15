@@ -134,7 +134,11 @@ function TableColumnsControl({ editor, api }: FeatureRenderContext) {
  *  borderless). `resizable` installs ProseMirror's columnResizing plugin —
  *  drag handles on column borders — with `BorderlessTableView` as its node
  *  view. (Row height isn't resizable in ProseMirror tables; it follows the
- *  cell content.) */
+ *  cell content.)
+ *
+ *  Contributes — insert: "Table" · context menu: row/column/cell actions ·
+ *  commands: `table.*` · keymap: Mod-Alt-t. (The bubble's "Table columns"
+ *  button is the separate {@link TableColumnsFeature}.) */
 export const TableFeature = defineFeature({
   id: 'table',
   extensions: () => [
@@ -262,6 +266,9 @@ export const TableFeature = defineFeature({
  * disturbing `TableFeature`'s own position, which also drives the footer
  * insert-dock's "Table" button order. `dependsOn` gives a clear boot error
  * instead of a silently no-op button if it's ever enabled without `table`.
+ *
+ * Contributes — bubble: "Table columns" (custom control) · command:
+ * `table.insertColumns`.
  */
 export const TableColumnsFeature = defineFeature({
   id: 'tableColumns',

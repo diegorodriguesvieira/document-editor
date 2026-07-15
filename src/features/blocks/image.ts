@@ -237,7 +237,10 @@ const ResizableImage = Image.extend({
   },
 })
 
-/** Image. The command takes an src payload, or prompts as a fallback. */
+/** Image. The command takes an src payload, or prompts as a fallback.
+ *
+ *  Contributes — insert: "Image" (URL form) · command: `image.insert` ·
+ *  keymap: Mod-Alt-p. */
 export const ImageFeature = defineFeature({
   id: 'image',
   extensions: () => [ResizableImage],

@@ -1,7 +1,9 @@
 import { Heading } from '@tiptap/extension-heading'
 import { defineFeature } from '../../editor'
 
-/** Headings H1–H3. */
+/** Headings H1–H3.
+ *
+ *  Contributes — bubble: "H1"/"H2"/"H3" · commands: `heading.h1/h2/h3`. */
 export const HeadingFeature = defineFeature({
   id: 'heading',
   extensions: () => [Heading.configure({ levels: [1, 2, 3] })],

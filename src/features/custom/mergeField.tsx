@@ -404,6 +404,9 @@ function MergeFieldInsert({ api }: { api: EditorApi }) {
  * Static "team" feature: @-menu that inserts inline merge-field chips. The
  * variable list comes from {@link DocumentVariablesProvider} (consumer-owned),
  * so it can load async without touching the editor.
+ *
+ * Contributes — insert: "Variable" (custom control) · command:
+ * `mergeField.insert` · the @-mention suggestion popup.
  */
 export const MergeFieldFeature = defineFeature({
   id: 'mergeField',

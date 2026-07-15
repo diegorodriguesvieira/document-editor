@@ -33,6 +33,9 @@ export const fullFeatures: FeatureDefinition[] = [
   ItalicFeature,
   HeadingFeature,
   ListsFeature,
+  // Bubble-only; its POSITION is load-bearing — array order is bar order, so
+  // this slots the bubble "Table columns" button next to Lists without moving
+  // TableFeature ("Table" in the insert dock) further down the array.
   TableColumnsFeature,
   LinkFeature,
   ColorFeature,

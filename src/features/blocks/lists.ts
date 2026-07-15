@@ -4,7 +4,10 @@ import { ListItem } from '@tiptap/extension-list-item'
 import { defineFeature } from '../../editor'
 import { icons } from '../icons'
 
-/** Bullet and ordered lists (bundles the shared ListItem node). */
+/** Bullet and ordered lists (bundles the shared ListItem node).
+ *
+ *  Contributes — bubble: "Bullet list"/"Ordered list" · commands:
+ *  `lists.bullet`/`lists.ordered`. */
 export const ListsFeature = defineFeature({
   id: 'lists',
   extensions: () => [BulletList, OrderedList, ListItem],

@@ -2,7 +2,10 @@ import { UndoRedo } from '@tiptap/extensions'
 import { defineFeature } from '../editor'
 import { icons } from './icons'
 
-/** Undo/redo (TipTap v3 renamed History → UndoRedo, now in @tiptap/extensions). */
+/** Undo/redo (TipTap v3 renamed History → UndoRedo, now in @tiptap/extensions).
+ *
+ *  Contributes — bubble: "Undo"/"Redo" (group `history` — the demo app filters
+ *  them out of the bubble) · commands: `history.undo`/`history.redo`. */
 export const HistoryFeature = defineFeature({
   id: 'history',
   extensions: () => [UndoRedo],

@@ -4,7 +4,10 @@ import { icons } from '../icons'
 import { renderLinkInsertControl } from '../promptForms'
 import { LinkInsertBridgeExtension, linkInsertBridge } from './linkInsertBridge'
 
-/** Link mark. Links are created through the insert-dock form (`link.insert`). */
+/** Link mark. Links are created through the insert-dock form (`link.insert`).
+ *
+ *  Contributes — insert: "Link" (URL form) · commands:
+ *  `link.insert`/`link.openInsert` · keymap: Mod-k. */
 export const LinkFeature = defineFeature({
   id: 'link',
   // `inclusive: () => false` so typing right after ANY link doesn't extend it

@@ -2,7 +2,10 @@ import { CodeBlock } from '@tiptap/extension-code-block'
 import { defineFeature } from '../../editor'
 import { icons } from '../icons'
 
-/** Fenced code block. */
+/** Fenced code block.
+ *
+ *  Contributes — insert: "Code block" · command: `codeBlock.toggle` ·
+ *  keymap: Mod-Shift-c. */
 export const CodeBlockFeature = defineFeature({
   id: 'codeBlock',
   extensions: () => [CodeBlock],

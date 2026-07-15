@@ -65,6 +65,11 @@ const Comment = Mark.create({
   },
 })
 
+/**
+ * Commented text (a mark) plus the thread store the comments panel reads.
+ *
+ * Contributes — bubble: "Comment" (comment-text form) · command: `comment.add`.
+ */
 export const CommentsFeature = defineFeature({
   id: 'comments',
   extensions: () => [Comment],

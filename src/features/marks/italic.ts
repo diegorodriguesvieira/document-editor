@@ -2,7 +2,9 @@ import { Italic } from '@tiptap/extension-italic'
 import { defineFeature } from '../../editor'
 import { icons } from '../icons'
 
-/** Italic mark. Its own Mod-i shortcut comes from the extension. */
+/** Italic mark. Its own Mod-i shortcut comes from the extension.
+ *
+ *  Contributes — bubble: "Italic" · command: `italic.toggle`. */
 export const ItalicFeature = defineFeature({
   id: 'italic',
   extensions: () => [Italic],
