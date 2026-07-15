@@ -155,6 +155,11 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
   backdrop — chip dragging and the region gate depend on it); suggestion
   popups keep their TipTap-owned lifecycle with MUI visuals only. Every
   portaled surface carries `document-editor-popup` on its paper/root.
+- **`editable={false}` (read-only)**: `setEditable` live — never a recreation
+  (undo/scroll survive the toggle; a no-op dispatch nudges the transaction
+  subscribers, which is what React node views listen to). The SDK hides its
+  mutating chrome (default insert actions, page affordances, context menu,
+  node-view controls); `api` stays fully able — read-only gates UI, not API.
 - **Render-prop ladder**: `renderBubble`, `renderHeader` / `renderFooter`
   (fixed-height SDK shells, consumer content; returning null HIDES the bar —
   the footer defaults to the insert actions), `renderLeftPanel` /

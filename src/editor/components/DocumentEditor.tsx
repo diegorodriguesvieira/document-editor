@@ -98,6 +98,10 @@ export function DocumentEditor({
 }: DocumentEditorProps) {
   const { editor, api, resolved } = useDocumentEditor(options)
   const ctx = editor && api ? { editor, api, resolved } : null
+  // Read-only hides the SDK chrome that mutates content (default insert
+  // actions, page-region affordances, context menu). A consumer-supplied
+  // renderFooter owns its own gating — it gets the same `editable` knowledge.
+  const editable = options.editable ?? true
 
   const bubble = ctx
     ? renderBubble
@@ -120,7 +124,7 @@ export function DocumentEditor({
   const footer = ctx
     ? renderFooter
       ? renderFooter(ctx)
-      : resolved.inserts.length > 0
+      : resolved.inserts.length > 0 && editable
         ? <InsertToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
         : null
     : null
@@ -150,11 +154,11 @@ export function DocumentEditor({
             className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}
           >
             <div className="document-editor__scale" style={{ zoom }}>
-              {ctx && resolved.pageRegions.length > 0 ? (
+              {ctx && editable && resolved.pageRegions.length > 0 ? (
                 <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="top" />
               ) : null}
               <EditorContent editor={editor} className="document-editor__surface" />
-              {ctx && resolved.pageRegions.length > 0 ? (
+              {ctx && editable && resolved.pageRegions.length > 0 ? (
                 <PageAffordances api={ctx.api} regions={resolved.pageRegions} position="bottom" />
               ) : null}
             </div>
@@ -164,7 +168,7 @@ export function DocumentEditor({
           <aside className="document-editor__panel document-editor__panel--right">{rightPanel}</aside>
         ) : null}
         {ctx && renderEmptyState ? <EmptyStateOverlay ctx={ctx} render={renderEmptyState} /> : null}
-        {ctx && resolved.contextMenu.length > 0 ? (
+        {ctx && editable && resolved.contextMenu.length > 0 ? (
           <EditorContextMenu editor={ctx.editor} api={ctx.api} sections={resolved.contextMenu} />
         ) : null}
       </div>

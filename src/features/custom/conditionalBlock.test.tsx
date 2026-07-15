@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { DocumentEditor, type EditorApi } from '../../editor'
@@ -769,5 +769,40 @@ describe('conditional block — summary bar text', () => {
         ],
       }),
     ).toBe('Gross salary is in the document or Company is in the document')
+  })
+})
+
+describe('conditional block — read-only', () => {
+  const lockedDoc = {
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'conditionalBlock',
+          attrs: { condition: existsCondition('pais') },
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'clause' }] }],
+        },
+      ],
+    },
+  }
+
+  it('keeps the summary bar but drops nest/delete, and the summary never opens the editor', async () => {
+    const { rerender } = render(
+      <DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} editable={false} />,
+    )
+    expect(await screen.findByText('Show if')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Add nested condition')).toBeNull()
+    expect(screen.queryByLabelText('Remove conditional block')).toBeNull()
+
+    // PM's own mousedown handler probes posAtCoords — jsdom has no
+    // elementFromPoint, so stub it (same rig as the header/footer tests).
+    vi.spyOn(editorFromDOM().view, 'posAtCoords').mockReturnValue(null)
+    await userEvent.click(screen.getByText('Show if'))
+    expect(document.querySelector('.cond-editor')).toBeNull()
+
+    // Back to edit mode WITHOUT remounting: the setEditable nudge must reach
+    // the React node view — the controls come back live.
+    rerender(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    await waitFor(() => expect(screen.getByLabelText('Add nested condition')).toBeInTheDocument())
   })
 })

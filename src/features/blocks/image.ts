@@ -178,6 +178,7 @@ const ResizableImage = Image.extend({
         const handle = document.createElement('span')
         handle.className = `image-resizer__handle image-resizer__handle--${id}`
         handle.addEventListener('mousedown', (event) => {
+          if (!view.editable) return // read-only: handles are hidden AND inert
           event.preventDefault()
           event.stopPropagation()
           const startW = img.offsetWidth || (current.attrs.width as number) || MIN_WIDTH
@@ -214,8 +215,10 @@ const ResizableImage = Image.extend({
           sync(next)
           return true
         },
-        // Handles only show while the node is selected (click the image).
+        // Handles only show while the node is selected (click the image) —
+        // and never in read-only, where resizing would mutate the document.
         selectNode() {
+          if (!view.editable) return
           dom.classList.add('image-resizer--selected')
         },
         deselectNode() {

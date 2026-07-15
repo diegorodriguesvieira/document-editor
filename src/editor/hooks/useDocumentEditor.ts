@@ -14,6 +14,14 @@ export interface UseDocumentEditorOptions {
    *  is safe — it won't recreate the editor on every parent render. */
   features: FeatureDefinition[]
   content?: DocumentJSON
+  /** `false` puts the editor in READ-ONLY mode: the document renders with its
+   *  full layout but rejects typing, and the SDK chrome that mutates content
+   *  (insert dock default, page-region affordances, context menu, node-view
+   *  controls) hides itself. Live-toggleable — flipping it does NOT recreate
+   *  the editor (no undo/scroll loss). Defaults to `true`. Programmatic
+   *  `api.exec`/`api.setJSON` stay available either way — read-only gates the
+   *  UI, not the API. */
+  editable?: boolean
   /** Called when INITIAL content (or an insertContent-style flow) fails schema
    *  validation — e.g. a node whose feature is disabled — instead of silently
    *  wiping the document. Defaults to throwing. Note: `api.setJSON` does NOT
@@ -64,9 +72,11 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
       else throw error
     },
   })
+  const editable = options.editable ?? true
   const editor = useEditor(
     {
       ...base,
+      editable,
       extensions: [
         ...base.extensions,
         ...(resolved.inserts.some((item) => item.commandId) ? [createSlashCommands(resolved)] : []),
@@ -74,6 +84,17 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
     },
     [resolved],
   )
+
+  // Live editable toggle — setEditable, not recreation. setEditable emits
+  // 'update' but no TRANSACTION, and React node views + `useEditorState`
+  // subscribe to transactions — so nudge them with a no-op dispatch or the
+  // isEditable-driven chrome (region bars, conditional-block controls) would
+  // keep rendering the stale mode.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.isEditable === editable) return
+    editor.setEditable(editable)
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
+  }, [editor, editable])
 
   const api = useMemo(
     () => (editor ? createEditorApi(editor, resolved) : null),

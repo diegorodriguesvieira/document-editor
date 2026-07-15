@@ -7,7 +7,7 @@ import { InsertToolbar } from './InsertToolbar'
 import { useFeatureState } from '../hooks/useFeatureState'
 import { createEmptyDocument } from '../core/document'
 import type { EditorApi } from '../core/EditorApi'
-import { BoldFeature, TableFeature } from '../../features'
+import { BoldFeature, HeaderFooterFeature, TableFeature } from '../../features'
 import { docWith, jsonHasNode } from '../../test/editorHarness'
 
 describe('<DocumentEditor /> empty state', () => {
@@ -247,4 +247,45 @@ describe('<DocumentEditor /> chrome shells and layout', () => {
     await waitFor(() => expect(jsonHasNode(api!.getJSON().doc, 'table')).toBe(true))
   })
 
+})
+
+describe('<DocumentEditor /> read-only (`editable={false}`)', () => {
+  const surface = () => document.querySelector('.ProseMirror') as HTMLElement
+
+  it('renders non-editable and toggles LIVE — same editor instance, no recreation', async () => {
+    let readyCount = 0
+    const onReady = () => {
+      readyCount += 1
+    }
+    const { rerender } = render(
+      <DocumentEditor
+        features={[BoldFeature]}
+        content={docWith('locked')}
+        editable={false}
+        onReady={onReady}
+      />,
+    )
+    await screen.findByText('locked')
+    expect(surface().getAttribute('contenteditable')).toBe('false')
+
+    rerender(<DocumentEditor features={[BoldFeature]} content={docWith('locked')} onReady={onReady} />)
+    await waitFor(() => expect(surface().getAttribute('contenteditable')).toBe('true'))
+    // onReady fires once per editor INSTANCE — a second call would mean the
+    // toggle recreated the editor (losing undo/scroll).
+    expect(readyCount).toBe(1)
+  })
+
+  it('hides the mutating SDK chrome — default insert actions and page-region affordances', async () => {
+    const features = [TableFeature, HeaderFooterFeature]
+    const { rerender } = render(
+      <DocumentEditor features={features} content={docWith('doc')} editable={false} />,
+    )
+    await screen.findByText('doc')
+    expect(screen.queryByRole('toolbar', { name: 'Insert' })).toBeNull()
+    expect(screen.queryByText(/Add header/)).toBeNull()
+
+    rerender(<DocumentEditor features={features} content={docWith('doc')} />)
+    expect(await screen.findByRole('toolbar', { name: 'Insert' })).toBeInTheDocument()
+    expect(await screen.findByText(/Add header/)).toBeInTheDocument()
+  })
 })

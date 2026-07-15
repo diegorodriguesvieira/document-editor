@@ -114,11 +114,15 @@ export function closeRegion(editor: Editor, name: string): void {
  */
 function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
   const isHeader = node.type.name === REGION_TOP
+  // Read-only: the region renders (it IS document content) but never opens
+  // for editing and loses its Remove control.
+  const editable = useFeatureState(editor, (current) => current.isEditable) ?? true
   // Derived from the guard's storage (single source of truth): the add
   // commands and double-click both open the gate, and every open/close is
   // followed by a dispatch, so this stays fresh.
-  const editing =
+  const gateOpen =
     useFeatureState(editor, () => guardStorage(editor).editing === node.type.name) ?? false
+  const editing = editable && gateOpen
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   // If this region unmounts while open (Remove, undo, setJSON swap), don't
@@ -171,7 +175,7 @@ function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
       onMouseDown={(event: React.MouseEvent) => {
         if (!editing) event.preventDefault() // no caret on single click
       }}
-      onDoubleClick={editing ? undefined : activate}
+      onDoubleClick={editing || !editable ? undefined : activate}
     >
       <div
         className="doc-region__bar"
@@ -182,15 +186,17 @@ function HeaderFooterView({ node, editor, getPos, deleteNode }: NodeViewProps) {
         onMouseDown={(event) => event.preventDefault()}
       >
         <span className="doc-region__label">{isHeader ? 'Header' : 'Footer'}</span>
-        <Button
-          className="doc-region__remove"
-          size="small"
-          aria-label={`Remove ${isHeader ? 'header' : 'footer'}`}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => deleteNode()}
-        >
-          Remove
-        </Button>
+        {editable ? (
+          <Button
+            className="doc-region__remove"
+            size="small"
+            aria-label={`Remove ${isHeader ? 'header' : 'footer'}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => deleteNode()}
+          >
+            Remove
+          </Button>
+        ) : null}
       </div>
       <NodeViewContent className="doc-region__content" />
     </NodeViewWrapper>

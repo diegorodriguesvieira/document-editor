@@ -7,6 +7,7 @@ import {
   NodeViewContent,
   NodeViewWrapper,
   ReactNodeViewRenderer,
+  useFeatureState,
   type NodeViewProps,
 } from '../../editor'
 import { GapCursor } from '@tiptap/pm/gapcursor'
@@ -429,6 +430,9 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
   const variables = useDocumentVariables()
   const [editing, setEditing] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  // Read-only keeps the bar (summary + collapse are just reading) but drops
+  // every mutating control: nest, delete and the condition editor.
+  const editable = useFeatureState(editor, (current) => current.isEditable) ?? true
   // setJSON doesn't go through parseHTML — guard the attr shape here too.
   const raw: unknown = node.attrs.condition
   const cond: Condition = isConditionShape(raw) ? raw : DRAFT_CONDITION
@@ -506,7 +510,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
           <button
             type="button"
             className="conditional-block__summary"
-            onClick={() => setEditing((open) => !open)}
+            onClick={() => editable && setEditing((open) => !open)}
           >
             <span className="conditional-block__icon" aria-hidden>
               {icons.conditional}
@@ -528,27 +532,31 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
           {nestedCount > 0 ? (
             <span className="conditional-block__count">{nestedCount} nested</span>
           ) : null}
-          <IconButton
-            size="small"
-            className="conditional-block__nest"
-            aria-label="Add nested condition"
-            title="Nest a condition (AND)"
-            disabled={atDepthLimit}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={addNested}
-          >
-            <AddCircleOutline fontSize="inherit" />
-          </IconButton>
-          <IconButton
-            size="small"
-            className="conditional-block__delete"
-            aria-label="Remove conditional block"
-            onClick={() => deleteNode()}
-          >
-            {icons.delete}
-          </IconButton>
+          {editable ? (
+            <>
+              <IconButton
+                size="small"
+                className="conditional-block__nest"
+                aria-label="Add nested condition"
+                title="Nest a condition (AND)"
+                disabled={atDepthLimit}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={addNested}
+              >
+                <AddCircleOutline fontSize="inherit" />
+              </IconButton>
+              <IconButton
+                size="small"
+                className="conditional-block__delete"
+                aria-label="Remove conditional block"
+                onClick={() => deleteNode()}
+              >
+                {icons.delete}
+              </IconButton>
+            </>
+          ) : null}
         </div>
-        {editing ? (
+        {editing && editable ? (
           <ConditionEditor
             variables={variables}
             value={cond}

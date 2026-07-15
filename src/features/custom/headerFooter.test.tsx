@@ -446,6 +446,19 @@ describe('header/footer node view (the React chrome)', () => {
     return { editor, api: api!, region, posAtCoords }
   }
 
+  it('read-only: no Remove control, and double-click does NOT open the region', async () => {
+    render(<DocumentEditor features={[HeaderFooterFeature]} content={REGION_DOC} editable={false} />)
+    await screen.findByText('Header')
+    const editor = editorFromDOM()
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+    expect(screen.queryByRole('button', { name: 'Remove header' })).toBeNull()
+
+    fireEvent.dblClick(document.querySelector('.doc-region--header') as HTMLElement)
+
+    expect(gate(editor).editing).toBeNull()
+    expect(document.querySelector('.doc-region--editing')).toBeNull()
+  })
+
   it('a single click does NOT drop the caret in (Google-Docs entry semantics)', async () => {
     const { editor, region } = await mountRegionEditor()
 

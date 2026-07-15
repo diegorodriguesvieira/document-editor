@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import Button from '@mui/material/Button'
-import { BubbleToolbar, DocumentEditor, InsertToolbar, useZoom } from '../editor'
+import {
+  BubbleToolbar,
+  DocumentEditor,
+  InsertToolbar,
+  useFeatureState,
+  useZoom,
+  type DocumentEditorRenderContext,
+} from '../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from '../features'
 import { CommentCards } from './CommentCards'
 import { contractTemplate } from './contractTemplate'
@@ -8,10 +15,45 @@ import { ZoomControls } from './ZoomControls'
 import { fullFeatures } from './presets'
 import './styles.css' // demo-app chrome (the SDK skin now ships inside the components)
 
+/**
+ * Preview/edit toggle — hidden while the document is BLANK: there is nothing
+ * to preview, and the empty-state overlay owns that moment. It stays visible
+ * in preview itself (a programmatically emptied doc must not trap the mode).
+ * Live via the SDK's blessed header recipe: useFeatureState + api.isEmpty.
+ */
+function ModeToggle({
+  ctx,
+  preview,
+  onToggle,
+}: {
+  ctx: DocumentEditorRenderContext
+  preview: boolean
+  onToggle: () => void
+}) {
+  const isEmpty = useFeatureState(ctx.editor, () => ctx.api.isEmpty()) ?? true
+  if (isEmpty && !preview) return null
+  return (
+    <Button
+      className="app__mode"
+      size="small"
+      variant="outlined"
+      aria-pressed={preview}
+      onClick={onToggle}
+    >
+      {preview ? 'Edit' : 'Preview'}
+    </Button>
+  )
+}
+
 export default function App() {
   // Zoom state + policy (clamp/step/rounding) come ready from the SDK hook;
   // the buttons below are the app's own UI on top of it.
   const { zoom, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom()
+
+  // Preview (read-only) vs edit. The SDK reacts to the `editable` prop live —
+  // no remount, so undo history and scroll survive the toggle. The app only
+  // hides its OWN mutating chrome (the insert actions); the SDK hides the rest.
+  const [preview, setPreview] = useState(false)
 
   // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
   // context (not the `features` list), the editor mounts immediately and does
@@ -40,14 +82,20 @@ export default function App() {
           <DocumentEditor
             features={fullFeatures}
             zoom={zoom}
+            editable={!preview}
             // The editor's own HEADER bar (fixed height, SDK shell) — the app
-            // only brings its content.
-            renderHeader={() => (
+            // only brings its content, including the preview/edit toggle.
+            renderHeader={(ctx) => (
               <>
                 <span className="app__title">Untitled document</span>
                 <span className="app__hint">
                   @ variables: {docVariables.length ? `${docVariables.length} loaded` : 'loading…'}
                 </span>
+                <ModeToggle
+                  ctx={ctx}
+                  preview={preview}
+                  onToggle={() => setPreview((current) => !current)}
+                />
               </>
             )}
             // `onChange` is debounced (~250ms after edits stop) — i.e. the exact
@@ -97,7 +145,7 @@ export default function App() {
                   canZoomIn={canZoomIn}
                   canZoomOut={canZoomOut}
                 />
-                <InsertToolbar {...ctx} className="app-dock__items" />
+                {!preview && <InsertToolbar {...ctx} className="app-dock__items" />}
                 <Button
                   variant="contained"
                   className="app-dock__send"

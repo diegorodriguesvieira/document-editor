@@ -201,10 +201,20 @@ dock skin), so pair it with a suppressed dock —
 ```tsx
 <DocumentEditor
   features={…}
-  renderFooter={() => null}  // no footer (read-only mode does the same)
+  renderFooter={() => null}  // no footer
   renderLeftPanel={(ctx) => <InsertToolbar {...ctx} className="my-side-inserts" />}
 />
 ```
+
+**Read-only mode** is a first-class prop: `editable={false}` keeps the full
+layout but rejects typing, and the SDK hides its own mutating chrome — the
+default insert actions, the page-region affordances, the context menu and the
+node-view controls (conditional-block bar buttons, region Remove, image resize
+handles); the bubble already only shows on an editable selection. It is
+live-toggleable (a preview/edit switch) without recreating the editor — undo
+history and scroll survive. A consumer `renderFooter` owns its own gating.
+Programmatic `api.exec`/`api.setJSON` stay available — the prop gates the UI,
+not the API.
 
 Comments ship both a default panel and the data hook, so you
 can drop the panel in as-is or rebuild the UI without losing behavior:

@@ -109,3 +109,38 @@ describe('<App /> toolbar', () => {
     expect(scale()).toBe('1')
   })
 })
+
+describe('<App /> preview mode', () => {
+  it('the toggle is HIDDEN while the document is blank — the empty state owns that moment', async () => {
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+    expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull()
+
+    act(() => {
+      editor().commands.insertContent('agora tem conteúdo')
+    })
+    expect(await screen.findByRole('button', { name: 'Preview' })).toBeInTheDocument()
+  })
+
+  it('the header button toggles read-only and back, live', async () => {
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+    const surface = () => document.querySelector('.ProseMirror') as HTMLElement
+    expect(surface().getAttribute('contenteditable')).toBe('true')
+    act(() => {
+      editor().commands.insertContent('hello mundo')
+    })
+    await screen.findByRole('toolbar', { name: 'Insert' })
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }))
+    await waitFor(() => expect(surface().getAttribute('contenteditable')).toBe('false'))
+    // The app's own mutating chrome goes with it — no insert actions…
+    expect(screen.queryByRole('toolbar', { name: 'Insert' })).toBeNull()
+    // …while the read-only layout keeps the shell (zoom rail, Send).
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await waitFor(() => expect(surface().getAttribute('contenteditable')).toBe('true'))
+    expect(await screen.findByRole('toolbar', { name: 'Insert' })).toBeInTheDocument()
+  })
+})

@@ -264,3 +264,8 @@ body {
   background: #343434;
 }
 
+
+/* Preview/edit toggle — pinned to the header's right edge. */
+.app__mode {
+  margin-left: auto;
+}
