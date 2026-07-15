@@ -1,106 +1,228 @@
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemButton from '@mui/material/ListItemButton'
+import { useEffect, useRef, useState } from 'react'
+import Avatar from '@mui/material/Avatar'
+import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
+import IconButton from '@mui/material/IconButton'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
+import TextField from '@mui/material/TextField'
+import MoreVert from '@mui/icons-material/MoreVert'
 import type { Editor } from '@tiptap/core'
-import { useFeatureState } from '../../editor'
-import { getCommentThreads } from './comments'
+import { POPUP_CLASS } from '../../editor'
+import { useComments, type CommentUser, type DocumentComment } from './commentsProvider'
 
-export interface AnchoredComment {
-  id: string
-  text: string
-  quote: string
-  from: number
-  to: number
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
 }
 
-/**
- * Walk the doc for `comment` marks, merging contiguous runs of the same id into
- * one range, and join with the stored thread text. This is the source of truth
- * for "what is commented" — derived from the document, so it stays correct as
- * text moves (and orphaned threads, whose marks were deleted, drop off the list).
- */
-function buildComments(editor: Editor): AnchoredComment[] {
-  // Per id, a LIST of segments: a run split by other marks (bold inside a
-  // comment) merges back into one segment, but a genuinely discontiguous
-  // reuse of the id (copy/paste of commented text) stays a separate entry —
-  // min/max there would swallow the uncommented text in between.
-  const segments = new Map<string, Array<{ from: number; to: number }>>()
-  const doc = editor.state.doc
-  doc.descendants((node, pos) => {
-    if (!node.isText) return
-    // `excludes: ''` allows overlapping comments — a text node can carry
-    // SEVERAL comment marks; reading only the first would drop the others.
-    for (const mark of node.marks) {
-      if (mark.type.name !== 'comment') continue
-      const id = mark.attrs.commentId as string
-      const list = segments.get(id) ?? []
-      const last = list[list.length - 1]
-      // Contiguous = no TEXT in the gap (block boundaries produce empty
-      // textBetween, so a comment spanning paragraphs stays one entry).
-      if (last && (pos <= last.to || doc.textBetween(last.to, pos) === '')) {
-        last.to = Math.max(last.to, pos + node.nodeSize)
-      } else {
-        list.push({ from: pos, to: pos + node.nodeSize })
-        segments.set(id, list)
-      }
-    }
-  })
-
-  const threads = getCommentThreads(editor)
-  return [...segments.entries()].flatMap(([id, list]) =>
-    list.map((range) => ({
-      id,
-      from: range.from,
-      to: range.to,
-      quote: doc.textBetween(range.from, range.to, ' '),
-      text: threads?.get(id)?.text ?? '',
-    })),
+/** Consumer-provided user → src/initials avatar; no user → MUI's generic one. */
+function UserAvatar({ user }: { user: CommentUser | null }) {
+  if (!user) return <Avatar className="comments-panel__avatar" alt="Anonymous" />
+  return (
+    <Avatar className="comments-panel__avatar" src={user.avatarUrl} alt={user.name}>
+      {initials(user.name)}
+    </Avatar>
   )
 }
 
-/** The comments currently anchored in the document, reactive to edits. */
-export function useDocumentComments(editor: Editor | null): AnchoredComment[] {
-  return useFeatureState(editor, buildComments) ?? []
+/** Collapse the document selection (read-only: no focus involved). */
+function collapseSelectionAt(editor: Editor | null, pos: number) {
+  if (!editor || editor.isDestroyed) return
+  editor.commands.setTextSelection(Math.max(0, Math.min(pos, editor.state.doc.content.size)))
 }
 
 /**
- * Right-side panel listing every comment. Clicking one selects its text and
- * scrolls the editor to it — the way to find a comment without hunting for the
- * yellow highlight.
+ * The avatar + field row a captured draft opens. Cancel/Comment appear once
+ * there is text; Enter sends, Shift+Enter breaks the line, Escape cancels.
+ * Cancelling/sending also COLLAPSES the document selection — the still-live
+ * range would summon the balloon right back.
+ */
+function Composer({ editor, draftTo }: { editor: Editor | null; draftTo: number }) {
+  const context = useComments()
+  const [text, setText] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  if (!context) return null
+
+  const cancel = () => {
+    context.clearDraft()
+    context.setActiveId(null)
+    collapseSelectionAt(editor, draftTo)
+  }
+
+  const submit = async () => {
+    if (text.trim() === '' || submitting) return
+    setSubmitting(true)
+    const saved = await context.addComment(text)
+    setSubmitting(false)
+    if (saved) collapseSelectionAt(editor, draftTo)
+    // On failure the draft and text stay — the provider keeps the error.
+  }
+
+  return (
+    <div className="comments-panel__composer">
+      <UserAvatar user={context.user} />
+      <div className="comments-panel__composer-main">
+        <TextField
+          multiline
+          autoFocus
+          fullWidth
+          size="small"
+          minRows={2}
+          placeholder="Add a comment…"
+          value={text}
+          slotProps={{ htmlInput: { 'aria-label': 'Comment text' } }}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void submit()
+            }
+            if (event.key === 'Escape') cancel()
+          }}
+        />
+        {text.trim() !== '' ? (
+          <div className="comments-panel__composer-actions">
+            <Button size="small" className="comments-panel__cancel" onClick={cancel}>
+              Cancel
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              className="comments-panel__submit"
+              disabled={submitting}
+              onClick={() => void submit()}
+            >
+              Comment
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One comment: avatar + author + text. Clicking it scrolls the document to
+ * the anchored range and lights it up (`comment--active`, via `activeId`).
+ * The author's own comments carry a 3-dots menu with Delete.
+ */
+function CommentCard({ comment, editor }: { comment: DocumentComment; editor: Editor | null }) {
+  const context = useComments()
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const cardRef = useRef<HTMLLIElement>(null)
+  const active = context?.activeId === comment.id
+  // Clicking the HIGHLIGHT in the document activates this card — bring it
+  // into the panel's scrolled viewport. (Optional chaining: jsdom has no
+  // scrollIntoView.)
+  useEffect(() => {
+    if (active) cardRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [active])
+  if (!context) return null
+  const isOwn = context.user != null && comment.author.id === context.user.id
+
+  const jump = () => {
+    context.setActiveId(comment.id)
+    if (!editor || editor.isDestroyed) return
+    // A COLLAPSED caret — selecting the whole range would summon the
+    // "Add comment" balloon over the very comment being read.
+    editor
+      .chain()
+      .setTextSelection(Math.max(0, Math.min(comment.from, editor.state.doc.content.size)))
+      .run()
+    // PM's own scrollIntoView is a NO-OP here: prosemirror-view bails out of
+    // scrollToSelection while the DOM focus sits outside the view — and it
+    // does, the user just clicked this panel. Scroll the highlight span
+    // itself instead (it exists: the setTextSelection dispatch above just
+    // re-derived the decorations). Optional-chained: jsdom has no
+    // scrollIntoView.
+    const escaped = globalThis.CSS?.escape?.(comment.id) ?? comment.id
+    editor.view.dom
+      .querySelector(`[data-comment-id="${escaped}"]`)
+      ?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }
+
+  return (
+    <li
+      ref={cardRef}
+      className={`comments-panel__card${active ? ' comments-panel__card--active' : ''}`}
+    >
+      <ButtonBase className="comments-panel__card-body" onClick={jump}>
+        <span className="comments-panel__card-header">
+          <UserAvatar user={comment.author} />
+          <span className="comments-panel__author">{comment.author.name}</span>
+        </span>
+        <span className="comments-panel__text">{comment.text}</span>
+      </ButtonBase>
+      {isOwn ? (
+        <>
+          <IconButton
+            size="small"
+            className="comments-panel__menu"
+            aria-label="Comment actions"
+            onClick={(event) => setMenuAnchor(event.currentTarget)}
+          >
+            <MoreVert fontSize="inherit" />
+          </IconButton>
+          <Menu
+            anchorEl={menuAnchor}
+            open={menuAnchor != null}
+            onClose={() => setMenuAnchor(null)}
+            // The popup marker rides the PAPER (portal root), same as the
+            // context menu — never the backdrop.
+            slotProps={{ paper: { className: POPUP_CLASS } }}
+          >
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null)
+                void context.removeComment(comment.id)
+              }}
+            >
+              Delete
+            </MenuItem>
+          </Menu>
+        </>
+      ) : null}
+    </li>
+  )
+}
+
+/**
+ * The review-mode comments panel: the composer while a draft is being written
+ * (the balloon captured a selection), then the comment cards — newest data
+ * straight from the adapter, refetched after every mutation. Renders nothing
+ * without a {@link CommentsProvider}, and nothing while there is neither a
+ * draft nor any comment (the product rule the old panel had too).
  */
 export function CommentsPanel({ editor }: { editor: Editor | null }) {
-  const comments = useDocumentComments(editor)
-
-  // No comments → no panel at all (product rule, shared with any consumer
-  // rewrite). It (re)appears reactively with the first anchored comment and
-  // leaves again when the last one is deleted.
-  if (comments.length === 0) return null
+  const context = useComments()
+  if (!context) return null
+  const { comments, draft, error } = context
+  if (!draft && comments.length === 0) return null
 
   return (
     <Paper component="aside" className="comments-panel" aria-label="Comments" elevation={0}>
-      <div className="comments-panel__title">Comments ({comments.length})</div>
-      <List className="comments-panel__list" dense disablePadding>
-        {comments.map((comment) => (
-          // Discontiguous reuses of one id are separate entries — key by range.
-          <ListItem key={`${comment.id}:${comment.from}`} disablePadding>
-            <ListItemButton
-              className="comments-panel__item"
-              onClick={() =>
-                editor
-                  ?.chain()
-                  .focus()
-                  .setTextSelection({ from: comment.from, to: comment.to })
-                  .scrollIntoView()
-                  .run()
-              }
-            >
-              <span className="comments-panel__quote">“{comment.quote}”</span>
-              {comment.text ? <span className="comments-panel__text">{comment.text}</span> : null}
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+      <div className="comments-panel__title">
+        Comments{comments.length > 0 ? ` (${comments.length})` : ''}
+      </div>
+      {draft ? (
+        // Keyed by the captured range: a new capture starts a FRESH composer.
+        <Composer key={`${draft.from}:${draft.to}`} editor={editor} draftTo={draft.to} />
+      ) : null}
+      {error ? <div className="comments-panel__error">{error}</div> : null}
+      {comments.length > 0 ? (
+        <ul className="comments-panel__list">
+          {comments.map((comment) => (
+            <CommentCard key={comment.id} comment={comment} editor={editor} />
+          ))}
+        </ul>
+      ) : null}
     </Paper>
   )
 }

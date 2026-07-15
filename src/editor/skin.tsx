@@ -30,6 +30,7 @@ import { pageAffordancesStyles } from './components/PageAffordances.styles'
 import { headerFooterStyles } from '../features/custom/headerFooter.styles'
 import { commentsStyles } from '../features/custom/comments.styles'
 import { commentsPanelStyles } from '../features/custom/commentsPanel.styles'
+import { commentsLayerStyles } from '../features/custom/commentsLayer.styles'
 import { colorStyles } from '../features/custom/color.styles'
 
 /**
@@ -68,6 +69,7 @@ const SKIN = [
   headerFooterStyles,
   commentsStyles,
   commentsPanelStyles,
+  commentsLayerStyles,
   colorStyles,
 ]
 

@@ -24,13 +24,19 @@ export {
   MAX_CONDITIONAL_DEPTH,
 } from './custom/conditionalBlock'
 export type { Condition, ConditionId, ConditionLeaf, ConditionOperand } from './custom/conditionalBlock'
+// Review-mode comments: the decoration kernel (feature), the consumer-fed
+// provider (user + endpoint adapter), the "Add comment" balloon layer and the
+// panel for the consumer-owned right rail — all read-only-mode only.
 export { CommentsFeature } from './custom/comments'
-export type { CommentThread } from './custom/comments'
-// The comments SURFACE for the consumer-owned right rail: the default panel,
-// or rebuild your own UI on the same reactive hook (click-to-scroll included —
-// see CommentsPanel as the reference implementation).
-export { CommentsPanel, useDocumentComments } from './custom/commentsPanel'
-export type { AnchoredComment } from './custom/commentsPanel'
+export { CommentsProvider, useComments } from './custom/commentsProvider'
+export type {
+  CommentDraft,
+  CommentsAdapter,
+  CommentUser,
+  DocumentComment,
+} from './custom/commentsProvider'
+export { CommentsLayer, commentBalloonShouldShow } from './custom/commentsLayer'
+export { CommentsPanel } from './custom/commentsPanel'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'
 export type { DocumentVariable } from './custom/documentVariables'

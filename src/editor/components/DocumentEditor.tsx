@@ -44,9 +44,9 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
    *  className="…"/>` is headless; pair it with `renderFooter={() => null}`
    *  to drop the footer). Omit for no panel. */
   renderLeftPanel?: (ctx: DocumentEditorRenderContext) => ReactNode
-  /** CONSUMER-owned side panel in the RIGHT gutter (zoom controls, a comments
-   *  panel via `<CommentsPanel editor={ctx.editor}/>`, your own UI built on
-   *  hooks like `useDocumentComments`). Omit for no panel. */
+  /** CONSUMER-owned side panel in the RIGHT gutter (zoom controls, the
+   *  review-comments panel via `<CommentsPanel editor={ctx.editor}/>`, or any
+   *  UI of yours). Omit for no panel. */
   renderRightPanel?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Shown centered on the SCREEN while the document is empty; disappears as
    *  soon as there is content. The overlay never steals clicks from the editor

@@ -1,10 +1,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { BubbleBar, InsertToolbar } from '../editor'
+import { InsertToolbar } from '../editor'
 import { docWith, jsonHasNode, renderEditor } from '../test/editorHarness'
-import { CommentsFeature } from './custom/comments'
-import { getCommentThreads } from './custom/comments'
 import { ImageFeature } from './blocks/image'
 import { LinkFeature } from './marks/link'
 
@@ -204,31 +202,5 @@ describe('image form', () => {
 
     expect(jsonHasNode(created.api.getJSON().doc, 'image')).toBe(true)
     expect(screen.queryByRole('dialog', { name: 'Insert image' })).toBeNull()
-  })
-})
-
-describe('comment form', () => {
-  it('anchors the comment to the selection and stores the thread text', async () => {
-    const user = userEvent.setup()
-    const created = renderEditor([CommentsFeature], { content: docWith('review this line') })
-    created.editor.commands.setTextSelection({ from: 1, to: 7 })
-    render(
-      <BubbleBar
-        editor={created.editor}
-        api={created.api}
-        resolved={created.resolved}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Comment' }))
-    const dialog = screen.getByRole('dialog', { name: 'Add comment' })
-    await user.type(within(dialog).getByRole('textbox', { name: 'Comment text' }), 'tighten the wording')
-    // Two buttons share the name (the bar toggle + the submit) — scope
-    // the click to the form.
-    await user.click(within(dialog).getByRole('button', { name: 'Comment' }))
-
-    expect(created.api.getHTML()).toContain('class="comment"')
-    const threads = getCommentThreads(created.editor)
-    expect([...(threads?.values() ?? [])].some((t) => t.text === 'tighten the wording')).toBe(true)
   })
 })

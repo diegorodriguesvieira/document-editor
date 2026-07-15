@@ -61,9 +61,11 @@ body {
   flex: 1 0 auto;
 }
 
-/* Right rail wrapper — consumer-owned gutter; the app renders its own
-   CommentCards here (not the SDK's CommentsPanel). */
+/* Right rail wrapper — consumer-owned gutter; in preview mode the app
+   renders the SDK's CommentsPanel here. Full height so the panel's sticky
+   positioning has the whole column to ride along. */
 .right-rail {
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -117,79 +119,6 @@ body {
 
 .empty-state__cta.empty-state__cta:hover {
   background: #333;
-}
-
-/* CommentCards — the app's OWN comments UI (rewritten over useDocumentComments),
-   deliberately styled differently from the SDK's .comments-panel. */
-.comment-cards {
-  width: 260px;
-  max-height: 70vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: #1b1b1b;
-  border-radius: 12px;
-  color: #e3e3e3;
-}
-
-.comment-cards__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.comment-cards__badge {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: #8ab4f8;
-  color: #1b1b1b;
-  font-size: 11px;
-  text-align: center;
-}
-
-.comment-cards__card.comment-cards__card {
-  display: flex;
-  gap: 8px;
-  padding: 8px 10px;
-  border: none;
-  border-left: 3px solid #8ab4f8;
-  border-radius: 6px;
-  background: #2a2a2a;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.comment-cards__card.comment-cards__card:hover {
-  background: #333;
-}
-
-.comment-cards__index {
-  font-size: 11px;
-  font-weight: 700;
-  color: #8ab4f8;
-}
-
-.comment-cards__body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.comment-cards__text {
-  font-size: 13px;
-}
-
-.comment-cards__quote {
-  font-size: 11px;
-  font-style: italic;
-  color: #9aa0a6;
 }
 
 /* Footer content (the fixed shell is the SDK's .document-editor__footer):

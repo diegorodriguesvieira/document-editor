@@ -104,7 +104,7 @@ so importing the file changes nothing until you override.
 | `--editor-callout-*` | amber set | Callout block |
 | `--editor-variable-*` | blue set | Variable chip + variables-panel chips |
 | `--editor-cond-*` | purple set + neutral greys | Conditional block: condition pill (`bg`/`border`/`fg`), card (`block-bg`) and grouped bar (`bar-bg`) |
-| `--editor-comment-*` | amber set | Commented-text highlight |
+| `--editor-comment-*` | amber set | Review-comment highlight decorations (`.comment`, `--draft`, `--active`) + panel hovers |
 
 A handful of one-off values (gradients, a few incidental greys/shadows) stay
 literal by design. Ask if you want any of them promoted to a token.
@@ -140,7 +140,7 @@ shell-scoped chrome. Feature CSS should follow the same convention.
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[aria-selected="true"]`; the selected LOOK comes from the MUI theme — double the class to override), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`), `.form-popover`, `.form-popover__card`
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
 - **Empty state:** `.document-editor__empty-state` — a viewport-spanning `position: fixed` overlay (`pointer-events: none`, children clickable). Embedding the editor in a split pane? Restyle it (e.g. `position: absolute` under a positioned wrapper) so it centers over the editor, not the app.
-- **Features:** `.callout`, `.variable-chip` (`--dropped` landing animation), `.var-panel*`/`.var-chip` (`--dragging`), `.var-drag-ghost` (custom drag image), `.conditional-block*`, `.cond-editor*`, `.comment`, `.comments-panel*`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
+- **Features:** `.callout`, `.variable-chip` (`--dropped` landing animation), `.var-panel*`/`.var-chip` (`--dragging`), `.var-drag-ghost` (custom drag image), `.conditional-block*`, `.cond-editor*`, `.comment` (`--draft`/`--active` review decorations), `.comments-panel*` (composer/cards), `.comment-balloon`, `.color-swatch`/`.color-picker*`, `.image-resizer` (`--selected`, `__handle--nw/n/ne/w/e/sw/s/se`)
 
 ## 4. Skipping the default entirely
 

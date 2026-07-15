@@ -266,12 +266,19 @@ affordance simply no-ops at the limit. Contrast with the header/footer
 no-op), *normalize* when malformed content arrives from outside (loads,
 pastes) and a canonical shape exists.
 
-### `comments.ts` + `commentsPanel.tsx` — behavior/UI split
+### Comments — a review-mode overlay, backend-owned
 
-The mark + storage + click-to-scroll behavior is the feature;
-`CommentsPanel` is *reference UI* and `useDocumentComments` is the data hook a
-consumer rebuilds UI on (the demo's `CommentCards` proves the rewrite path).
-This is the pattern that replaced the deleted "panels channel".
+Comments exist only while the editor is read-only. The split:
+`CommentsProvider` (consumer context: `user` + `CommentsAdapter`, fetch on
+mount, REFETCH after every add/remove — never optimistic) owns the data;
+`comments.ts` is a decoration kernel (plugin derives inline decorations from
+`editor.storage.comments`; returns nothing in edit mode); `CommentsLayer`
+syncs provider → storage (plus a no-op dispatch nudge) and floats the
+"Add comment" balloon 6px under a read-only selection; `CommentsPanel` is the
+composer + cards UI. Anchors are `{from,to}` positions of the reviewed
+revision, stored backend-side with the quote — the document NEVER carries
+comments (`getHTML()`/JSON have no `data-comment-id` anymore; that contract
+changed when the mark-based implementation was replaced).
 
 ## 9. CSS architecture (Emotion, no .css files)
 
@@ -361,6 +368,6 @@ before judging behavior.
 | `ARCHITECTURE.md` | this file — maintainers and feature authors |
 
 `src/app` is a living example gallery (custom bar items via
-`appExtras.tsx`, rewritten comments UI via `CommentCards.tsx`, schema-aware
+`appExtras.tsx`, a mocked comments backend via `commentsMock.ts`, schema-aware
 templates via `contractTemplate.ts`) — treat it as executable documentation,
 not product code.

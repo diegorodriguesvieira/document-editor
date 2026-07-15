@@ -1,6 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { DocumentEditor, InsertToolbar } from '../editor'
-import { CommentsPanel } from '../features'
+import { BubbleToolbar, DocumentEditor, InsertToolbar } from '../editor'
+import {
+  CommentsLayer,
+  CommentsPanel,
+  CommentsProvider,
+  type CommentsAdapter,
+  type DocumentComment,
+} from '../features'
 import { ALL_FEATURES, Shell, COMMENTED_DOC, STARTER_DOC } from './storyShell'
 
 
@@ -61,24 +67,70 @@ export const ActionsInTheLeftPanel: Story = {
   },
 }
 
+// In-memory adapter seeded with one comment anchored on the "30 days" range
+// of COMMENTED_DOC — the story-sized version of a real HTTP adapter.
+function storyAdapter(): CommentsAdapter {
+  let db: DocumentComment[] = [
+    {
+      id: 'c-1',
+      from: 37,
+      to: 44,
+      quote: '30 days',
+      text: 'Can we make this 15 days?',
+      author: { id: 'u-reviewer', name: 'Rita Reviewer' },
+      createdAt: '2026-07-15T12:00:00Z',
+    },
+  ]
+  return {
+    async list() {
+      return [...db]
+    },
+    async add(input) {
+      db = [
+        ...db,
+        {
+          ...input,
+          id: `c-${db.length + 1}`,
+          author: { id: 'u-you', name: 'You' },
+          createdAt: new Date().toISOString(),
+        },
+      ]
+    },
+    async remove(id) {
+      db = db.filter((comment) => comment.id !== id)
+    },
+  }
+}
+
 export const CommentsInTheRightPanel: Story = {
-  name: 'Comments panel on the right',
+  name: 'Review comments on the right',
   render: () => (
     <Shell>
-      <DocumentEditor
-        features={ALL_FEATURES}
-        content={COMMENTED_DOC}
-        renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}
-      />
+      <CommentsProvider user={{ id: 'u-you', name: 'You' }} adapter={storyAdapter()}>
+        <DocumentEditor
+          features={ALL_FEATURES}
+          content={COMMENTED_DOC}
+          editable={false}
+          renderBubble={(ctx) => (
+            <>
+              <BubbleToolbar {...ctx} />
+              <CommentsLayer editor={ctx.editor} />
+            </>
+          )}
+          renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}
+        />
+      </CommentsProvider>
     </Shell>
   ),
   parameters: {
     docs: {
       description: {
         story:
-          "The SDK's `CommentsPanel` dropped into the right gutter (or rebuild your own UI on the " +
-          '`useDocumentComments` hook — same reactive data, click-to-scroll included). The panel ' +
-          'renders nothing when there are no comments; this document ships one anchored comment.',
+          'Comments are a REVIEW-mode surface: the editor is `editable={false}`, highlights are ' +
+          'decorations fed by the consumer’s `CommentsAdapter` (the doc never mutates), selecting ' +
+          'text floats the "Add comment" balloon (`CommentsLayer`), and the SDK `CommentsPanel` ' +
+          'lists avatar + author + text with delete on your own comments. In edit mode nothing ' +
+          'comment-related renders.',
       },
     },
   },

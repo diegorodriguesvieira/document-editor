@@ -1,111 +1,114 @@
-import { defineFeature, Mark, mergeAttributes } from '../../editor'
-import { promptOr } from '../promptFallback'
+import { defineFeature, Extension } from '../../editor'
 import type { Editor } from '../../editor'
-import { icons } from '../icons'
-import { commentAddActive, commentAddDisabled, renderCommentAddControl } from '../promptForms'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import type { CommentDraft, DocumentComment } from './commentsProvider'
 
-export interface CommentThread {
-  id: string
-  text: string
+/**
+ * What the decoration plugin reads. {@link CommentsLayer} keeps it in sync
+ * with the {@link CommentsProvider} (and nudges a re-render); the plugin only
+ * ever derives from it — comments never touch the document itself.
+ */
+export interface CommentsStorage {
+  comments: DocumentComment[]
+  draft: CommentDraft | null
+  activeId: string | null
+  /** Set by {@link CommentsLayer}: a document click landed ON a comment
+   *  highlight (its id) or OFF every highlight (null) — drives the panel's
+   *  active card, the mirror of the panel's click-to-highlight. */
+  onCommentClick: ((id: string | null) => void) | null
 }
 
 /**
- * The one typed accessor for the comment mark's storage — the single place the
- * `editor.storage` cast lives, beside the mark that owns that storage.
+ * The one typed accessor for the comments storage — the single place the
+ * `editor.storage` cast lives, beside the extension that owns that storage.
  */
-export function getCommentThreads(editor: Editor): Map<string, CommentThread> | undefined {
-  const storage = editor.storage as unknown as { comment?: { threads: Map<string, CommentThread> } }
-  return storage.comment?.threads
-}
-
-/** A unique-ish comment id (browser-side; fine for this demo). */
-function newCommentId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-  )
+export function getCommentsStorage(editor: Editor): CommentsStorage | undefined {
+  const storage = editor.storage as unknown as { comments?: CommentsStorage }
+  return storage.comments
 }
 
 /**
- * The comment ANCHOR lives in the document as a mark on the commented text, so
- * it rides along with the characters through every edit (line changes, reflow,
- * inserts) and serializes with the doc (`<span data-comment-id>`). The thread
- * (body…) lives OUTSIDE, keyed by `commentId`, in a tiny in-memory store here —
- * a real app would own it (e.g. a `CommentsProvider`, like document variables).
- * The commented text just stays highlighted; the threads are read in the side
- * panel ({@link CommentsPanel}). `excludes: ''` lets comments overlap;
- * `inclusive: false` keeps typing at the edges out of the comment.
+ * Comments are a REVIEW-mode overlay: they exist only while the editor is
+ * read-only, live backend-side (see {@link CommentsAdapter}) and render as
+ * ProseMirror DECORATIONS — the document never mutates and never serializes
+ * them. In edit mode the plugin returns nothing, deliberately: anchors are
+ * absolute positions in the reviewed document, so an edited document would
+ * drift them (re-anchoring by quote is a future concern, not this one's).
  */
-const Comment = Mark.create({
-  name: 'comment',
-  inclusive: false,
-  excludes: '',
+const CommentsKernel = Extension.create({
+  name: 'comments',
 
-  addStorage() {
-    return { threads: new Map<string, CommentThread>() }
+  addStorage(): CommentsStorage {
+    return { comments: [], draft: null, activeId: null, onCommentClick: null }
   },
 
-  addAttributes() {
-    return {
-      commentId: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-comment-id'),
-        renderHTML: (attributes) =>
-          attributes.commentId ? { 'data-comment-id': attributes.commentId as string } : {},
-      },
-    }
-  },
-
-  parseHTML() {
-    return [{ tag: 'span[data-comment-id]' }]
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { class: 'comment' }), 0]
+  addProseMirrorPlugins() {
+    const editor = this.editor
+    const storage = this.storage as CommentsStorage
+    return [
+      new Plugin({
+        key: new PluginKey('commentDecorations'),
+        props: {
+          decorations: (state) => {
+            if (editor.isEditable) return null
+            // Backend positions can outlive the doc revision they were made
+            // on — clamp instead of throwing, and drop emptied ranges.
+            const max = state.doc.content.size
+            const clamp = (pos: number) => Math.max(0, Math.min(pos, max))
+            const decorations: Decoration[] = []
+            for (const comment of storage.comments) {
+              const from = clamp(comment.from)
+              const to = clamp(comment.to)
+              if (from >= to) continue
+              const active = comment.id === storage.activeId
+              decorations.push(
+                Decoration.inline(from, to, {
+                  class: active ? 'comment comment--active' : 'comment',
+                  'data-comment-id': comment.id,
+                }),
+              )
+            }
+            if (storage.draft) {
+              const from = clamp(storage.draft.from)
+              const to = clamp(storage.draft.to)
+              if (from < to) {
+                decorations.push(Decoration.inline(from, to, { class: 'comment comment--draft' }))
+              }
+            }
+            return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : null
+          },
+          // Clicking a highlight activates its comment in the panel (the
+          // mirror of the panel's click-to-scroll); clicking plain text
+          // deactivates. Never consumes the click — the caret still lands.
+          handleClick: (_view, pos) => {
+            if (editor.isEditable) return false
+            const notify = storage.onCommentClick
+            if (!notify) return false
+            // Overlaps: the INNERMOST (smallest) covering comment wins.
+            let hit: DocumentComment | null = null
+            for (const comment of storage.comments) {
+              if (pos < comment.from || pos > comment.to) continue
+              if (!hit || comment.to - comment.from < hit.to - hit.from) hit = comment
+            }
+            notify(hit ? hit.id : null)
+            return false
+          },
+        },
+      }),
+    ]
   },
 })
 
 /**
- * Commented text (a mark) plus the thread store the comments panel reads.
+ * Review-mode comments: the decoration kernel only. The UI lives in
+ * {@link CommentsLayer} (the "Add comment" balloon) and {@link CommentsPanel}
+ * (composer + cards), both fed by {@link CommentsProvider}.
  *
- * Contributes — bubble: "Comment" (comment-text form) · command: `comment.add`.
+ * Contributes — extensions only (no bubble/insert items): comment highlights
+ * as read-only decorations. In edit mode nothing renders, by design.
  */
 export const CommentsFeature = defineFeature({
   id: 'comments',
-  extensions: () => [Comment],
-  commands: {
-    // Anchor a comment to the current selection. Payload `{ text }` skips the
-    // prompt (the bubble's comment form and tests pass it; bare exec falls
-    // back to window.prompt). The thread is stored (keyed by id) and shows up
-    // in the comments panel.
-    'comment.add': (editor, payload) => {
-      const { empty } = editor.state.selection
-      if (empty) return false
-      const fields = (payload ?? {}) as { text?: string }
-      const text = promptOr(fields.text, 'Comment:')
-      if (!text) return false
-      const id = newCommentId()
-      const applied = editor.chain().focus().setMark('comment', { commentId: id }).run()
-      if (applied) {
-        // The thread stores only the WHAT (the body); the quote is derived
-        // live from the anchored range, so it survives edits to the text.
-        getCommentThreads(editor)?.set(id, { id, text })
-      }
-      return applied
-    },
-  },
-  bubble: [
-    {
-      id: 'comment',
-      group: 'marks',
-      label: 'Comment',
-      icon: icons.comment,
-      commandId: 'comment.add',
-      // Comment-text form → exec('comment.add', { text }).
-      render: renderCommentAddControl,
-      isActive: commentAddActive,
-      // The anchor is the selected text — nothing selected, nothing to comment.
-      isDisabled: commentAddDisabled,
-    },
-  ],
+  extensions: () => [CommentsKernel],
 })

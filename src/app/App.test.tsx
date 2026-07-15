@@ -25,7 +25,8 @@ describe('<App /> toolbar', () => {
     const bubble = await selectSomeText()
     expect(within(bubble).getByRole('button', { name: 'Bold' })).toBeInTheDocument()
     expect(within(bubble).getByRole('button', { name: 'Callout' })).toBeInTheDocument()
-    expect(within(bubble).getByRole('button', { name: 'Comment' })).toBeInTheDocument()
+    // No Comment button: commenting is a REVIEW-mode (preview) surface now.
+    expect(within(bubble).queryByRole('button', { name: 'Comment' })).toBeNull()
   })
 
   it('ships the FULL feature set — the footer dock carries every team insert, no preset switcher', async () => {
@@ -68,27 +69,6 @@ describe('<App /> toolbar', () => {
     expect(within(bubble).getByRole('button', { name: 'Clear formatting' })).toBeInTheDocument()
     expect(within(bubble).getByRole('button', { name: 'Copy selection' })).toBeInTheDocument()
     expect(within(bubble).queryByRole('button', { name: 'Undo' })).toBeNull()
-  })
-
-  it('shows the comments panel only when there ARE comments (right rail stays clean otherwise)', async () => {
-    render(<App />)
-    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
-
-    // No comments → no panel at all.
-    expect(screen.queryByRole('complementary', { name: 'Review notes' })).toBeNull()
-
-    // Anchor a comment (what comment.add does to the doc) → the app-rewritten
-    // panel appears in the consumer-owned right rail, reactively.
-    act(() => {
-      editor()
-        .chain()
-        .insertContent('hello world')
-        .setTextSelection({ from: 1, to: 6 })
-        .setMark('comment', { commentId: 'c-1' })
-        .run()
-    })
-    const cards = await screen.findByRole('complementary', { name: 'Review notes' })
-    expect(within(cards).getByText(/on “hello”/)).toBeInTheDocument()
   })
 
   it('zooms the document in and out via the footer dock', async () => {
@@ -142,5 +122,62 @@ describe('<App /> preview mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
     await waitFor(() => expect(surface().getAttribute('contenteditable')).toBe('true'))
     expect(await screen.findByRole('toolbar', { name: 'Insert' })).toBeInTheDocument()
+  })
+})
+
+describe('<App /> review comments (preview mode)', () => {
+  /** Enter preview with real content and a text selection ready to comment. */
+  async function enterPreviewSelecting() {
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+    act(() => {
+      editor().commands.insertContent('hello mundo para revisar')
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }))
+    await waitFor(() =>
+      expect(document.querySelector('.ProseMirror')?.getAttribute('contenteditable')).toBe('false'),
+    )
+    act(() => {
+      editor().commands.setTextSelection({ from: 1, to: 6 })
+    })
+  }
+
+  it('nothing comment-related exists in EDIT mode', async () => {
+    render(<App />)
+    const bubble = await selectSomeText()
+    expect(within(bubble).queryByRole('button', { name: 'Comment' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add comment' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Comments' })).toBeNull()
+  })
+
+  it('select → balloon → composer → Enter saves via the mock API → card → Delete removes it', async () => {
+    await enterPreviewSelecting()
+
+    // The balloon floats in (TipTap's real BubbleMenu, ~250ms debounce).
+    await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
+
+    // The panel opens with the composer; typing reveals the actions.
+    const field = await screen.findByRole('textbox', { name: 'Comment text' })
+    expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull()
+    await userEvent.type(field, 'trocar essa palavra{Enter}')
+
+    // Saved on the fake backend (300ms) → refetched (300ms more) → the
+    // composer closes and the card lands: avatar initials + author + text,
+    // no quote. Waiting on the composer first keeps the text query from
+    // matching the textarea's own content mid-save.
+    await waitFor(
+      () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
+      { timeout: 3000 },
+    )
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    expect(await within(panel).findByText('trocar essa palavra')).toBeInTheDocument()
+    expect(within(panel).getByText('Diego Rodrigues')).toBeInTheDocument()
+    expect(within(panel).getByText('DR')).toBeInTheDocument()
+    expect(within(panel).queryByText(/hello/)).toBeNull()
+
+    // Own comment → 3-dots → Delete → DELETE endpoint + refetch → card leaves.
+    await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('trocar essa palavra')).toBeNull())
   })
 })

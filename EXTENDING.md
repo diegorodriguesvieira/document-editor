@@ -216,26 +216,47 @@ history and scroll survive. A consumer `renderFooter` owns its own gating.
 Programmatic `api.exec`/`api.setJSON` stay available — the prop gates the UI,
 not the API.
 
-Comments ship both a default panel and the data hook, so you
-can drop the panel in as-is or rebuild the UI without losing behavior:
+**Comments are a REVIEW-mode surface**: they exist only while
+`editable={false}` — selecting text floats an "Add comment" balloon 6px below
+the selection; the panel opens a composer (the consumer's user avatar + field,
+Enter sends); saving goes through YOUR adapter and the SDK refetches (no
+optimistic writes). Anchors are decorations fed by the fetched comments — the
+document itself never mutates and never serializes them. In edit mode nothing
+comment-related renders.
 
 ```tsx
-import { CommentsPanel, useDocumentComments } from '../features'
+import {
+  CommentsFeature, CommentsLayer, CommentsPanel, CommentsProvider,
+  type CommentsAdapter,
+} from '../features'
 
-// Default UI:
-<DocumentEditor features={…}
-  renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />} />
-
-// …or your own UI on the same reactive data (click-to-scroll included):
-function MyComments({ editor }) {
-  const comments = useDocumentComments(editor) // [{ id, text, quote, from, to }]
-  return comments.map((c) => (
-    <button key={c.id} onClick={() =>
-      editor?.chain().focus().setTextSelection({ from: c.from, to: c.to }).scrollIntoView().run()
-    }>{c.text}</button>
-  ))
+// The endpoint seam — implement over your HTTP client:
+const adapter: CommentsAdapter = {
+  list: () => api.get('/documents/42/comments'),
+  add: (input) => api.post('/documents/42/comments', input), // {text, quote, from, to}
+  remove: (id) => api.delete(`/documents/42/comments/${id}`),
 }
+
+<CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
+  <DocumentEditor
+    features={[…, CommentsFeature]}   // the decoration kernel
+    editable={!editing}
+    renderBubble={(ctx) => (
+      <>
+        <BubbleToolbar {...ctx} />          {/* edit mode only */}
+        <CommentsLayer editor={ctx.editor} /> {/* preview only: balloon + highlights */}
+      </>
+    )}
+    renderRightPanel={(ctx) => (preview ? <CommentsPanel editor={ctx.editor} /> : null)}
+  />
+</CommentsProvider>
 ```
+
+Omit `user` for anonymous commenting (generic avatar); deleting requires a
+`user` — the 3-dots menu only shows on comments whose `author.id` matches.
+The active highlight is BIDIRECTIONAL: clicking a card scrolls to the range
+and lights it up (`comment--active`); clicking a highlight in the document
+lights (and scrolls to) its card in the panel.
 
 ## 7. Save & load
 
@@ -317,7 +338,8 @@ import { DocumentVariablesProvider } from '../features'
 Backend-contract values are exported for whoever renders the document:
 `MAX_CONDITIONAL_DEPTH`, `ConditionId`, `Condition`/`ConditionLeaf`/
 `ConditionOperand`, `CONDITION_SIGNATURES` (operator arity table),
-`isCompleteCondition` (the publish gate), `CommentThread`, `AnchoredComment`.
+`isCompleteCondition` (the publish gate), `DocumentComment`/`CommentUser`/
+`CommentsAdapter` (the comments backend contract).
 The condition grammar, coercion rules and error policy live in
 `CONDITION-FORMAT.md`.
 

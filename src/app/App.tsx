@@ -8,9 +8,15 @@ import {
   useZoom,
   type DocumentEditorRenderContext,
 } from '../editor'
-import { DocumentVariablesProvider, type DocumentVariable } from '../features'
-import { CommentCards } from './CommentCards'
+import {
+  CommentsLayer,
+  CommentsPanel,
+  CommentsProvider,
+  DocumentVariablesProvider,
+  type DocumentVariable,
+} from '../features'
 import { contractTemplate } from './contractTemplate'
+import { createFakeCommentsAdapter, MOCK_USER } from './commentsMock'
 import { ZoomControls } from './ZoomControls'
 import { fullFeatures } from './presets'
 import './styles.css' // demo-app chrome (the SDK skin now ships inside the components)
@@ -45,6 +51,10 @@ function ModeToggle({
   )
 }
 
+// Fake comments backend (module-scope: one "database" per app load) — a real
+// consumer builds a CommentsAdapter over its HTTP client instead.
+const commentsAdapter = createFakeCommentsAdapter()
+
 export default function App() {
   // Zoom state + policy (clamp/step/rounding) come ready from the SDK hook;
   // the buttons below are the app's own UI on top of it.
@@ -78,6 +88,10 @@ export default function App() {
         {/* Document variables come from here (consumer), via context — shared by
             variables and conditional blocks. */}
         <DocumentVariablesProvider variables={docVariables}>
+          {/* Review comments: identity + endpoints come from the consumer.
+              Context reaches every surface, including the body-portaled
+              balloon and the right-rail panel. */}
+          <CommentsProvider user={MOCK_USER} adapter={commentsAdapter}>
           {/* The full feature set, presented through the bubble + footer dock. */}
           <DocumentEditor
             features={fullFeatures}
@@ -124,15 +138,16 @@ export default function App() {
                 </Button>
               </div>
             )}
-            // The right rail is consumer-owned: render anything here. This app
-            // ships its OWN comments UI (CommentCards, built on the SDK's
-            // useDocumentComments hook) — swap back to the SDK's CommentsPanel
-            // any time, same data, same click-to-scroll.
-            renderRightPanel={(ctx) => (
-              <div className="right-rail">
-                <CommentCards editor={ctx.editor} />
-              </div>
-            )}
+            // The right rail is consumer-owned. Comments are a REVIEW-mode
+            // surface — the rail only exists in preview; in edit mode there is
+            // nothing comment-related anywhere.
+            renderRightPanel={(ctx) =>
+              preview ? (
+                <div className="right-rail">
+                  <CommentsPanel editor={ctx.editor} />
+                </div>
+              ) : null
+            }
             // FOOTER content (the fixed shell is the SDK's): zoom on the
             // left, the insert actions centered (headless InsertToolbar) and
             // the Send action on the right.
@@ -157,10 +172,17 @@ export default function App() {
             )}
             // The bubble is the ONLY toolbar (plus the footer insert dock).
             // Undo/redo stay out: not selection-scoped (keyboard covers them).
+            // CommentsLayer rides along: the "Add comment" balloon + comment
+            // highlights, both exclusive to preview (the bubble is exclusive
+            // to edit) — the two floating surfaces never coexist.
             renderBubble={(ctx) => (
-              <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
+              <>
+                <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
+                <CommentsLayer editor={ctx.editor} />
+              </>
             )}
           />
+          </CommentsProvider>
         </DocumentVariablesProvider>
       </main>
     </div>

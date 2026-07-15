@@ -2,24 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
-import ToggleButton from '@mui/material/ToggleButton'
-import {
-  PopupShell,
-  tokenVar,
-  useFeatureState,
-  type EditorStateView,
-  type FeatureRenderContext,
-} from '../editor'
+import { PopupShell, tokenVar, type FeatureRenderContext } from '../editor'
 import { icons } from './icons'
 import { linkInsertBridge } from './marks/linkInsertBridge'
-
-/**
- * Shared button-state predicates — the ONE definition each rule has. The
- * feature's bar item (`isActive`/`isDisabled`, driving the default-button
- * path and the mock seam) and the custom controls below both read these.
- */
-export const commentAddActive = (state: EditorStateView) => state.isActive('comment')
-export const commentAddDisabled = (state: EditorStateView) => state.isSelectionEmpty()
 
 /**
  * The prop block every popup TRIGGER shares: accessible name, the
@@ -221,60 +206,10 @@ function ImageInsertControl({ api }: FeatureRenderContext) {
   )
 }
 
-/** Anchor a comment to the current selection (the bubble's Comment button). */
-function CommentAddControl({ editor, api }: FeatureRenderContext) {
-  const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const active = useFeatureState(editor, () => commentAddActive(api)) ?? false
-  const disabled = useFeatureState(editor, () => commentAddDisabled(api)) ?? true
-
-  const reset = () => {
-    setOpen(false)
-    setText('')
-  }
-  return (
-    <>
-      <ToggleButton
-        ref={buttonRef}
-        value="comment"
-        selected={active}
-        disabled={disabled}
-        {...popupTriggerProps('Comment', open, () => setOpen((value) => !value))}
-      >
-        {icons.comment}
-      </ToggleButton>
-      <FormPopover
-        anchor={buttonRef.current}
-        open={open}
-        label="Add comment"
-        submitLabel="Comment"
-        onClose={reset}
-        onSubmit={() => {
-          if (api.exec('comment.add', { text })) reset()
-        }}
-      >
-        <TextField
-          label="Comment"
-          value={text}
-          autoFocus
-          multiline
-          minRows={2}
-          slotProps={{ htmlInput: { 'aria-label': 'Comment text' } }}
-          onChange={(event) => setText(event.target.value)}
-        />
-      </FormPopover>
-    </>
-  )
-}
-
 /* Plain-function faces so .ts feature files can wire `render` without JSX. */
 export const renderLinkInsertControl = (ctx: FeatureRenderContext) => (
   <LinkInsertControl {...ctx} />
 )
 export const renderImageInsertControl = (ctx: FeatureRenderContext) => (
   <ImageInsertControl {...ctx} />
-)
-export const renderCommentAddControl = (ctx: FeatureRenderContext) => (
-  <CommentAddControl {...ctx} />
 )
