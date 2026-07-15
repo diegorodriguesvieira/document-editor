@@ -3,11 +3,11 @@ import type { Editor } from '@tiptap/core'
 import { useEditorState } from '@tiptap/react'
 import type { EditorApi } from '../core/EditorApi'
 import type { ResolvedFeatures } from '../core/registry'
-import type { ToolbarItem } from '../core/types'
+import type { BarItemBase } from '../core/types'
 
-/** A live toolbar entry: the contribution plus its current state and action. */
-export interface ToolbarButton {
-  item: ToolbarItem
+/** A live bar entry: the contribution plus its current state and action. */
+export interface BarButton {
+  item: BarItemBase
   active: boolean
   disabled: boolean
   run: () => boolean
@@ -18,7 +18,7 @@ interface Flag {
   disabled: boolean
 }
 
-function computeFlags(items: ToolbarItem[], api: EditorApi): Flag[] {
+function computeFlags(items: BarItemBase[], api: EditorApi): Flag[] {
   return items.map((item) => ({
     active: item.isActive ? item.isActive(api) : false,
     disabled: item.isDisabled ? item.isDisabled(api) : false,
@@ -41,7 +41,7 @@ function useApiRevision(api: EditorApi, enabled: boolean): number {
 }
 
 /**
- * Core headless engine for any registry-driven bar (toolbar, bubble, insert
+ * Core headless engine for any registry-driven bar (bubble menu, insert
  * dock). Given a list of contributions, returns the live buttons.
  *
  * State is read through the {@link EditorApi} seam, so it works with a real
@@ -49,11 +49,11 @@ function useApiRevision(api: EditorApi, enabled: boolean): number {
  * (skips re-renders when flags don't change); without one it re-renders on the
  * api's update/selection events.
  */
-function useToolbarButtons(
+function useBarButtons(
   editor: Editor | null,
   api: EditorApi,
-  items: ToolbarItem[],
-): ToolbarButton[] {
+  items: BarItemBase[],
+): BarButton[] {
   const editorFlags = useEditorState({
     editor,
     selector: (snapshot) => (snapshot.editor ? computeFlags(items, api) : null),
@@ -74,13 +74,13 @@ function useToolbarButtons(
   }))
 }
 
-/** Headless state for the formatting toolbar (the `resolved.toolbar` channel). */
-export function useToolbar(
+/** Headless state for the selection bubble (the `resolved.bubble` channel). */
+export function useBubbleBar(
   editor: Editor | null,
   api: EditorApi,
   resolved: ResolvedFeatures,
-): ToolbarButton[] {
-  return useToolbarButtons(editor, api, resolved.toolbar)
+): BarButton[] {
+  return useBarButtons(editor, api, resolved.bubble)
 }
 
 /** Headless state for the insert dock (the `resolved.inserts` channel). */
@@ -88,6 +88,6 @@ export function useInsertBar(
   editor: Editor | null,
   api: EditorApi,
   resolved: ResolvedFeatures,
-): ToolbarButton[] {
-  return useToolbarButtons(editor, api, resolved.inserts)
+): BarButton[] {
+  return useBarButtons(editor, api, resolved.inserts)
 }

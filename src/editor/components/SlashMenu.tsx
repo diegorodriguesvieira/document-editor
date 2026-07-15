@@ -1,11 +1,11 @@
 import { forwardRef } from 'react'
 import { useListKeyboardNav, type SuggestionPopupRef } from '../hooks/createSuggestionPopup'
 import { SuggestionList } from './SuggestionList'
-import type { ToolbarItem } from '../core/types'
+import type { InsertItem } from '../core/types'
 
 interface SlashMenuProps {
-  items: ToolbarItem[]
-  command: (item: ToolbarItem) => void
+  items: InsertItem[]
+  command: (item: InsertItem) => void
 }
 
 /**

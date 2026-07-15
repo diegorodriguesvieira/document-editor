@@ -27,7 +27,7 @@ export interface ColorFeatureOptions {
 /**
  * A color swatch that shows the current text color and opens a little popover of
  * preset colors + a "+" that fires the native color picker for a custom one.
- * A `render` toolbar control — every interactive element does
+ * A `render` bubble control — every interactive element does
  * `onMouseDown` preventDefault so the editor keeps focus/selection (critical in
  * the bubble menu, so the selection the color applies to survives the click).
  */
@@ -120,7 +120,7 @@ function ColorControl({ editor, api, palette }: FeatureRenderContext & { palette
 /**
  * Text color, with a configurable preset palette. TextStyle is the generic
  * style-attribute mark; Color adds the `setColor`/`unsetColor` commands on top
- * of it (both ship in `@tiptap/extension-text-style` in v3). The toolbar
+ * of it (both ship in `@tiptap/extension-text-style` in v3). The bubble
  * control is `group: 'marks'` so it shows in the bubble menu.
  *
  * The palette is COMPOSITION-TIME config, like every feature option: pick it
@@ -147,7 +147,7 @@ export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOp
       },
       'color.unset': (editor) => editor.chain().focus().unsetColor().run(),
     },
-    toolbar: [
+    bubble: [
       {
         id: 'color',
         group: 'marks',

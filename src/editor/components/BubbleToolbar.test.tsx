@@ -10,7 +10,7 @@ const bold = defineFeature({
   id: 'bold',
   extensions: () => [],
   commands: { 'bold.toggle': () => true },
-  toolbar: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold.toggle' }],
+  bubble: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold.toggle' }],
 })
 
 describe('<BubbleToolbar />', () => {
@@ -27,8 +27,8 @@ describe('<BubbleToolbar />', () => {
     ).not.toThrow()
   })
 
-  it('renders nothing when NO feature contributes toolbar items (no empty dark pill)', () => {
-    // TableFeature ships commands/inserts/contextMenu — but zero toolbar items.
+  it('renders nothing when NO feature contributes bubble items (no empty dark pill)', () => {
+    // TableFeature ships commands/inserts/contextMenu — but zero bubble items.
     const { editor, api, resolved } = renderEditor([TableFeature])
     const { container } = render(<BubbleToolbar editor={editor} api={api} resolved={resolved} />)
     expect(container).toBeEmptyDOMElement()

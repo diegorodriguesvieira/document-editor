@@ -15,7 +15,7 @@ re-litigate them casually:
    is **data portability** (the `DocumentJSON` envelope), not code portability.
    The `EditorApi` facade exists for *hygiene* (keeping `@tiptap/*` out of
    product code), not swappability.
-2. **Features are data first, code second.** A feature declares its toolbar
+2. **Features are data first, code second.** A feature declares its bubble
    buttons, inserts, commands and keybindings as *data* (`defineFeature`); the
    SDK renders and routes them. JSX only appears where a feature genuinely owns
    pixels (node views, custom popovers).
@@ -39,7 +39,7 @@ FeatureDefinition[]  ──resolveFeatures──►  ResolvedFeatures   (fail-fa
               ┌─────────────────────────────┼──────────────────────────┐
               ▼                             ▼                          ▼
       buildExtensions               UI contributions              commands/keymap
-  kernel + feature extensions   toolbar/inserts/contextMenu/    exec()-routable ids
+  kernel + feature extensions   bubble/inserts/contextMenu/    exec()-routable ids
   + synthetic registryKeymap    pageRegions (rendered by the    + registryKeymap
               │                  shell via RegistryBar etc.)
               ▼
@@ -64,8 +64,8 @@ extensions — features are TipTap-native by design), and optional channels:
 |---|---|---|
 | `commands` | `id → (editor, payload?) => boolean` | routed via `api.exec(id)` |
 | `keymap` | `'Mod-Shift-x' → commandId` | synthetic `registryKeymap` extension |
-| `toolbar` | `ToolbarItem[]` (data; optional `render` escape hatch) | `EditorToolbar` / `BubbleToolbar` |
-| `insert` | `ToolbarItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
+| `bubble` | `BubbleItem[]` (data; optional `render` escape hatch) | `BubbleBar` / `BubbleToolbar` |
+| `insert` | `InsertItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
 | `contextMenu` | `ContextMenuSection[]` | `EditorContextMenu` (all matching sections compose) |
 | `pageRegions` | `PageRegion[]` (position, label, addCommandId, nodeName) | `PageAffordances` hover chrome; kernel derives `TrailingNode.notAfter` from `position: 'bottom'` entries |
 
@@ -73,7 +73,7 @@ extensions — features are TipTap-native by design), and optional channels:
 
 Merges the enabled features and **throws at boot** on: duplicate feature ids
 with different definitions, missing `dependsOn`, a command id declared twice,
-a keyboard shortcut mapped twice, and toolbar/insert/keymap items referencing
+a keyboard shortcut mapped twice, and bubble/insert/keymap items referencing
 a command id nobody registered. A broken feature set is a programmer error —
 it should never reach users half-working.
 
@@ -115,12 +115,12 @@ The React entry point. Three things worth knowing:
 
 ## 4. The seam: `EditorApi` / `EditorStateView`
 
-`EditorStateView` is the *read* slice a toolbar needs (`isActive`, `canUndo`,
+`EditorStateView` is the *read* slice a bar needs (`isActive`, `canUndo`,
 `isEmpty`, `isSelectionEmpty`, …). `EditorApi` extends it with document I/O
 (`getJSON`/`setJSON`/`getHTML`), `exec(commandId)`, `hasNode`, `focus`, `on`.
 
 `createMockEditor` implements the same interface in memory. That twin is what
-makes toolbar and feature wiring testable without a real ProseMirror instance
+makes bar and feature wiring testable without a real ProseMirror instance
 — and it is a *compile-time* pressure: anything added to the interface must be
 mockable, which keeps the seam honest and thin.
 
@@ -155,7 +155,7 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
   backdrop — chip dragging and the region gate depend on it); suggestion
   popups keep their TipTap-owned lifecycle with MUI visuals only. Every
   portaled surface carries `document-editor-popup` on its paper/root.
-- **Render-prop ladder**: `renderToolbar`, `renderHeader` / `renderFooter`
+- **Render-prop ladder**: `renderBubble`, `renderHeader` / `renderFooter`
   (fixed-height SDK shells, consumer content; returning null HIDES the bar —
   the footer defaults to the insert actions), `renderLeftPanel` /
   `renderRightPanel` (consumer-owned gutters, render anything — including the
@@ -166,14 +166,14 @@ model (e.g. `editor.schema.nodes` probing, `editor.can()`).
   paragraph; deliberately NOT TipTap's "no text" semantics). Each receives the same
   `DocumentEditorRenderContext { editor, api, resolved }`.
 - `RegistryBar` (internal, not exported) is the one rendering pipeline behind
-  `EditorToolbar` and `InsertToolbar` — item filtering, disabled state via
+  `BubbleBar` and `InsertToolbar` — item filtering, disabled state via
   `EditorStateView`, custom `render` escape hatch. Skins differ; wiring
   doesn't.
 
 ## 6. Reactivity and state rules
 
 - **`useFeatureState(editor, selector)`** (`hooks/useFeatureState.ts`) is the
-  seam feature UI reads editor state through (only it and `useToolbar`, which
+  seam feature UI reads editor state through (only it and `useBar`, which
   predates it, touch TipTap's `useEditorState` directly). Same
   selector+equality optimization, single point of coupling.
 - **Extension `storage`** is for feature-internal shared state (e.g. which
@@ -330,7 +330,7 @@ These cost real debugging time; they're encoded in code comments too:
 
 Two supported modes (`src/test/editorHarness.ts`):
 
-1. **Headless-mock** (`createMockEditor`): toolbar/wiring logic, no DOM.
+1. **Headless-mock** (`createMockEditor`): bar/wiring logic, no DOM.
 2. **Real editor in jsdom** (`renderEditor`): schema, commands, guards,
    keymaps. The harness auto-destroys via `onTestFinished` — no manual
    cleanup, and cleanup is registered *before* creation so a throwing test
@@ -355,7 +355,7 @@ before judging behavior.
 | `THEMING.md` | designers/consumers: tokens, class contract, layering |
 | `ARCHITECTURE.md` | this file — maintainers and feature authors |
 
-`src/app` is a living example gallery (custom toolbar items via
+`src/app` is a living example gallery (custom bar items via
 `appExtras.tsx`, rewritten comments UI via `CommentCards.tsx`, schema-aware
 templates via `contractTemplate.ts`) — treat it as executable documentation,
 not product code.

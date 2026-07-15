@@ -255,8 +255,8 @@ export const TableFeature = defineFeature({
 })
 
 /**
- * The bubble's "Table columns" quick-insert. A separate, toolbar-only
- * feature (no extensions of its own) rather than a `toolbar` entry on
+ * The bubble's "Table columns" quick-insert. A separate, bubble-only
+ * feature (no extensions of its own) rather than a `bubble` entry on
  * `TableFeature`: that lets it be slotted anywhere in the app's feature
  * array — right next to `ListsFeature`, in this app's preset — without
  * disturbing `TableFeature`'s own position, which also drives the footer
@@ -267,7 +267,7 @@ export const TableColumnsFeature = defineFeature({
   id: 'tableColumns',
   dependsOn: ['table'],
   extensions: () => [],
-  toolbar: [
+  bubble: [
     {
       id: 'tableColumns',
       group: 'blocks',

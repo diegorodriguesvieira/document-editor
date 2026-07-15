@@ -2,8 +2,8 @@ import { type ReactNode } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { EditorApi } from '../core/EditorApi'
 import type { ResolvedFeatures } from '../core/registry'
-import type { ToolbarItem } from '../core/types'
-import { useInsertBar, type ToolbarButton } from '../hooks/useToolbar'
+import type { InsertItem } from '../core/types'
+import { useInsertBar, type BarButton } from '../hooks/useBar'
 import { RegistryBar } from './RegistryBar'
 
 export interface InsertToolbarProps {
@@ -11,9 +11,9 @@ export interface InsertToolbarProps {
   api: EditorApi
   resolved: ResolvedFeatures
   /** Show only a subset of inserts. */
-  filter?: (item: ToolbarItem) => boolean
+  filter?: (item: InsertItem) => boolean
   /** Override how each button renders, keeping the live state. */
-  renderButton?: (button: ToolbarButton) => ReactNode
+  renderButton?: (button: BarButton) => ReactNode
   className?: string
   /** Domain insert actions appended after the built-ins (e.g. merge field). */
   children?: ReactNode
@@ -22,7 +22,7 @@ export interface InsertToolbarProps {
 /**
  * The insert ACTIONS row — the editor footer's default content (the fixed
  * bar itself is the footer shell; this also drops into a side panel via
- * `className`). Same registry-driven, headless skin as {@link EditorToolbar},
+ * `className`). Same registry-driven, headless skin as {@link BubbleBar},
  * reading the `resolved.inserts` channel. A feature contributes inserts via
  * `FeatureDefinition.insert`, so the row is pure opt-in. Renders `null` when
  * there's nothing to show.

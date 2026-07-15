@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { EditorToolbar, InsertToolbar } from '../editor'
+import { BubbleBar, InsertToolbar } from '../editor'
 import { docWith, jsonHasNode, renderEditor } from '../test/editorHarness'
 import { CommentsFeature } from './custom/comments'
 import { getCommentThreads } from './custom/comments'
@@ -213,7 +213,7 @@ describe('comment form', () => {
     const created = renderEditor([CommentsFeature], { content: docWith('review this line') })
     created.editor.commands.setTextSelection({ from: 1, to: 7 })
     render(
-      <EditorToolbar
+      <BubbleBar
         editor={created.editor}
         api={created.api}
         resolved={created.resolved}
@@ -223,7 +223,7 @@ describe('comment form', () => {
     await user.click(screen.getByRole('button', { name: 'Comment' }))
     const dialog = screen.getByRole('dialog', { name: 'Add comment' })
     await user.type(within(dialog).getByRole('textbox', { name: 'Comment text' }), 'tighten the wording')
-    // Two buttons share the name (the toolbar toggle + the submit) — scope
+    // Two buttons share the name (the bar toggle + the submit) — scope
     // the click to the form.
     await user.click(within(dialog).getByRole('button', { name: 'Comment' }))
 

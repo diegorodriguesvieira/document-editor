@@ -10,7 +10,7 @@ export const HeadingFeature = defineFeature({
     'heading.h2': (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     'heading.h3': (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
   },
-  toolbar: [
+  bubble: [
     {
       id: 'h1',
       group: 'blocks',

@@ -29,7 +29,7 @@ ProseMirror-managed document DOM and the pure-DOM node views.
 ## 1. It's built in
 
 `DocumentEditor` mounts the skin automatically — nothing to import. Custom
-shells that assemble the exported components themselves (`EditorToolbar`,
+shells that assemble the exported components themselves (`BubbleBar`,
 `CommentsPanel`, …) render `<EditorSkin />` once near their root and wrap
 themselves in `<EditorThemeProvider theme={createEditorTheme(overrides)}>` (or
 their own MUI ThemeProvider); duplicate
@@ -135,7 +135,7 @@ protecting) is styled under `.document-editor` — custom shells that skip
 shell-scoped chrome. Feature CSS should follow the same convention.
 
 - **Shell:** `.document-editor`, `.document-editor__panel--left` / `--right` (the consumer gutter asides), `.document-editor__column`, `.document-editor__zoom` (`--scrolls` while zoom > 1), `.document-editor__scale`, `.document-editor__surface`, `.document-editor__empty-state` (screen-centered overlay, `pointer-events: none`; its children are clickable)
-- **Toolbars:** `.editor-toolbar__btn` / `.insert-dock__btn` (className hooks on the MUI ToggleButton/IconButton — pressed state is `aria-pressed`; the LOOK lives in `muiTheme`), `.bubble-toolbar__inner`, `.document-editor__header` (the fixed header bar), `.document-editor__footer` (the fixed footer bar; shape via `--editor-dock-height`/`--editor-dock-gap`), `.insert-dock`, `.insert-dock__btn` (the actions row inside it)
+- **Toolbars:** `.bubble-bar__btn` / `.insert-dock__btn` (className hooks on the MUI ToggleButton/IconButton — pressed state is `aria-pressed`; the LOOK lives in `muiTheme`), `.bubble-toolbar__inner`, `.document-editor__header` (the fixed header bar), `.document-editor__footer` (the fixed footer bar; shape via `--editor-dock-height`/`--editor-dock-gap`), `.insert-dock`, `.insert-dock__btn` (the actions row inside it)
 - **Document (inside `.document-editor__surface`):** `.ProseMirror`, `h1`–`h3`, `table`/`th`/`td`, `.tableWrapper`, `.column-resize-handle`, `.selectedCell`, `blockquote`, `pre`, `hr`, `img`
 - **Menus (portaled to `<body>`):** `.suggestion-popup` (the caret-popup wrapper), `.slash-menu`, `.slash-menu__item` (`[aria-selected="true"]`; the selected LOOK comes from the MUI theme — double the class to override), `.slash-menu--empty`, `.context-menu`, `.context-menu__item` (`--danger`), `.form-popover`, `.form-popover__card`
 - **Page regions:** `.page-affordance`, `.doc-region` (`--header`/`--footer`, plus `--editing` while open for editing), `.doc-region__bar`/`__label`/`__remove`/`__content`
@@ -148,5 +148,5 @@ The components render plain class names; only `<EditorSkin />` gives them
 looks. `DocumentEditor` mounts it automatically — to own ALL styling, assemble
 a custom shell from the exported components (skip `DocumentEditor`, don't
 render `EditorSkin`) and write your own styles against the class contract
-above. The headless `useToolbar` / `useInsertBar` hooks let you replace the
+above. The headless `useBubbleBar` / `useInsertBar` hooks let you replace the
 markup too (see `EXTENDING.md`).

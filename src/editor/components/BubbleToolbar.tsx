@@ -7,9 +7,9 @@ import { editorDarkTheme } from '../theme'
 import type { Fragment } from '@tiptap/pm/model'
 import { NodeSelection } from '@tiptap/pm/state'
 import type { EditorApi } from '../core/EditorApi'
-import { EditorToolbar, type EditorToolbarProps } from './EditorToolbar'
+import { BubbleBar, type BubbleBarProps } from './BubbleBar'
 import type { ResolvedFeatures } from '../core/registry'
-import type { ToolbarItem } from '../core/types'
+import type { BubbleItem } from '../core/types'
 
 /**
  * Whether `fragment` is, once whitespace-only text is ignored, nothing but a
@@ -35,11 +35,11 @@ export interface BubbleToolbarProps {
   api: EditorApi
   resolved: ResolvedFeatures
   /** Which contributions to show in the bubble (default: all). */
-  filter?: (item: ToolbarItem) => boolean
+  filter?: (item: BubbleItem) => boolean
   /** Class for the floating container (TipTap positions it via Floating UI). */
   className?: string
   /** Override how each button renders — same seam as the sibling bars. */
-  renderButton?: EditorToolbarProps['renderButton']
+  renderButton?: BubbleBarProps['renderButton']
   /** Custom controls appended after the contributions. */
   children?: ReactNode
 }
@@ -75,8 +75,8 @@ export function bubbleShouldShow(editor: Editor): boolean {
 /**
  * A floating formatting toolbar that appears over the current text selection.
  * Positioning/visibility is handled by TipTap's BubbleMenu; the *content* is
- * the same registry-driven `EditorToolbar`, so opt-in features show up here too.
- * Needs a real editor — for unit-testing the content, render `EditorToolbar`
+ * the same registry-driven `BubbleBar`, so opt-in features show up here too.
+ * Needs a real editor — for unit-testing the content, render `BubbleBar`
  * with `createMockEditor` instead.
  */
 export function BubbleToolbar({
@@ -90,8 +90,8 @@ export function BubbleToolbar({
 }: BubbleToolbarProps) {
   if (!editor) return null
   // Nothing to show → no bubble. Without this, a feature set with zero
-  // toolbar items floats an EMPTY dark pill over every selection.
-  const items = filter ? resolved.toolbar.filter(filter) : resolved.toolbar
+  // bubble items floats an EMPTY dark pill over every selection.
+  const items = filter ? resolved.bubble.filter(filter) : resolved.bubble
   if (items.length === 0 && !children) return null
 
   return (
@@ -110,7 +110,7 @@ export function BubbleToolbar({
       {/* Dark chrome for the pill: the theme (not CSS overrides) recolors the
           MUI buttons inside. */}
       <ThemeProvider theme={editorDarkTheme}>
-        <EditorToolbar
+        <BubbleBar
           editor={editor}
           api={api}
           resolved={resolved}
@@ -119,7 +119,7 @@ export function BubbleToolbar({
           className="bubble-toolbar__inner"
         >
           {children}
-        </EditorToolbar>
+        </BubbleBar>
       </ThemeProvider>
     </BubbleMenu>
   )

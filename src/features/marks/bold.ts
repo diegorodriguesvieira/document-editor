@@ -9,7 +9,7 @@ export const BoldFeature = defineFeature({
   commands: {
     'bold.toggle': (editor) => editor.chain().focus().toggleBold().run(),
   },
-  toolbar: [
+  bubble: [
     {
       id: 'bold',
       group: 'marks',

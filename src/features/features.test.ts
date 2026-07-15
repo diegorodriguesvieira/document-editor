@@ -15,14 +15,14 @@ describe('platform features', () => {
     expect(editor.isActive('bold')).toBe(true)
   })
 
-  it('only contributes toolbar items for the features that were opted in', () => {
+  it('only contributes bubble items for the features that were opted in', () => {
     const withLists = renderEditor([BoldFeature, ListsFeature])
-    expect(withLists.resolved.toolbar.map((t) => t.id)).toEqual(
+    expect(withLists.resolved.bubble.map((t) => t.id)).toEqual(
       expect.arrayContaining(['bold', 'bulletList', 'orderedList']),
     )
 
     const boldOnly = renderEditor([BoldFeature])
-    expect(boldOnly.resolved.toolbar.map((t) => t.id)).not.toContain('bulletList')
+    expect(boldOnly.resolved.bubble.map((t) => t.id)).not.toContain('bulletList')
   })
 
   it('exec THROWS for a command no enabled feature provides (no silent no-op)', () => {

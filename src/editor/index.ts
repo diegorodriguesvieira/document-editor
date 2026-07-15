@@ -6,14 +6,15 @@
 // Feature contract
 export { defineFeature } from './core/defineFeature'
 export type {
+  BubbleItem,
   CommandFn,
   ContextMenuGroup,
   ContextMenuItem,
   ContextMenuSection,
   FeatureDefinition,
   FeatureRenderContext,
+  InsertItem,
   PageRegion,
-  ToolbarItem,
 } from './core/types'
 
 // Composition
@@ -31,8 +32,8 @@ export type { EditorApi, EditorStateView } from './core/EditorApi'
 export { createMockEditor } from './core/createMockEditor'
 export type { MockEditor, MockEditorInit } from './core/createMockEditor'
 export { useFeatureState } from './hooks/useFeatureState'
-export { useToolbar, useInsertBar } from './hooks/useToolbar'
-export type { ToolbarButton } from './hooks/useToolbar'
+export { useBubbleBar, useInsertBar } from './hooks/useBar'
+export type { BarButton } from './hooks/useBar'
 export { createSuggestionPopup, useListKeyboardNav } from './hooks/createSuggestionPopup'
 export type { SuggestionPopupRef } from './hooks/createSuggestionPopup'
 export { useDismissable, useEscapeSurface } from './hooks/useDismissable'
@@ -42,8 +43,8 @@ export { SuggestionList } from './components/SuggestionList'
 export { useZoom } from './hooks/useZoom'
 export { createEditorTheme, EditorThemeProvider, tokenVar } from './theme'
 export type { UseZoomOptions } from './hooks/useZoom'
-export { EditorToolbar } from './components/EditorToolbar'
-export type { EditorToolbarProps } from './components/EditorToolbar'
+export { BubbleBar } from './components/BubbleBar'
+export type { BubbleBarProps } from './components/BubbleBar'
 export { BubbleToolbar } from './components/BubbleToolbar'
 export type { BubbleToolbarProps } from './components/BubbleToolbar'
 export { InsertToolbar } from './components/InsertToolbar'

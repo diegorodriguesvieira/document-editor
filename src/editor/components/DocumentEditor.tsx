@@ -22,10 +22,10 @@ export interface DocumentEditorRenderContext {
 }
 
 export interface DocumentEditorProps extends UseDocumentEditorOptions {
-  /** Replace the toolbar surface with your own. There is no static
+  /** Replace the bubble surface with your own. There is no static
    *  top bar: the default is {@link BubbleToolbar} — a floating formatting
    *  bar over the text selection. */
-  renderToolbar?: (ctx: DocumentEditorRenderContext) => ReactNode
+  renderBubble?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Content for the editor HEADER — a fixed-height sticky bar the SDK ships
    *  by default (fill it with your title/actions; the shell's height and look
    *  come from the skin: `--editor-header-height`). Return `null` (or any
@@ -86,7 +86,7 @@ function EmptyStateOverlay({
  * is swappable; the app never touches `@tiptap/*` itself.
  */
 export function DocumentEditor({
-  renderToolbar,
+  renderBubble,
   renderHeader,
   renderFooter,
   renderLeftPanel,
@@ -99,9 +99,9 @@ export function DocumentEditor({
   const { editor, api, resolved } = useDocumentEditor(options)
   const ctx = editor && api ? { editor, api, resolved } : null
 
-  const toolbar = ctx
-    ? renderToolbar
-      ? renderToolbar(ctx)
+  const bubble = ctx
+    ? renderBubble
+      ? renderBubble(ctx)
       : <BubbleToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
     : null
 
@@ -144,7 +144,7 @@ export function DocumentEditor({
           <aside className="document-editor__panel document-editor__panel--left">{leftPanel}</aside>
         ) : null}
         <div className="document-editor__column">
-          {toolbar}
+          {bubble}
           {/* The page scrolls inside its column when zoomed — the rails stay put. */}
           <div
             className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}

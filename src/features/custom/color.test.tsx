@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { EditorToolbar, createMockEditor, resolveFeatures } from '../../editor'
+import { BubbleBar, createMockEditor, resolveFeatures } from '../../editor'
 import { docWith, renderEditor } from '../../test/editorHarness'
 import { ColorFeature, createColorFeature } from './color'
 
@@ -23,7 +23,7 @@ describe('color feature', () => {
   it('dispatches color.set for a preset and color.unset for Default (mock editor)', async () => {
     const user = userEvent.setup()
     const mock = createMockEditor()
-    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />)
+    render(<BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />)
 
     // The swatch is closed by default.
     expect(document.querySelector('input[type="color"]')).toBeNull()
@@ -44,7 +44,7 @@ describe('color feature', () => {
     const user = userEvent.setup()
     const mock = createMockEditor()
     const brand = createColorFeature({ palette: ['#ff0055', '#00c2a8'] })
-    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([brand])} />)
+    render(<BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([brand])} />)
 
     await user.click(screen.getByRole('button', { name: 'Text color' }))
 
@@ -62,13 +62,13 @@ describe('color feature', () => {
 
   it('the popover is a body-portaled MUI Popper carrying the region-gate MARKER', async () => {
     // Positioning (viewport flip/clamp) is Popper's job now — jsdom mounts it
-    // at 0,0, so the pin here is structure: portaled OUTSIDE the toolbar, on
+    // at 0,0, so the pin here is structure: portaled OUTSIDE the bar, on
     // <body>, with the functional 'document-editor-popup' class the
     // header/footer gate reads to keep regions open for clicks inside it.
     const user = userEvent.setup()
     const mock = createMockEditor()
     const { container } = render(
-      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
+      <BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
     )
 
     await user.click(screen.getByRole('button', { name: 'Text color' }))
@@ -83,7 +83,7 @@ describe('color feature', () => {
   it('reflects the current color in the swatch reactively (real editor)', async () => {
     const created = renderEditor([ColorFeature], { content: HELLO })
     render(
-      <EditorToolbar editor={created.editor} api={created.api} resolved={created.resolved} />,
+      <BubbleBar editor={created.editor} api={created.api} resolved={created.resolved} />,
     )
 
     // The command re-renders the mounted ColorControl — that's the point of
@@ -126,7 +126,7 @@ describe('the native custom picker (the "+" input)', () => {
     const user = userEvent.setup()
     const mock = createMockEditor()
     render(
-      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
+      <BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([ColorFeature])} />,
     )
     await user.click(screen.getByRole('button', { name: 'Text color' }))
 

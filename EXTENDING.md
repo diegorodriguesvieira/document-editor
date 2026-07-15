@@ -59,8 +59,8 @@ defineFeature({
   extensions: () => [MyNode],   // TipTap extension(s); [] for UI-only features
   commands: { 'myFeature.run': (editor, payload) => boolean },
   keymap: { 'Mod-Shift-y': 'myFeature.run' },
-  toolbar: [/* ToolbarItem[] — the bubble menu (or any custom toolbar surface) */],
-  insert: [/* ToolbarItem[] — bottom insert dock; `/` menu mirrors runnable ones */],
+  bubble: [/* BubbleItem[] — the selection bubble menu */],
+  insert: [/* InsertItem[] — bottom insert dock; `/` menu mirrors runnable ones */],
   contextMenu: [/* ContextMenuSection[] — right-click */],
   pageRegions: [/* PageRegion[] — header/footer-style page chrome */],
 })
@@ -70,10 +70,10 @@ Everything is validated at boot: duplicate command ids, keymap conflicts,
 missing `dependsOn` and dangling `commandId` references all **throw** with a
 clear message — a button can't render enabled and silently no-op.
 
-## 3. Toolbar / insert items
+## 3. Bubble / insert items
 
 ```tsx
-toolbar: [{
+bubble: [{
   id: 'my', group: 'marks', order: 10, label: 'My action', icon: '✦',
   commandId: 'myFeature.run',
   isActive:   (s) => s.isActive('myNode'),
@@ -87,7 +87,7 @@ toolbar: [{
 - `isActive`/`isDisabled` read the engine-agnostic state view
   (`isActive / canUndo / canRedo / isEmpty / isSelectionEmpty`) — they work
   against a real editor or `createMockEditor` alike.
-- **Bubble menu:** toolbar contributions appear in the bubble automatically
+- **Bubble menu:** `bubble` contributions appear in the bubble automatically
   (the consumer may filter, e.g. `filter={(i) => i.group !== 'history'}`).
 - **Payloads:** the default button calls `api.exec(commandId)` with *no*
   payload. For a fixed set of variants, mint one command id per variant (see
@@ -102,7 +102,7 @@ toolbar: [{
 ## 4. A custom control (`render`) + floating surfaces
 
 ```tsx
-toolbar: [{ id: 'my', label: 'My picker', render: ({ editor, api }) => <MyControl api={api} /> }]
+bubble: [{ id: 'my', label: 'My picker', render: ({ editor, api }) => <MyControl api={api} /> }]
 ```
 
 The chrome is Material UI — `DocumentEditor` mounts a scoped `ThemeProvider`
@@ -342,22 +342,22 @@ Keep dynamic, high-frequency values (positions, sizes mid-drag) in inline
 ```ts
 // paths relative to src/features/custom/ — adjust to where your feature lives
 import { renderEditor, docWith, jsonHasNode } from '../../test/editorHarness'
-import { createMockEditor, resolveFeatures, EditorToolbar } from '../../editor'
+import { createMockEditor, resolveFeatures, BubbleBar } from '../../editor'
 
 // Real editor (schema, commands, serialization) — auto-destroyed per test:
 const { api } = renderEditor([MyFeature], { content: docWith('hello') })
 expect(api.exec('myFeature.run')).toBe(true)
 expect(jsonHasNode(api.getJSON().doc, 'myNode')).toBe(true)
 
-// Toolbar wiring — no ProseMirror at all:
+// Bar wiring — no ProseMirror at all:
 const mock = createMockEditor({ active: ['myNode'] })
-render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([MyFeature])} />)
+render(<BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([MyFeature])} />)
 // click → assert mock.execCalls
 ```
 
-## Swapping the whole toolbar (optional)
+## Swapping the bubble (optional)
 
-The toolbar surface is the selection bubble (`BubbleToolbar`) — the product
+The formatting surface is the selection bubble (`BubbleToolbar`) — the product
 has no static formatting bar. `DocumentEditor` takes render props for full
 control while still driving off the same registry data (e.g. to filter the
 bubble):
@@ -365,11 +365,11 @@ bubble):
 ```tsx
 <DocumentEditor
   features={…}
-  renderToolbar={(ctx) => <BubbleToolbar {...ctx} filter={(i) => i.group !== 'history'} />}
+  renderBubble={(ctx) => <BubbleToolbar {...ctx} filter={(i) => i.group !== 'history'} />}
   renderFooter={(ctx) => <InsertToolbar {...ctx} />}   // keep the shell, swap the content
 />
 ```
 
-Or build a totally custom bar on the headless `useToolbar(editor, api, resolved)`
+Or build a totally custom bar on the headless `useBubbleBar(editor, api, resolved)`
 hook — it returns live `{ item, active, disabled, run }` buttons and you own
 every pixel of markup. You never lose the registry — only the markup changes.

@@ -11,9 +11,13 @@ export interface FeatureRenderContext {
   api: EditorApi
 }
 
-/** Declarative toolbar contribution — data, not JSX, so the host renders it. */
-export interface ToolbarItem {
+/** Fields shared by both bar surfaces (bubble menu + insert dock). A bar item
+ *  is data, not JSX — the host renders it. Module-internal base; the public
+ *  names are {@link BubbleItem} and {@link InsertItem}. */
+export interface BarItemBase {
   id: string
+  /** Data hint the host can filter on (e.g. `filter={(i) => i.group !==
+   *  'history'}`); both bars stamp it as `data-group` on the default button. */
   group?: string
   /** Sort hint within a bar (ascending; default 0, stable for ties). Lets two
    *  features interleave their buttons deterministically. */
@@ -26,13 +30,22 @@ export interface ToolbarItem {
    *  when `render` provides a fully custom control. */
   commandId?: string
   /** Read from the engine-agnostic state view, so it works with a real editor
-   *  or `createMockEditor` alike. */
+   *  or `createMockEditor` alike. Items with `isActive` render as toggles
+   *  (aria-pressed) in both bars. */
   isActive?: (state: EditorStateView) => boolean
   isDisabled?: (state: EditorStateView) => boolean
   /** Escape hatch: render a fully custom control (dropdown, picker, etc.)
-   *  instead of the default button. Lets a feature ship its own toolbar UI. */
+   *  instead of the default button. Lets a feature ship its own bar UI. */
   render?: (ctx: FeatureRenderContext) => ReactNode
 }
+
+/** Contribution to the selection BUBBLE menu — the product's only formatting
+ *  toolbar (there is no static bar). */
+export interface BubbleItem extends BarItemBase {}
+
+/** Contribution to the bottom INSERT dock. The `/` slash menu mirrors the
+ *  runnable ones (those with a `commandId`). */
+export interface InsertItem extends BarItemBase {}
 
 /** A single right-click (context menu) action. */
 export interface ContextMenuItem {
@@ -49,9 +62,9 @@ export interface ContextMenuItem {
    *  merged cell). Omit to always show.
    *
    *  DELIBERATELY receives the raw `Editor` (not {@link EditorStateView} like
-   *  `ToolbarItem.isDisabled`): availability checks are TipTap-native
+   *  a bar item's `isDisabled`): availability checks are TipTap-native
    *  `editor.can().<command>()` probes the thin state view can't express, and
-   *  features are TipTap-native by design. The trade-off: `when` and toolbar
+   *  features are TipTap-native by design. The trade-off: `when` and bar-item
    *  predicates stay mock-testable; `isAvailable` needs a real editor. */
   isAvailable?: (editor: Editor) => boolean
 }
@@ -92,7 +105,7 @@ export interface PageRegion {
 /**
  * The contract every feature implements. A feature bundles its TipTap
  * extension(s) with the stable, engine-independent surface the app consumes:
- * commands, keybindings and toolbar/insert contributions.
+ * commands, keybindings and bubble/insert contributions.
  */
 export interface FeatureDefinition {
   /** Stable unique id, e.g. 'bold', 'callout'. */
@@ -101,16 +114,17 @@ export interface FeatureDefinition {
   dependsOn?: string[]
   /** The TipTap extension(s) this feature installs. */
   extensions: () => AnyExtension[]
-  /** Stable command ids → implementation. Referenced by toolbar/keymap. */
+  /** Stable command ids → implementation. Referenced by bar items/keymap. */
   commands?: Record<string, CommandFn>
   /** Extra shortcuts, e.g. `{ 'Mod-Shift-c': 'callout.toggle' }`. */
   keymap?: Record<string, string>
-  toolbar?: ToolbarItem[]
+  /** Contributions to the selection bubble menu. */
+  bubble?: BubbleItem[]
   /**
-   * Contributions to the bottom insert dock (same shape as toolbar items).
-   * The `/` slash menu mirrors the runnable ones (those with a `commandId`).
+   * Contributions to the bottom insert dock. The `/` slash menu mirrors the
+   * runnable ones (those with a `commandId`).
    */
-  insert?: ToolbarItem[]
+  insert?: InsertItem[]
   /** Right-click menu shown when its `when` predicate matches the click. */
   contextMenu?: ContextMenuSection[]
   /** Page-edge regions (header/footer) with a hover "add" affordance. */

@@ -2,7 +2,7 @@ import type { Extension } from '@tiptap/core'
 import { SlashMenu } from '../components/SlashMenu'
 import { createSuggestionPopup } from './createSuggestionPopup'
 import type { ResolvedFeatures } from '../core/registry'
-import type { ToolbarItem } from '../core/types'
+import type { InsertItem } from '../core/types'
 
 /**
  * The `/` menu: shows exactly the insert-dock items (`resolved.inserts`)
@@ -10,7 +10,7 @@ import type { ToolbarItem } from '../core/types'
  * {@link createSuggestionPopup} primitive — only the filter and command differ.
  */
 export function createSlashCommands(resolved: ResolvedFeatures): Extension {
-  return createSuggestionPopup<ToolbarItem, ToolbarItem>({
+  return createSuggestionPopup<InsertItem, InsertItem>({
     name: 'slashCommands',
     char: '/',
     component: SlashMenu,

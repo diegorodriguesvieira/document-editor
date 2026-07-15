@@ -433,7 +433,7 @@ describe('header/footer node view (the React chrome)', () => {
       <DocumentEditor
         features={[HeaderFooterFeature]}
         content={REGION_DOC}
-        renderToolbar={() => <button type="button">Toolbar control</button>}
+        renderBubble={() => <button type="button">Toolbar control</button>}
         onReady={(ready) => {
           api = ready
         }}

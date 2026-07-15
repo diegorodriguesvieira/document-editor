@@ -103,7 +103,7 @@ export const NoFooter: Story = {
         features={ALL_FEATURES}
         content={STARTER_DOC}
         renderFooter={() => null}
-        renderToolbar={() => null}
+        renderBubble={() => null}
         onReady={(api) => api.focus()}
       />
     </Shell>
@@ -113,7 +113,7 @@ export const NoFooter: Story = {
       description: {
         story:
           '`renderFooter={() => null}` removes the bar AND the page clearance under it. Combined with ' +
-          '`renderToolbar={() => null}` this is the read-only presentation (the content itself stays ' +
+          '`renderBubble={() => null}` this is the read-only presentation (the content itself stays ' +
           'editable unless your app also disables editing).',
       },
     },

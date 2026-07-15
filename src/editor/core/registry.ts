@@ -1,10 +1,11 @@
 import type { AnyExtension } from '@tiptap/core'
 import type {
+  BubbleItem,
   CommandFn,
   ContextMenuSection,
   FeatureDefinition,
+  InsertItem,
   PageRegion,
-  ToolbarItem,
 } from './types'
 
 /** Stable ascending sort by `order` (default 0), preserving input order on ties. */
@@ -21,8 +22,8 @@ export interface ResolvedFeatures {
   extensions: AnyExtension[]
   commands: Record<string, CommandFn>
   keymap: Record<string, string>
-  toolbar: ToolbarItem[]
-  inserts: ToolbarItem[]
+  bubble: BubbleItem[]
+  inserts: InsertItem[]
   contextMenu: ContextMenuSection[]
   pageRegions: PageRegion[]
 }
@@ -79,7 +80,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     if (commandId && !(commandId in commands)) missing.push(`${where} -> "${commandId}"`)
   }
   for (const feature of features) {
-    for (const item of feature.toolbar ?? []) check(item.commandId, `toolbar "${item.id}"`)
+    for (const item of feature.bubble ?? []) check(item.commandId, `bubble "${item.id}"`)
     for (const item of feature.insert ?? []) check(item.commandId, `insert "${item.id}"`)
     for (const section of feature.contextMenu ?? []) {
       for (const group of section.groups) {
@@ -107,7 +108,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
       seen.add(id)
     }
   }
-  channel('toolbar', features.flatMap((f) => (f.toolbar ?? []).map((item) => item.id)))
+  channel('bubble', features.flatMap((f) => (f.bubble ?? []).map((item) => item.id)))
   channel('insert', features.flatMap((f) => (f.insert ?? []).map((item) => item.id)))
   channel('pageRegion', features.flatMap((f) => (f.pageRegions ?? []).map((region) => region.id)))
   channel('contextMenu section', features.flatMap((f) => (f.contextMenu ?? []).map((s) => s.id)))
@@ -121,7 +122,7 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     extensions: features.flatMap((feature) => feature.extensions()),
     commands,
     keymap,
-    toolbar: byOrder(features.flatMap((feature) => feature.toolbar ?? [])),
+    bubble: byOrder(features.flatMap((feature) => feature.bubble ?? [])),
     inserts: byOrder(features.flatMap((feature) => feature.insert ?? [])),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
     pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),

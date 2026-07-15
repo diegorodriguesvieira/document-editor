@@ -19,7 +19,7 @@ import ViewColumn from '@mui/icons-material/ViewColumn'
 
 /**
  * The SDK defaults' icon set, prebuilt as elements so plain .ts feature files
- * can use them without JSX. `ToolbarItem.icon` accepts any ReactNode — a
+ * can use them without JSX. A bar item's `icon` accepts any ReactNode — a
  * consumer feature can pass its own elements or keep short strings ('H1').
  */
 export const icons = {

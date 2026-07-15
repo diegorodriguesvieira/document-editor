@@ -12,7 +12,7 @@ export const ListsFeature = defineFeature({
     'lists.bullet': (editor) => editor.chain().focus().toggleBulletList().run(),
     'lists.ordered': (editor) => editor.chain().focus().toggleOrderedList().run(),
   },
-  toolbar: [
+  bubble: [
     {
       id: 'bulletList',
       group: 'blocks',

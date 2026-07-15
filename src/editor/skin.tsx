@@ -73,7 +73,7 @@ const SKIN = [
 
 /**
  * Mounts the SDK skin. `DocumentEditor` renders one automatically; custom
- * shells that assemble the exported components themselves (EditorToolbar,
+ * shells that assemble the exported components themselves (BubbleBar,
  * CommentsPanel, …) should render `<EditorSkin />` once near their root and
  * wrap themselves in `<EditorThemeProvider>` (theme.tsx) for the MUI chrome.
  * Duplicate mounts are harmless (identical rules).

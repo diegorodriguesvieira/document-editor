@@ -72,7 +72,7 @@ export const CalloutFeature = defineFeature({
   // A genuinely new shortcut, routed through the SDK's registry keymap.
   // Mod-Shift-c belongs to the code block (product shortcut map).
   keymap: { 'Mod-Shift-e': 'callout.toggle' },
-  toolbar: [
+  bubble: [
     {
       id: 'callout',
       group: 'blocks',

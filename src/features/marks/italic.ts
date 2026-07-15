@@ -9,7 +9,7 @@ export const ItalicFeature = defineFeature({
   commands: {
     'italic.toggle': (editor) => editor.chain().focus().toggleItalic().run(),
   },
-  toolbar: [
+  bubble: [
     {
       id: 'italic',
       group: 'marks',

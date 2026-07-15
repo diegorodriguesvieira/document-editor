@@ -25,8 +25,8 @@ export interface MockEditor {
 
 /**
  * The analog of the Deel doc's `createMockEngine`: an in-memory `EditorApi`
- * for testing toolbars, custom buttons and command wiring with no jsdom editor,
- * no ProseMirror, and no `.focus()` quirks. Render `<EditorToolbar editor={null}
+ * for testing bars, custom buttons and command wiring with no jsdom editor,
+ * no ProseMirror, and no `.focus()` quirks. Render `<BubbleBar editor={null}
  * api={mock.api} resolved={...} />` and assert against `mock.execCalls` /
  * `mock.setActive([...])`.
  */

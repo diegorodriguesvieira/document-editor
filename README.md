@@ -4,9 +4,9 @@ A Google-Docs-style rich text editor built on **TipTap v3** (ProseMirror), with 
 
 ## Highlights
 
-- **Opt-in features** — `defineFeature()` bundles a TipTap extension with its commands, keybindings and toolbar/insert contributions. Compose a product by listing the features it needs.
-- **Engine kept behind a seam** — app code talks to a small `EditorApi` facade and never imports `@tiptap/*` (enforced by a test). `createMockEditor()` lets you test toolbars/commands with no real editor.
-- **Headless + skinnable UI** — `useToolbar`/`useInsertBar` expose the live buttons; `EditorToolbar`, `BubbleToolbar` and `InsertToolbar` are thin, overridable skins over them (chrome widgets are Material UI 7, themed via the `muiTheme` prop — see THEMING.md). `useZoom` ships the zoom state/policy for the `zoom` prop.
+- **Opt-in features** — `defineFeature()` bundles a TipTap extension with its commands, keybindings and bubble/insert contributions. Compose a product by listing the features it needs.
+- **Engine kept behind a seam** — app code talks to a small `EditorApi` facade and never imports `@tiptap/*` (enforced by a test). `createMockEditor()` lets you test bars/commands with no real editor.
+- **Headless + skinnable UI** — `useBubbleBar`/`useInsertBar` expose the live buttons; `BubbleBar`, `BubbleToolbar` and `InsertToolbar` are thin, overridable skins over them (chrome widgets are Material UI 7, themed via the `muiTheme` prop — see THEMING.md). `useZoom` ships the zoom state/policy for the `zoom` prop.
 - **Portable content** — documents persist as a thin ProseMirror-JSON envelope (`DocumentJSON`, `{ doc }`). Loading content whose feature is disabled throws instead of silently wiping the document.
 - **Built-in skin** — Emotion `<Global>` (`EditorSkin`, mounted by `DocumentEditor`; no .css files); theme via `--editor-*` tokens (see `THEMING.md`).
 
@@ -16,8 +16,8 @@ A Google-Docs-style rich text editor built on **TipTap v3** (ProseMirror), with 
 src/
 ├── editor/            # the SDK
 │   ├── core/          # headless: defineFeature, registry, EditorApi, createEditor, createMockEditor, document
-│   ├── hooks/         # useDocumentEditor, useFeatureState, useToolbar, createSuggestionPopup
-│   ├── components/    # DocumentEditor, toolbars (bubble/insert; EditorToolbar is the bubble's content engine), SlashMenu, EditorContextMenu, PageAffordances
+│   ├── hooks/         # useDocumentEditor, useFeatureState, useBar, createSuggestionPopup
+│   ├── components/    # DocumentEditor, bars (bubble/insert; BubbleBar is the bubble's content engine), SlashMenu, EditorContextMenu, PageAffordances
 │   ├── authoring.ts   # convenience TipTap re-exports for feature authors
 │   ├── skin.tsx       # default skin: Emotion Global aggregating *.styles.ts partials (see THEMING.md)
 │   └── index.ts       # public barrel

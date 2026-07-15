@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { SlashMenu } from './SlashMenu'
 import type { SuggestionPopupRef } from '../hooks/createSuggestionPopup'
-import type { ToolbarItem } from '../core/types'
+import type { InsertItem } from '../core/types'
 
-const ITEMS: ToolbarItem[] = [
+const ITEMS: InsertItem[] = [
   { id: 'h1', label: 'Heading 1', icon: 'H1', commandId: 'heading.h1' },
   { id: 'quote', label: 'Quote', icon: 'Q', commandId: 'quote.toggle' },
   { id: 'table', label: 'Table', icon: 'T', commandId: 'table.insert' },

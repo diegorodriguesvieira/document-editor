@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createMockEditor } from '../core/createMockEditor'
 import { defineFeature } from '../core/defineFeature'
-import { EditorToolbar } from './EditorToolbar'
+import { BubbleBar } from './BubbleBar'
 import { resolveFeatures } from '../core/registry'
 import { renderEditor } from '../../test/editorHarness'
 
@@ -12,15 +12,15 @@ const commandFeature = (run = vi.fn(() => true)) =>
     id: 'demo',
     extensions: () => [],
     commands: { 'demo.run': run },
-    toolbar: [{ id: 'demo', label: 'Demo', icon: 'D', commandId: 'demo.run', isActive: () => false }],
+    bubble: [{ id: 'demo', label: 'Demo', icon: 'D', commandId: 'demo.run', isActive: () => false }],
   })
 
-describe('<EditorToolbar />', () => {
+describe('<BubbleBar />', () => {
   it('renders one button per contribution and runs its command on click', async () => {
     const run = vi.fn(() => true)
     const { editor, api, resolved } = renderEditor([commandFeature(run)])
 
-    render(<EditorToolbar editor={editor} api={api} resolved={resolved} />)
+    render(<BubbleBar editor={editor} api={api} resolved={resolved} />)
 
     const button = screen.getByRole('button', { name: 'Demo' })
     expect(button).toHaveAttribute('aria-pressed', 'false')
@@ -32,7 +32,7 @@ describe('<EditorToolbar />', () => {
   it('applies a custom container className (restyle without forking)', () => {
     const mock = createMockEditor()
     render(
-      <EditorToolbar
+      <BubbleBar
         editor={null}
         api={mock.api}
         resolved={resolveFeatures([])}
@@ -45,7 +45,7 @@ describe('<EditorToolbar />', () => {
   it('lets the consumer override the button markup via renderButton', () => {
     const mock = createMockEditor()
     render(
-      <EditorToolbar
+      <BubbleBar
         editor={null}
         api={mock.api}
         resolved={resolveFeatures([commandFeature()])}
@@ -63,22 +63,22 @@ describe('<EditorToolbar />', () => {
   it('appends children as custom controls (slot)', () => {
     const mock = createMockEditor()
     render(
-      <EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([])}>
+      <BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([])}>
         <button type="button">Custom</button>
-      </EditorToolbar>,
+      </BubbleBar>,
     )
     expect(screen.getByRole('button', { name: 'Custom' })).toBeInTheDocument()
   })
 
-  it('lets a feature ship a fully custom control via ToolbarItem.render', () => {
+  it('lets a feature ship a fully custom control via a bubble item render', () => {
     const feature = defineFeature({
       id: 'meta',
       extensions: () => [],
-      toolbar: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">hi</span> }],
+      bubble: [{ id: 'meta', label: 'Meta', render: () => <span data-testid="custom">hi</span> }],
     })
     const mock = createMockEditor()
 
-    render(<EditorToolbar editor={null} api={mock.api} resolved={resolveFeatures([feature])} />)
+    render(<BubbleBar editor={null} api={mock.api} resolved={resolveFeatures([feature])} />)
     expect(screen.getByTestId('custom')).toHaveTextContent('hi')
   })
 
@@ -87,18 +87,18 @@ describe('<EditorToolbar />', () => {
       id: 'marks',
       extensions: () => [],
       commands: { bold: () => true },
-      toolbar: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold' }],
+      bubble: [{ id: 'bold', group: 'marks', label: 'Bold', commandId: 'bold' }],
     })
     const history = defineFeature({
       id: 'history',
       extensions: () => [],
       commands: { undo: () => true },
-      toolbar: [{ id: 'undo', group: 'history', label: 'Undo', commandId: 'undo' }],
+      bubble: [{ id: 'undo', group: 'history', label: 'Undo', commandId: 'undo' }],
     })
     const mock = createMockEditor()
 
     render(
-      <EditorToolbar
+      <BubbleBar
         editor={null}
         api={mock.api}
         resolved={resolveFeatures([marks, history])}

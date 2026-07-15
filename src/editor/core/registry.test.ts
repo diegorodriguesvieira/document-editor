@@ -41,7 +41,7 @@ describe('resolveFeatures', () => {
 
   it('rejects a channel commandId that no command registers', () => {
     expect(() =>
-      resolveFeatures([feature({ id: 'x', toolbar: [{ id: 'x', label: 'X', commandId: 'x.typo' }] })]),
+      resolveFeatures([feature({ id: 'x', bubble: [{ id: 'x', label: 'X', commandId: 'x.typo' }] })]),
     ).toThrow(/referenced but never registered/)
   })
 
@@ -54,51 +54,51 @@ describe('resolveFeatures', () => {
     ).toThrow(/Shortcut conflict/)
   })
 
-  it('aggregates extensions and toolbar contributions in order', () => {
+  it('aggregates extensions and bubble contributions in order', () => {
     const resolved = resolveFeatures([
       feature({
         id: 'a',
         extensions: () => [{} as unknown as AnyExtension],
         commands: { 'a.cmd': () => true },
-        toolbar: [{ id: 'a', label: 'A', commandId: 'a.cmd' }],
+        bubble: [{ id: 'a', label: 'A', commandId: 'a.cmd' }],
       }),
       feature({
         id: 'b',
         extensions: () => [{} as unknown as AnyExtension, {} as unknown as AnyExtension],
         commands: { 'b.cmd': () => true },
-        toolbar: [{ id: 'b', label: 'B', commandId: 'b.cmd' }],
+        bubble: [{ id: 'b', label: 'B', commandId: 'b.cmd' }],
       }),
     ])
     expect(resolved.extensions).toHaveLength(3)
-    expect(resolved.toolbar.map((t) => t.id)).toEqual(['a', 'b'])
+    expect(resolved.bubble.map((t) => t.id)).toEqual(['a', 'b'])
   })
 
-  it('orders toolbar items by their optional `order` (stable for ties)', () => {
+  it('orders bubble items by their optional `order` (stable for ties)', () => {
     const resolved = resolveFeatures([
       feature({
         id: 'a',
         commands: { 'a.c': () => true },
-        toolbar: [{ id: 'a', label: 'A', commandId: 'a.c', order: 2 }],
+        bubble: [{ id: 'a', label: 'A', commandId: 'a.c', order: 2 }],
       }),
       feature({
         id: 'b',
         commands: { 'b.c': () => true },
-        toolbar: [{ id: 'b', label: 'B', commandId: 'b.c', order: 1 }],
+        bubble: [{ id: 'b', label: 'B', commandId: 'b.c', order: 1 }],
       }),
     ])
-    expect(resolved.toolbar.map((t) => t.id)).toEqual(['b', 'a'])
+    expect(resolved.bubble.map((t) => t.id)).toEqual(['b', 'a'])
   })
 })
 
 describe('per-channel item-id uniqueness (boot fail-fast)', () => {
-  it('throws when two features contribute the SAME toolbar/insert item id', () => {
+  it('throws when two features contribute the SAME bubble/insert item id', () => {
     // Every registry surface keys React children by item id — a collision
     // composes without error and mis-reconciles the bars.
     const a = feature({ id: 'a', commands: { 'a.run': () => true },
-      toolbar: [{ id: 'dup', label: 'A', commandId: 'a.run' }] })
+      bubble: [{ id: 'dup', label: 'A', commandId: 'a.run' }] })
     const b = feature({ id: 'b', commands: { 'b.run': () => true },
-      toolbar: [{ id: 'dup', label: 'B', commandId: 'b.run' }] })
-    expect(() => resolveFeatures([a, b])).toThrow(/duplicate.*toolbar "dup"/i)
+      bubble: [{ id: 'dup', label: 'B', commandId: 'b.run' }] })
+    expect(() => resolveFeatures([a, b])).toThrow(/duplicate.*bubble "dup"/i)
 
     const c = feature({ id: 'c', commands: { 'c.run': () => true },
       insert: [{ id: 'image', label: 'C', commandId: 'c.run' }] })
@@ -122,7 +122,7 @@ describe('per-channel item-id uniqueness (boot fail-fast)', () => {
 
   it('a feature listed twice (dedup path) is NOT a duplicate-id error', () => {
     const a = feature({ id: 'a', commands: { 'a.run': () => true },
-      toolbar: [{ id: 'a', label: 'A', commandId: 'a.run' }] })
+      bubble: [{ id: 'a', label: 'A', commandId: 'a.run' }] })
     expect(() => resolveFeatures([a, a])).not.toThrow()
   })
 })

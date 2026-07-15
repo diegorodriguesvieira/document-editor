@@ -15,7 +15,7 @@ import { linkInsertBridge } from './marks/linkInsertBridge'
 
 /**
  * Shared button-state predicates — the ONE definition each rule has. The
- * feature's ToolbarItem (`isActive`/`isDisabled`, driving the default-button
+ * feature's bar item (`isActive`/`isDisabled`, driving the default-button
  * path and the mock seam) and the custom controls below both read these.
  */
 export const commentAddActive = (state: EditorStateView) => state.isActive('comment')

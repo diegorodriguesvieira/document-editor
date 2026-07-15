@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import {
   createMockEditor,
-  EditorToolbar,
+  BubbleBar,
   resolveFeatures,
   type EditorApi,
   type EditorStateView,
@@ -303,7 +303,7 @@ describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
   it('disables the button while the selection is blocked, re-enables once it is not (real editor)', async () => {
     const created = renderEditor([TableFeature, TableColumnsFeature], { content: docWith('hello') })
     const { editor, api, resolved } = created
-    render(<EditorToolbar editor={editor} api={api} resolved={resolved} />)
+    render(<BubbleBar editor={editor} api={api} resolved={resolved} />)
 
     editor.commands.selectAll()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Table columns' })).toBeEnabled())
@@ -319,7 +319,7 @@ describe('table.insertColumns (the bubble\'s "Table columns" picker)', () => {
     const user = userEvent.setup()
     const mock = createMockEditor()
     render(
-      <EditorToolbar
+      <BubbleBar
         editor={null}
         api={mock.api}
         resolved={resolveFeatures([TableFeature, TableColumnsFeature])}

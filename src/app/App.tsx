@@ -109,7 +109,7 @@ export default function App() {
             )}
             // The bubble is the ONLY toolbar (plus the footer insert dock).
             // Undo/redo stay out: not selection-scoped (keyboard covers them).
-            renderToolbar={(ctx) => (
+            renderBubble={(ctx) => (
               <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
             )}
           />

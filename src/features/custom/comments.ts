@@ -89,7 +89,7 @@ export const CommentsFeature = defineFeature({
       return applied
     },
   },
-  toolbar: [
+  bubble: [
     {
       id: 'comment',
       group: 'marks',

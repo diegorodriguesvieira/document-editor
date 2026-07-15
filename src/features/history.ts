@@ -10,7 +10,7 @@ export const HistoryFeature = defineFeature({
     'history.undo': (editor) => editor.chain().focus().undo().run(),
     'history.redo': (editor) => editor.chain().focus().redo().run(),
   },
-  toolbar: [
+  bubble: [
     {
       id: 'undo',
       group: 'history',

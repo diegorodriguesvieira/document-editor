@@ -3,11 +3,11 @@ import IconButton from '@mui/material/IconButton'
 import ToggleButton from '@mui/material/ToggleButton'
 import type { Editor } from '@tiptap/core'
 import type { EditorApi } from '../core/EditorApi'
-import type { ToolbarItem } from '../core/types'
-import type { ToolbarButton } from '../hooks/useToolbar'
+import type { BarItemBase } from '../core/types'
+import type { BarButton } from '../hooks/useBar'
 
 /**
- * INTERNAL: the one rendering pipeline behind {@link EditorToolbar} and
+ * INTERNAL: the one rendering pipeline behind {@link BubbleBar} and
  * {@link InsertToolbar} (render precedence: a feature's own `render` → the
  * consumer's `renderButton` → the default button; then the `children` slot).
  * Not exported from the barrel — the public components are the API, this just
@@ -28,15 +28,15 @@ export function RegistryBar({
 }: {
   editor: Editor | null
   api: EditorApi
-  buttons: ToolbarButton[]
-  filter?: (item: ToolbarItem) => boolean
-  renderButton?: (button: ToolbarButton) => ReactNode
+  buttons: BarButton[]
+  filter?: (item: BarItemBase) => boolean
+  renderButton?: (button: BarButton) => ReactNode
   children?: ReactNode
   className: string
   buttonClassName: string
   ariaLabel: string
   /** What the default button shows when the item has no icon. */
-  iconFallback: (item: ToolbarItem) => ReactNode
+  iconFallback: (item: BarItemBase) => ReactNode
   hideWhenEmpty?: boolean
 }) {
   const shown = filter ? buttons.filter((button) => filter(button.item)) : buttons
@@ -72,9 +72,9 @@ function DefaultButton({
   className,
   iconFallback,
 }: {
-  button: ToolbarButton
+  button: BarButton
   className: string
-  iconFallback: (item: ToolbarItem) => ReactNode
+  iconFallback: (item: BarItemBase) => ReactNode
 }) {
   const { item, active, disabled, run } = button
   const common = {

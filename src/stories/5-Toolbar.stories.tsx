@@ -11,7 +11,7 @@ const meta = {
       description: {
         component:
           'The formatting toolbar is the selection BUBBLE — the product has no static bar. ' +
-          '`renderToolbar` swaps the surface: filter the bubble, or remove formatting UI entirely. ' +
+          '`renderBubble` swaps the surface: filter the bubble, or remove formatting UI entirely. ' +
           '**Select some text in each story to see it.**',
       },
     },
@@ -28,7 +28,7 @@ export const FilteredBubble: Story = {
       <DocumentEditor
         features={ALL_FEATURES}
         content={STARTER_DOC}
-        renderToolbar={(ctx) => (
+        renderBubble={(ctx) => (
           <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />
         )}
       />
@@ -49,14 +49,14 @@ export const NoFormattingUI: Story = {
   name: 'No formatting UI at all',
   render: () => (
     <Shell>
-      <DocumentEditor features={ALL_FEATURES} content={STARTER_DOC} renderToolbar={() => null} />
+      <DocumentEditor features={ALL_FEATURES} content={STARTER_DOC} renderBubble={() => null} />
     </Shell>
   ),
   parameters: {
     docs: {
       description: {
         story:
-          '`renderToolbar={() => null}` — no bubble, no bar. Keyboard shortcuts still work ' +
+          '`renderBubble={() => null}` — no bubble, no bar. Keyboard shortcuts still work ' +
           '(Mod-B, Mod-I, the `/` and `@` menus…).',
       },
     },

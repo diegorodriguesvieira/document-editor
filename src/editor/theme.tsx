@@ -45,7 +45,7 @@ export const tokenVar = (name: keyof typeof TOKEN_DEFAULTS) =>
 
 const FONT = tokenVar('--editor-font')
 
-/** Toolbar metrics (the old .editor-toolbar__btn skin): squarish,
+/** Bar metrics (the .bubble-bar__btn skin): squarish,
  *  text-capable (some icons are strings like 'H1'). ONE copy — the bubble's
  *  dark controls must never diverge from the main chrome's. */
 const CONTROL_METRICS = {
