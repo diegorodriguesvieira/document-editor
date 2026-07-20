@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/core'
@@ -139,6 +139,55 @@ describe('<CommentsPanel />', () => {
     await waitFor(() =>
       expect(adapter.add).toHaveBeenCalledWith({ text: 'direto no enter', ...DRAFT }),
     )
+  })
+
+  it('a mousedown anywhere outside the panel cancels the draft — nothing sent, selection collapsed', async () => {
+    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    created.editor.setEditable(false)
+    created.editor.commands.setTextSelection({ from: 1, to: 6 })
+    const adapter = fakeAdapter()
+    renderPanel({ adapter, editor: created.editor, draft: DRAFT })
+    const field = await screen.findByRole('textbox', { name: 'Comment text' })
+    // Typed text does not arm a guard: clicking away discards it, exactly
+    // like Escape already does.
+    await userEvent.type(field, 'metade digitada')
+
+    fireEvent.mouseDown(document.body)
+
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull())
+    expect(adapter.add).not.toHaveBeenCalled()
+    // The captured range collapses to the draft's end — a still-live
+    // selection would summon the "Add comment" balloon right back.
+    expect(created.editor.state.selection.empty).toBe(true)
+    expect(created.editor.state.selection.from).toBe(6)
+  })
+
+  it('a mousedown INSIDE the panel (reading cards mid-draft) keeps the composer', async () => {
+    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'do beto')]), draft: DRAFT })
+    await screen.findByRole('textbox', { name: 'Comment text' })
+
+    fireEvent.mouseDown(await screen.findByText('do beto'))
+
+    expect(screen.getByRole('textbox', { name: 'Comment text' })).toBeInTheDocument()
+  })
+
+  it('dismissing the card menu (backdrop mousedown, Escape) does not throw the draft away', async () => {
+    renderPanel({ adapter: fakeAdapter([saved('c-1', ANA, 'meu')]), draft: DRAFT })
+    await screen.findByRole('textbox', { name: 'Comment text' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Comment actions' }))
+    await screen.findByRole('menuitem', { name: 'Delete' })
+
+    // A click-away while the MODAL menu is open lands on its backdrop — that
+    // gesture belongs to the menu, not to the composer's outside-click rule.
+    // (Placeholder query: the open modal aria-hides the panel, so role
+    // queries can't see the field even though it is alive and well.)
+    fireEvent.mouseDown(document.querySelector('.MuiBackdrop-root')!)
+    expect(screen.getByPlaceholderText('Add a comment…')).toBeInTheDocument()
+
+    // Escape closes surfaces innermost-first: the MENU goes, the draft stays.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull())
+    expect(screen.getByRole('textbox', { name: 'Comment text' })).toBeInTheDocument()
   })
 
   it('the 3-dots menu exists ONLY on the current user’s own comments', async () => {

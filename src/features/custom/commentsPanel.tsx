@@ -9,7 +9,7 @@ import Paper from '@mui/material/Paper'
 import TextField from '@mui/material/TextField'
 import MoreVert from '@mui/icons-material/MoreVert'
 import type { Editor } from '@tiptap/core'
-import { POPUP_CLASS } from '../../editor'
+import { POPUP_CLASS, useDismissable, useEscapeSurface } from '../../editor'
 import { useComments, type CommentUser, type DocumentComment } from './commentsProvider'
 
 function initials(name: string): string {
@@ -40,7 +40,9 @@ function collapseSelectionAt(editor: Editor | null, pos: number) {
 
 /**
  * The avatar + field row a captured draft opens. Cancel/Comment appear once
- * there is text; Enter sends, Shift+Enter breaks the line, Escape cancels.
+ * there is text; Enter sends, Shift+Enter breaks the line; Escape or a
+ * mousedown anywhere outside the panel cancels — clicking away IS the
+ * "never mind" gesture, exactly like Escape (both discard typed text).
  * Cancelling/sending also COLLAPSES the document selection — the still-live
  * range would summon the balloon right back.
  */
@@ -48,13 +50,27 @@ function Composer({ editor, draftTo }: { editor: Editor | null; draftTo: number 
   const context = useComments()
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  if (!context) return null
+  const rootRef = useRef<HTMLDivElement>(null)
 
   const cancel = () => {
-    context.clearDraft()
-    context.setActiveId(null)
+    context?.clearDraft()
+    context?.setActiveId(null)
     collapseSelectionAt(editor, draftTo)
   }
+
+  // The shared dismiss contract (outside mousedown + stack-coordinated
+  // Escape) — the composer is a "floating surface" that happens to dock in
+  // the panel. "Inside" is the whole PANEL (reading cards mid-draft is not
+  // abandonment), plus portaled popups and the modal backdrop under them:
+  // dismissing the card menu must not also throw the draft away.
+  useDismissable(rootRef, cancel, {
+    isOutsideClick: (target) => {
+      const el = target instanceof Element ? target : target.parentElement
+      return el == null || !el.closest(`.comments-panel, .${POPUP_CLASS}, .MuiBackdrop-root`)
+    },
+  })
+
+  if (!context) return null
 
   const submit = async () => {
     if (text.trim() === '' || submitting) return
@@ -66,7 +82,7 @@ function Composer({ editor, draftTo }: { editor: Editor | null; draftTo: number 
   }
 
   return (
-    <div className="comments-panel__composer">
+    <div ref={rootRef} className="comments-panel__composer">
       <UserAvatar user={context.user} />
       <div className="comments-panel__composer-main">
         <TextField
@@ -84,7 +100,8 @@ function Composer({ editor, draftTo }: { editor: Editor | null; draftTo: number 
               event.preventDefault()
               void submit()
             }
-            if (event.key === 'Escape') cancel()
+            // Escape is owned by useDismissable above — global while the
+            // draft lives, and it yields to newer surfaces (the card menu).
           }}
         />
         {text.trim() !== '' ? (
@@ -116,6 +133,9 @@ function Composer({ editor, draftTo }: { editor: Editor | null; draftTo: number 
 function CommentCard({ comment, editor }: { comment: DocumentComment; editor: Editor | null }) {
   const context = useComments()
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  // The MODAL Menu owns its own dismissal; registering it keeps the open
+  // composer's Escape (useDismissable) yielding while the menu is on top.
+  useEscapeSurface(menuAnchor != null)
   const cardRef = useRef<HTMLLIElement>(null)
   const active = context?.activeId === comment.id
   // Clicking the HIGHLIGHT in the document activates this card — bring it
