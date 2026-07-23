@@ -14,6 +14,7 @@ export type {
   FeatureDefinition,
   FeatureRenderContext,
   InsertItem,
+  NodeBubbleSection,
   PageRegion,
 } from './core/types'
 
@@ -30,9 +31,9 @@ export type { UseDocumentEditorOptions, DocumentEditorHandle } from './hooks/use
 // App-facing surface
 export type { EditorApi, EditorStateView } from './core/EditorApi'
 export { createMockEditor } from './core/createMockEditor'
-export type { MockEditor, MockEditorInit } from './core/createMockEditor'
+export type { MockActiveEntry, MockEditor, MockEditorInit } from './core/createMockEditor'
 export { useFeatureState } from './hooks/useFeatureState'
-export { useBubbleBar, useInsertBar } from './hooks/useBar'
+export { useBubbleBar, useInsertBar, useNodeBubbleBar } from './hooks/useBar'
 export type { BarButton } from './hooks/useBar'
 export { createSuggestionPopup, useListKeyboardNav } from './hooks/createSuggestionPopup'
 export type { SuggestionPopupRef } from './hooks/createSuggestionPopup'
@@ -47,6 +48,8 @@ export { BubbleBar } from './components/BubbleBar'
 export type { BubbleBarProps } from './components/BubbleBar'
 export { BubbleToolbar } from './components/BubbleToolbar'
 export type { BubbleToolbarProps } from './components/BubbleToolbar'
+export { NodeBubbleToolbar } from './components/NodeBubbleToolbar'
+export type { NodeBubbleToolbarProps } from './components/NodeBubbleToolbar'
 export { InsertToolbar } from './components/InsertToolbar'
 export type { InsertToolbarProps } from './components/InsertToolbar'
 export { EditorContextMenu } from './components/EditorContextMenu'

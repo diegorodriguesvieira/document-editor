@@ -1,5 +1,6 @@
+import { mergeAttributes } from '@tiptap/core'
 import { Image } from '@tiptap/extension-image'
-import { defineFeature } from '../../editor'
+import { defineFeature, type CommandFn, type EditorStateView } from '../../editor'
 import { promptOr } from '../promptFallback'
 import { icons } from '../icons'
 import { renderImageInsertControl } from '../promptForms'
@@ -21,6 +22,16 @@ function isSafeImageSrc(src: string): boolean {
 
 const MIN_WIDTH = 60
 const MIN_HEIGHT = 40
+
+/**
+ * Left is the DEFAULT: stored as null so an untouched image serializes no
+ * attribute at all (same policy as width). An explicit data-align="left" in
+ * pasted HTML normalizes to the same canonical null — one representation per
+ * alignment; anything unrecognized is dropped, not persisted.
+ */
+function parseAlign(raw: string | null): 'center' | 'right' | null {
+  return raw === 'center' || raw === 'right' ? raw : null
+}
 
 function parseDimension(raw: string | null): number | null {
   // Pixels only (bare number or "300px"). parseInt would happily read "80%"
@@ -72,7 +83,38 @@ const ResizableImage = Image.extend({
         renderHTML: (attributes) =>
           attributes.height ? { height: String(attributes.height) } : {},
       },
+      align: {
+        default: null,
+        parseHTML: (element) => parseAlign(element.getAttribute('data-align')),
+        renderHTML: (attributes) =>
+          attributes.align ? { 'data-align': attributes.align } : {},
+      },
     }
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    // Self-contained HTML: size and alignment ship as ONE inline style, so a
+    // renderer outside the editor (PDF, e-mail, preview) needs zero CSS of its
+    // own. width/height stay as plain attributes too (native browser hints +
+    // the parse contract); the style wins over consumer resets like
+    // `img { height: auto }`. data-align stays the SEMANTIC source — this is
+    // presentation. Longhand margins, not margin-inline: Outlook's Word
+    // engine ignores logical properties.
+    const { width, height, align } = node.attrs as {
+      width: number | null
+      height: number | null
+      align: 'center' | 'right' | null
+    }
+    const style = [
+      width != null ? `width: ${width}px` : '',
+      height != null ? `height: ${height}px` : '',
+      align ? 'display: block' : '',
+      align ? 'margin-left: auto' : '',
+      align === 'center' ? 'margin-right: auto' : '',
+    ]
+      .filter(Boolean)
+      .join('; ')
+    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, style ? { style } : {})]
   },
 
   parseHTML() {
@@ -96,6 +138,11 @@ const ResizableImage = Image.extend({
       let current = node
       const dom = document.createElement('div')
       dom.className = 'image-resizer'
+      // Editable-inert like the variable chip's dom: the wrapper is CHROME
+      // (handles + margins), not editable content — left inherited-editable,
+      // the browser treats its inside as valid caret territory. setAttribute,
+      // not the property: jsdom's property setter doesn't reflect.
+      dom.setAttribute('contenteditable', 'false')
       const img = document.createElement('img')
       img.draggable = false // ProseMirror owns block dragging; kill the native ghost
 
@@ -109,6 +156,11 @@ const ResizableImage = Image.extend({
         else img.removeAttribute('title')
         img.style.width = n.attrs.width ? `${n.attrs.width}px` : ''
         img.style.height = n.attrs.height ? `${n.attrs.height}px` : ''
+        // Alignment lands on the WRAPPER (the fit-content block the skin
+        // margins around), not the <img> — the serialized HTML still carries
+        // data-align on the <img> itself via renderHTML.
+        if (n.attrs.align) dom.dataset.align = n.attrs.align as string
+        else delete dom.dataset.align
       }
       sync(node)
       dom.appendChild(img)
@@ -240,9 +292,20 @@ const ResizableImage = Image.extend({
   },
 })
 
+/** Aligning only applies WITH an image selected — a bare updateAttributes on
+ *  a text selection would return true having changed nothing. */
+const alignImage = (align: 'center' | 'right' | null): CommandFn => (editor) =>
+  editor.isActive('image') && editor.chain().focus().updateAttributes('image', { align }).run()
+
+/** Left = canonical null (see {@link parseAlign}), so "left is active" means
+ *  "an image with NEITHER of the explicit alignments". */
+const alignIs = (state: EditorStateView, align: 'center' | 'right') =>
+  state.isActive('image', { align })
+
 /** Image. The command takes an src payload, or prompts as a fallback.
  *
- *  Contributes — insert: "Image" (URL form) · command: `image.insert` ·
+ *  Contributes — insert: "Image" (URL form) · nodeBubble: align left/center/
+ *  right · commands: `image.insert`, `image.alignLeft/Center/Right` ·
  *  keymap: Mod-Alt-p. */
 export const ImageFeature = defineFeature({
   id: 'image',
@@ -253,7 +316,43 @@ export const ImageFeature = defineFeature({
       if (!src || !isSafeImageSrc(src)) return false
       return editor.chain().focus().setImage({ src }).run()
     },
+    'image.alignLeft': alignImage(null),
+    'image.alignCenter': alignImage('center'),
+    'image.alignRight': alignImage('right'),
   },
+  nodeBubble: [
+    {
+      id: 'image',
+      when: (state) => state.isActive('image'),
+      items: [
+        {
+          id: 'image-align-left',
+          group: 'align',
+          label: 'Align left',
+          icon: icons.alignLeft,
+          commandId: 'image.alignLeft',
+          isActive: (state) =>
+            state.isActive('image') && !alignIs(state, 'center') && !alignIs(state, 'right'),
+        },
+        {
+          id: 'image-align-center',
+          group: 'align',
+          label: 'Align center',
+          icon: icons.alignCenter,
+          commandId: 'image.alignCenter',
+          isActive: (state) => alignIs(state, 'center'),
+        },
+        {
+          id: 'image-align-right',
+          group: 'align',
+          label: 'Align right',
+          icon: icons.alignRight,
+          commandId: 'image.alignRight',
+          isActive: (state) => alignIs(state, 'right'),
+        },
+      ],
+    },
+  ],
   // Mod-Alt-p ("picture"): Mod-Shift-i collides with Safari's Mail Contents
   // of Page; the Alt+I/J/C/K/U row is devtools territory across browsers.
   keymap: { 'Mod-Alt-p': 'image.insert' },

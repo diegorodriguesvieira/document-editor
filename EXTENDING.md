@@ -60,6 +60,7 @@ defineFeature({
   commands: { 'myFeature.run': (editor, payload) => boolean },
   keymap: { 'Mod-Shift-y': 'myFeature.run' },
   bubble: [/* BubbleItem[] — the selection bubble menu */],
+  nodeBubble: [/* NodeBubbleSection[] — bubble over a selected NODE (image, …) */],
   insert: [/* InsertItem[] — bottom insert dock; `/` menu mirrors runnable ones */],
   contextMenu: [/* ContextMenuSection[] — right-click */],
   pageRegions: [/* PageRegion[] — header/footer-style page chrome */],
@@ -89,6 +90,10 @@ bubble: [{
   against a real editor or `createMockEditor` alike.
 - **Bubble menu:** `bubble` contributions appear in the bubble automatically
   (the consumer may filter, e.g. `filter={(i) => i.group !== 'history'}`).
+- **Node bubble:** `nodeBubble` sections show the same pill over a selected
+  NODE — exactly where the text bubble refuses to. A section's `when` claims
+  the node through the state view (`(s) => s.isActive('image')`); the items of
+  every matching section render together (see ImageFeature's align buttons).
 - **Payloads:** the default button calls `api.exec(commandId)` with *no*
   payload. For a fixed set of variants, mint one command id per variant (see
   HeadingFeature's `heading.h1/h2/h3`). For arbitrary input (a color, a URL),
@@ -321,6 +326,17 @@ With more than one writer (two tabs, two users), add server-side optimistic
 concurrency (a `rev`/ETag with `If-Match` → conflicts become a 409 instead of
 a silent clobber). Real-time co-editing is a different animal (CRDT/Yjs) and
 out of scope here.
+
+### Backend HTML — deriving HTML from the stored JSON
+
+Consumers that regenerate HTML from the stored JSON (e.g. `generateHTML` from
+`@tiptap/html/server`) own their extension list; the SDK's contract with them
+is the DOCUMENT, not code. What the document guarantees: every node carries
+its presentation in attrs (`src`/`width`/`height`/`align` on images), the
+serialized HTML is self-contained (inline style — no consumer CSS needed),
+and semantic state travels in `data-*` attributes (see ARCHITECTURE.md §10).
+The reference for what each node serializes to is the feature source (e.g.
+`blocks/image.ts` `renderHTML`) and `api.getHTML()`'s output.
 
 ## 8. Runtime data (variable-chip / conditional variables)
 

@@ -18,6 +18,19 @@ export const imageStyles = css`
     line-height: 0;
   }
 
+  /* Docs-style block alignment. The node view mirrors the image's align attr
+     onto this wrapper; the serialized HTML is self-contained (renderHTML puts
+     the same margins inline on the <img>). No attr = left. Longhand margins,
+     IDENTICAL to the serialized style — one semantics in both worlds. */
+  .document-editor__surface .image-resizer[data-align='center'] {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .document-editor__surface .image-resizer[data-align='right'] {
+    margin-left: auto;
+  }
+
   .document-editor__surface .image-resizer--selected img {
     outline: 2px solid var(--editor-accent);
     outline-offset: 1px;

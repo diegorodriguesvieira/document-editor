@@ -65,6 +65,7 @@ extensions — features are TipTap-native by design), and optional channels:
 | `commands` | `id → (editor, payload?) => boolean` | routed via `api.exec(id)` |
 | `keymap` | `'Mod-Shift-x' → commandId` | synthetic `registryKeymap` extension |
 | `bubble` | `BubbleItem[]` (data; optional `render` escape hatch) | `BubbleBar` / `BubbleToolbar` |
+| `nodeBubble` | `NodeBubbleSection[]` (`when` claims the selected node; items per section) | `NodeBubbleToolbar` — the bubble over a NODE selection (where the text bubble refuses to show) |
 | `insert` | `InsertItem[]` | `InsertToolbar` (bottom insert dock) + mirrored into the `/` slash menu |
 | `contextMenu` | `ContextMenuSection[]` | `EditorContextMenu` (all matching sections compose) |
 | `pageRegions` | `PageRegion[]` (position, label, addCommandId, nodeName) | `PageAffordances` hover chrome; kernel derives `TrailingNode.notAfter` from `position: 'bottom'` entries |
@@ -312,7 +313,14 @@ changed when the mark-based implementation was replaced).
   (`data-conditional-block` + `data-condition` carrying the condition JSON —
   an all/any tree of `{op, params}` comparisons with typed operands; operator
   ids like `EQUALS`/`GREATER_THAN` are protocol constants. Full grammar,
-  coercion and error policy: `CONDITION-FORMAT.md`).
+  coercion and error policy: `CONDITION-FORMAT.md`), and image alignment
+  (`data-align="center|right"` on the `<img>`; absent = left). Images are
+  presentationally SELF-CONTAINED: size and alignment also ship as one inline
+  `style` (`width`/`height` px + `display: block` with longhand auto margins —
+  Outlook's Word engine ignores logical properties), so renderers (PDF,
+  e-mail, previews) need zero CSS of their own. `data-align` stays the
+  semantic source for backends that treat alignment as data, and the parse
+  side reads it (plus the `width`/`height` attributes or style) back in.
 - `setJSON` **throws** on content invalid for the active schema. Templates
   must therefore be built against `editor.schema.nodes` (which features are
   enabled), not `api.hasNode` (which asks the current *document*) — reference:

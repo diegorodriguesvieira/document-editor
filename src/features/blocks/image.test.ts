@@ -97,10 +97,11 @@ describe('image resize (width attribute)', () => {
     expect(widthFor('40vw')).toBeNull()
   })
 
-  it('images without width stay width-less (no serialized attr)', () => {
+  it('images without width stay width-less (no serialized attr, no style)', () => {
     const created = renderEditor([ImageFeature])
     created.api.exec('image.insert', 'https://example.com/a.png')
     expect(created.api.getHTML()).not.toContain('width=')
+    expect(created.api.getHTML()).not.toContain('style=')
   })
 
   it('round-trips height (edge-handle stretch persists both dimensions)', () => {
@@ -116,6 +117,110 @@ describe('image resize (width attribute)', () => {
     reloaded.api.setJSON(created.api.getJSON())
     const image = jsonFindNode(reloaded.api.getJSON().doc, 'image')
     expect(image?.attrs?.height).toBe(250)
+  })
+})
+
+describe('image alignment (data-align attribute)', () => {
+  /** An editor with a selected image (align commands act on the selection). */
+  function selectedImage(attrs: Record<string, unknown> = {}) {
+    const created = renderEditor([ImageFeature], {
+      content: {
+        doc: {
+          type: 'doc',
+          content: [
+            { type: 'image', attrs: { src: 'https://example.com/a.png', ...attrs } },
+            { type: 'paragraph' },
+          ],
+        },
+      },
+    })
+    created.editor.commands.setNodeSelection(0)
+    const align = () => jsonFindNode(created.api.getJSON().doc, 'image')?.attrs?.align
+    return { created, align }
+  }
+
+  it('center/right write the attr and serialize data-align in the HTML contract', () => {
+    const { created, align } = selectedImage()
+    expect(created.api.exec('image.alignCenter')).toBe(true)
+    expect(align()).toBe('center')
+    expect(created.api.getHTML()).toContain('data-align="center"')
+
+    expect(created.api.exec('image.alignRight')).toBe(true)
+    expect(align()).toBe('right')
+    expect(created.api.getHTML()).toContain('data-align="right"')
+  })
+
+  it('left is the canonical DEFAULT — it clears the attr instead of writing "left"', () => {
+    const { created, align } = selectedImage({ align: 'center' })
+    expect(created.api.exec('image.alignLeft')).toBe(true)
+    expect(align()).toBeNull()
+    expect(created.api.getHTML()).not.toContain('data-align')
+    expect(created.api.getHTML()).not.toContain('style=') // no leftover margins either
+  })
+
+  it('serialized HTML is SELF-CONTAINED — size + alignment ship as ONE inline style, zero consumer CSS', () => {
+    const { created } = selectedImage()
+    created.editor.commands.updateAttributes('image', { width: 400, height: 250 })
+    created.api.exec('image.alignCenter')
+    expect(created.api.getHTML()).toContain(
+      'style="width: 400px; height: 250px; display: block; margin-left: auto; margin-right: auto;"',
+    )
+
+    // Right alignment pushes with a lone margin-left (longhand, not
+    // margin-inline — Outlook's Word engine ignores logical properties).
+    created.api.exec('image.alignRight')
+    expect(created.api.getHTML()).toContain(
+      'style="width: 400px; height: 250px; display: block; margin-left: auto;"',
+    )
+
+    // And the schema re-parses its own self-contained output intact.
+    const reloaded = renderEditor([ImageFeature])
+    reloaded.editor.commands.insertContent(created.api.getHTML())
+    expect(jsonFindNode(reloaded.api.getJSON().doc, 'image')?.attrs).toMatchObject({
+      width: 400,
+      height: 250,
+      align: 'right',
+    })
+  })
+
+  it('refuses to align without an image selected (no silent true on a text selection)', () => {
+    const { created } = selectedImage()
+    created.editor.commands.setTextSelection(3) // caret in the paragraph
+    expect(created.api.exec('image.alignCenter')).toBe(false)
+  })
+
+  it('parses data-align from pasted HTML — and normalizes "left"/unknown values to null', () => {
+    const alignFor = (value: string) => {
+      const created = renderEditor([ImageFeature])
+      created.editor.commands.insertContent(
+        `<img src="https://example.com/a.png" data-align="${value}">`,
+      )
+      return jsonFindNode(created.api.getJSON().doc, 'image')?.attrs?.align
+    }
+    expect(alignFor('right')).toBe('right')
+    expect(alignFor('center')).toBe('center')
+    expect(alignFor('left')).toBeNull() // one representation per alignment
+    expect(alignFor('top')).toBeNull() // unrecognized values are dropped
+  })
+
+  it('mirrors the attr onto the node view WRAPPER (the skin margins it), and clears it', () => {
+    const { created } = selectedImage()
+    const resizer = created.editor.view.dom.querySelector('.image-resizer') as HTMLElement
+
+    created.api.exec('image.alignCenter')
+    expect(resizer.dataset.align).toBe('center')
+
+    created.api.exec('image.alignLeft')
+    expect(resizer.dataset.align).toBeUndefined()
+  })
+
+  it('round-trips through JSON persistence', () => {
+    const { created } = selectedImage()
+    created.api.exec('image.alignRight')
+
+    const reloaded = renderEditor([ImageFeature])
+    reloaded.api.setJSON(created.api.getJSON())
+    expect(jsonFindNode(reloaded.api.getJSON().doc, 'image')?.attrs?.align).toBe('right')
   })
 })
 
@@ -165,6 +270,11 @@ describe('image resize interaction (dragging the handles)', () => {
   it('renders all 8 handles around the image', () => {
     const { resizer } = mountImage({ width: 200, height: 100 })
     expect(resizer.querySelectorAll('.image-resizer__handle')).toHaveLength(8)
+  })
+
+  it('keeps the wrapper editable-inert (chrome, not caret territory)', () => {
+    const { resizer } = mountImage({ width: 200, height: 100 })
+    expect(resizer.getAttribute('contenteditable')).toBe('false')
   })
 
   it('edge handle stretches ONE dimension and freezes the other at its current pixels', () => {

@@ -46,6 +46,19 @@ describe('createMockEditor', () => {
     expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it("matches attribute probes TipTap-style: the probe's attrs must be a subset of the entry's", () => {
+    const { api } = createMockEditor({
+      active: ['bold', { name: 'heading', attrs: { level: 1 } }],
+    })
+    // Name-only probes match either entry form…
+    expect(api.isActive('bold')).toBe(true)
+    expect(api.isActive('heading')).toBe(true)
+    // …but an attribute probe needs the entry to CARRY those attrs.
+    expect(api.isActive('bold', { level: 1 })).toBe(false) // bare entry has none
+    expect(api.isActive('heading', { level: 1 })).toBe(true)
+    expect(api.isActive('heading', { level: 2 })).toBe(false)
+  })
+
   it('pins the EditorApi defaults a fresh mock reports (and their overrides)', () => {
     const { api } = createMockEditor()
     expect(api.canUndo()).toBe(false)

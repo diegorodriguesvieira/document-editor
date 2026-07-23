@@ -5,6 +5,7 @@ import type { Theme } from '@mui/material/styles'
 import type { EditorApi } from '../core/EditorApi'
 import { BubbleToolbar } from './BubbleToolbar'
 import { EditorContextMenu } from './EditorContextMenu'
+import { NodeBubbleToolbar } from './NodeBubbleToolbar'
 import { InsertToolbar } from './InsertToolbar'
 import { PageAffordances } from './PageAffordances'
 import { useFeatureState } from '../hooks/useFeatureState'
@@ -26,6 +27,10 @@ export interface DocumentEditorProps extends UseDocumentEditorOptions {
    *  top bar: the default is {@link BubbleToolbar} — a floating formatting
    *  bar over the text selection. */
   renderBubble?: (ctx: DocumentEditorRenderContext) => ReactNode
+  /** Replace the NODE bubble — the default is {@link NodeBubbleToolbar}, the
+   *  floating actions bar over a selected node (image alignment, …), fed by
+   *  the `nodeBubble` channel. */
+  renderNodeBubble?: (ctx: DocumentEditorRenderContext) => ReactNode
   /** Content for the editor HEADER — a fixed-height sticky bar the SDK ships
    *  by default (fill it with your title/actions; the shell's height and look
    *  come from the skin: `--editor-header-height`). Return `null` (or any
@@ -87,6 +92,7 @@ function EmptyStateOverlay({
  */
 export function DocumentEditor({
   renderBubble,
+  renderNodeBubble,
   renderHeader,
   renderFooter,
   renderLeftPanel,
@@ -107,6 +113,12 @@ export function DocumentEditor({
     ? renderBubble
       ? renderBubble(ctx)
       : <BubbleToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
+    : null
+
+  const nodeBubble = ctx
+    ? renderNodeBubble
+      ? renderNodeBubble(ctx)
+      : <NodeBubbleToolbar editor={ctx.editor} api={ctx.api} resolved={ctx.resolved} />
     : null
 
   // Header/footer semantics: the SHELLS are the SDK's (fixed heights, skin);
@@ -149,6 +161,7 @@ export function DocumentEditor({
         ) : null}
         <div className="document-editor__column">
           {bubble}
+          {nodeBubble}
           {/* The page scrolls inside its column when zoomed — the rails stay put. */}
           <div
             className={`document-editor__zoom${zoom > 1 ? ' document-editor__zoom--scrolls' : ''}`}

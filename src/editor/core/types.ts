@@ -47,6 +47,20 @@ export interface BubbleItem extends BarItemBase {}
  *  runnable ones (those with a `commandId`). */
 export interface InsertItem extends BarItemBase {}
 
+/**
+ * A bubble shown over a selected NODE (image, divider…) — the counterpart of
+ * the text-selection bubble, which deliberately hides on node selections.
+ * `when` claims the selected node through the engine-agnostic state view
+ * (same seam as a context-menu section's `when`), e.g.
+ * `(state) => state.isActive('image')`; the items of every matching section
+ * render together.
+ */
+export interface NodeBubbleSection {
+  id: string
+  when: (state: EditorStateView) => boolean
+  items: BubbleItem[]
+}
+
 /** A single right-click (context menu) action. */
 export interface ContextMenuItem {
   id: string
@@ -120,6 +134,8 @@ export interface FeatureDefinition {
   keymap?: Record<string, string>
   /** Contributions to the selection bubble menu. */
   bubble?: BubbleItem[]
+  /** Bubble sections shown over a selected NODE (image, divider…). */
+  nodeBubble?: NodeBubbleSection[]
   /**
    * Contributions to the bottom insert dock. The `/` slash menu mirrors the
    * runnable ones (those with a `commandId`).

@@ -5,6 +5,7 @@ import type {
   ContextMenuSection,
   FeatureDefinition,
   InsertItem,
+  NodeBubbleSection,
   PageRegion,
 } from './types'
 
@@ -23,6 +24,7 @@ export interface ResolvedFeatures {
   commands: Record<string, CommandFn>
   keymap: Record<string, string>
   bubble: BubbleItem[]
+  nodeBubble: NodeBubbleSection[]
   inserts: InsertItem[]
   contextMenu: ContextMenuSection[]
   pageRegions: PageRegion[]
@@ -81,6 +83,9 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
   }
   for (const feature of features) {
     for (const item of feature.bubble ?? []) check(item.commandId, `bubble "${item.id}"`)
+    for (const section of feature.nodeBubble ?? []) {
+      for (const item of section.items) check(item.commandId, `nodeBubble "${item.id}"`)
+    }
     for (const item of feature.insert ?? []) check(item.commandId, `insert "${item.id}"`)
     for (const section of feature.contextMenu ?? []) {
       for (const group of section.groups) {
@@ -109,6 +114,10 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     }
   }
   channel('bubble', features.flatMap((f) => (f.bubble ?? []).map((item) => item.id)))
+  // Item ids checked ACROSS sections, not just section ids: two sections can
+  // match the same node at once, and their items land keyed in ONE bar.
+  channel('nodeBubble section', features.flatMap((f) => (f.nodeBubble ?? []).map((s) => s.id)))
+  channel('nodeBubble', features.flatMap((f) => (f.nodeBubble ?? []).flatMap((s) => s.items.map((item) => item.id))))
   channel('insert', features.flatMap((f) => (f.insert ?? []).map((item) => item.id)))
   channel('pageRegion', features.flatMap((f) => (f.pageRegions ?? []).map((region) => region.id)))
   channel('contextMenu section', features.flatMap((f) => (f.contextMenu ?? []).map((s) => s.id)))
@@ -123,6 +132,10 @@ export function resolveFeatures(input: FeatureDefinition[]): ResolvedFeatures {
     commands,
     keymap,
     bubble: byOrder(features.flatMap((feature) => feature.bubble ?? [])),
+    // Sections keep feature order; `order` interleaves items WITHIN a section.
+    nodeBubble: features.flatMap((feature) =>
+      (feature.nodeBubble ?? []).map((section) => ({ ...section, items: byOrder(section.items) })),
+    ),
     inserts: byOrder(features.flatMap((feature) => feature.insert ?? [])),
     contextMenu: features.flatMap((feature) => feature.contextMenu ?? []),
     pageRegions: features.flatMap((feature) => feature.pageRegions ?? []),

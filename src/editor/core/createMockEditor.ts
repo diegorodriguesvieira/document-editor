@@ -1,9 +1,15 @@
 import { createEmptyDocument, type DocumentJSON } from './document'
 import type { EditorApi } from './EditorApi'
 
+/** An entry in the mock's active set. A bare name satisfies name-only
+ *  `isActive(name)` probes; give `attrs` to satisfy attribute probes too —
+ *  matching is TipTap's: the PROBE's attrs must be a subset of the entry's
+ *  (so a bare name never matches an attribute probe). */
+export type MockActiveEntry = string | { name: string; attrs?: Record<string, unknown> }
+
 export interface MockEditorInit {
-  /** Mark/node names that should report active (matched by name; attrs ignored). */
-  active?: string[]
+  /** Marks/nodes that should report active. */
+  active?: MockActiveEntry[]
   doc?: DocumentJSON
   canUndo?: boolean
   canRedo?: boolean
@@ -18,9 +24,20 @@ export interface MockEditor {
   /** Every `api.exec` call, in order, for assertions. */
   execCalls: Array<{ commandId: string; payload?: unknown }>
   /** Replace the active set and notify subscribers (selection change). */
-  setActive(names: string[]): void
+  setActive(entries: MockActiveEntry[]): void
   emitUpdate(): void
   emitSelection(): void
+}
+
+function entryMatches(
+  entry: MockActiveEntry,
+  name: string,
+  attrs?: Record<string, unknown>,
+): boolean {
+  if ((typeof entry === 'string' ? entry : entry.name) !== name) return false
+  if (!attrs) return true
+  const entryAttrs = typeof entry === 'string' ? undefined : entry.attrs
+  return Object.entries(attrs).every(([key, value]) => (entryAttrs ?? {})[key] === value)
 }
 
 /**
@@ -31,7 +48,7 @@ export interface MockEditor {
  * `mock.setActive([...])`.
  */
 export function createMockEditor(init: MockEditorInit = {}): MockEditor {
-  let active = new Set(init.active ?? [])
+  let active = init.active ?? []
   let doc = init.doc ?? createEmptyDocument()
   const execCalls: Array<{ commandId: string; payload?: unknown }> = []
   const listeners: Record<'update' | 'selection', Set<() => void>> = {
@@ -43,7 +60,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
   }
 
   const api: EditorApi = {
-    isActive: (name) => active.has(name),
+    isActive: (name, attrs) => active.some((entry) => entryMatches(entry, name, attrs)),
     canUndo: () => init.canUndo ?? false,
     canRedo: () => init.canRedo ?? false,
     isEmpty: () => init.isEmpty ?? false,
@@ -70,8 +87,8 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
   return {
     api,
     execCalls,
-    setActive: (names) => {
-      active = new Set(names)
+    setActive: (entries) => {
+      active = entries
       emit('selection')
     },
     emitUpdate: () => emit('update'),

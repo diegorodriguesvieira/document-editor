@@ -3,6 +3,9 @@ import AlternateEmail from '@mui/icons-material/AlternateEmail'
 import CallSplit from '@mui/icons-material/CallSplit'
 import Code from '@mui/icons-material/Code'
 import DeleteOutline from '@mui/icons-material/DeleteOutline'
+import FormatAlignCenter from '@mui/icons-material/FormatAlignCenter'
+import FormatAlignLeft from '@mui/icons-material/FormatAlignLeft'
+import FormatAlignRight from '@mui/icons-material/FormatAlignRight'
 import FormatBold from '@mui/icons-material/FormatBold'
 import FormatItalic from '@mui/icons-material/FormatItalic'
 import FormatListBulleted from '@mui/icons-material/FormatListBulleted'
@@ -32,6 +35,9 @@ export const icons = {
   code: <Code />,
   divider: <HorizontalRule />,
   image: <ImageOutlined />,
+  alignLeft: <FormatAlignLeft />,
+  alignCenter: <FormatAlignCenter />,
+  alignRight: <FormatAlignRight />,
   table: <GridOn />,
   tableColumns: <ViewColumn />,
   comment: <AddCommentOutlined />,

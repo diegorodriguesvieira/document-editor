@@ -83,6 +83,37 @@ export function useBubbleBar(
   return useBarButtons(editor, api, resolved.bubble)
 }
 
+/**
+ * Headless state for the NODE bubble (the `resolved.nodeBubble` channel): the
+ * items of every section whose `when` matches the current state, as live
+ * buttons. Section matching re-evaluates through the same two paths the flags
+ * do — editor state with a real editor, api events with a mock.
+ */
+export function useNodeBubbleBar(
+  editor: Editor | null,
+  api: EditorApi,
+  resolved: ResolvedFeatures,
+): BarButton[] {
+  const sections = resolved.nodeBubble
+  // Selected as a joined-id STRING so useEditorState's equality check skips
+  // re-renders while the same section(s) stay matched.
+  const editorMatched = useEditorState({
+    editor,
+    selector: (snapshot) =>
+      snapshot.editor ? sections.filter((s) => s.when(api)).map((s) => s.id).join('\n') : null,
+  })
+  const revision = useApiRevision(api, editor === null)
+  const matched = useMemo(
+    () => editorMatched ?? sections.filter((s) => s.when(api)).map((s) => s.id).join('\n'),
+    [editorMatched, sections, api, revision],
+  )
+  const items = useMemo(() => {
+    const ids = new Set(matched ? matched.split('\n') : [])
+    return sections.filter((s) => ids.has(s.id)).flatMap((s) => s.items)
+  }, [sections, matched])
+  return useBarButtons(editor, api, items)
+}
+
 /** Headless state for the insert dock (the `resolved.inserts` channel). */
 export function useInsertBar(
   editor: Editor | null,
