@@ -211,6 +211,29 @@ dock skin), so pair it with a suppressed dock —
 />
 ```
 
+**Jump-to-content panels** (a used-variables outline, a heading TOC): derive
+the list from the document itself and scroll on click. A real COMPONENT, not
+an inline render-prop body — it calls a hook:
+
+```tsx
+function VariablesOutline({ editor, api }: DocumentEditorRenderContext) {
+  // Every `variable` node with its LIVE position + attrs, re-derived per
+  // transaction (deep-equal skips re-renders while the list is stable).
+  const chips = useFeatureState(editor, () => api.findNodes('variable'))
+  return chips?.map(({ pos, attrs }) => (
+    <button key={pos} onClick={() => api.scrollTo(pos)}>{String(attrs.label)}</button>
+  ))
+}
+
+<DocumentEditor features={…} renderLeftPanel={(ctx) => <VariablesOutline {...ctx} />} />
+```
+
+Positions shift with every edit — always re-derive through `useFeatureState`,
+never store them. `api.scrollTo(pos)` scrolls the DOM node at the position
+directly, on purpose: the engine's own scroll-to-selection is a no-op while
+DOM focus sits outside the editor, which is exactly the panel-click case.
+Reference: the "Used variables in the LEFT panel" story.
+
 **Read-only mode** is a first-class prop: `editable={false}` keeps the full
 layout but rejects typing, and the SDK hides its own mutating chrome — the
 default insert actions, the page-region affordances, the context menu and the
@@ -308,9 +331,9 @@ lights (and scrolls to) its card in the panel.
 ```
 
 The persisted shape is `{ doc }` (ProseMirror JSON — portable). The `api`
-surface: `getJSON / setJSON / getHTML / hasNode / focus / exec(commandId, payload?)
-/ isActive / canUndo / canRedo / isEmpty / isSelectionEmpty
-/ on('update' | 'selection')`.
+surface: `getJSON / setJSON / getHTML / hasNode / findNodes / scrollTo / focus
+/ exec(commandId, payload?) / isActive / canUndo / canRedo / isEmpty
+/ isSelectionEmpty / on('update' | 'selection')`.
 Loading content whose feature is disabled **throws** — synchronously, from
 `api.setJSON` itself, so try/catch the async-load pattern above
 (`onContentError` covers initial content and insertContent-style flows, not

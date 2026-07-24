@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { defineFeature } from './defineFeature'
 import { docWith, renderEditor } from '../../test/editorHarness'
-import { BoldFeature, HistoryFeature, TableFeature } from '../../features'
+import { BoldFeature, HistoryFeature, TableFeature, VariableFeature } from '../../features'
 
 describe('EditorApi (the facade over a real editor)', () => {
   it('canUndo/canRedo degrade to false — not a crash — when no history feature is enabled', () => {
@@ -53,6 +53,77 @@ describe('EditorApi (the facade over a real editor)', () => {
     off()
     created.editor.commands.setTextSelection(4)
     expect(seen.mock.calls.length).toBe(calls)
+  })
+})
+
+// Two chips (one per paragraph, filler between) — enough to pin document
+// order, real positions and attrs pass-through.
+const CHIPPED_DOC = {
+  doc: {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Dear ' },
+          { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
+        ],
+      },
+      { type: 'paragraph', content: [{ type: 'text', text: 'filler paragraph' }] },
+      {
+        type: 'paragraph',
+        content: [{ type: 'variable', attrs: { id: 'amount.monthly', label: 'Monthly amount' } }],
+      },
+    ],
+  },
+}
+
+/** jsdom has no scrollIntoView — install one and return the spy. */
+function stubScrollIntoView() {
+  const spy = vi.fn()
+  const proto = Element.prototype as unknown as { scrollIntoView?: typeof spy }
+  proto.scrollIntoView = spy
+  onTestFinished(() => {
+    delete proto.scrollIntoView
+  })
+  return spy
+}
+
+describe('findNodes / scrollTo (the outline-panel seam)', () => {
+  it('findNodes returns every match in document order, with REAL positions and attrs', () => {
+    const { api, editor } = renderEditor([VariableFeature], { content: CHIPPED_DOC })
+    const found = api.findNodes('variable')
+
+    expect(found.map((entry) => entry.attrs.id)).toEqual(['client.name', 'amount.monthly'])
+    // The positions are live ProseMirror offsets, not indices: the doc
+    // resolves each one back to the very node reported.
+    for (const entry of found) {
+      expect(editor.state.doc.nodeAt(entry.pos)?.type.name).toBe('variable')
+    }
+    expect(api.findNodes('image')).toEqual([])
+  })
+
+  it('scrollTo scrolls the node-view element at pos — DOM-based, so it works while focus sits in a panel', () => {
+    const { api } = renderEditor([VariableFeature], { content: CHIPPED_DOC })
+    const scrolled = stubScrollIntoView()
+
+    const [chip] = api.findNodes('variable')
+    api.scrollTo(chip.pos)
+
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    const target = scrolled.mock.contexts[0] as Element
+    expect(target.getAttribute('data-variable')).toBe('client.name')
+  })
+
+  it('scrollTo on a TEXT position scrolls its parent block; out-of-range clamps instead of throwing', () => {
+    const { api } = renderEditor([BoldFeature], { content: docWith('hello') })
+    const scrolled = stubScrollIntoView()
+
+    api.scrollTo(2) // inside "hello" — a Text DOM node, scroll its <p>
+    expect((scrolled.mock.contexts[0] as Element).tagName).toBe('P')
+
+    expect(() => api.scrollTo(9999)).not.toThrow()
+    expect(() => api.scrollTo(-5)).not.toThrow()
   })
 })
 

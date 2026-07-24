@@ -22,6 +22,13 @@ export interface EditorStateView {
   isSelectionEmpty(): boolean
 }
 
+/** One `findNodes` match: where the node sits — a `scrollTo` handle, valid
+ *  until the next edit — plus its attributes (a variable chip's id/label…). */
+export interface FoundNode {
+  pos: number
+  attrs: Record<string, unknown>
+}
+
 /**
  * The stable facade the app talks to instead of the raw TipTap `Editor`.
  * Light by design (engine-swap is hygiene, not a real requirement) — its job
@@ -36,6 +43,15 @@ export interface EditorApi extends EditorStateView {
   getHTML(): string
   /** Whether a top-level node of this type exists in the document. */
   hasNode(name: string): boolean
+  /** Every node of this type anywhere in the document, in document order,
+   *  each with the position `scrollTo` takes. Positions shift with every
+   *  edit — derive them fresh (`useFeatureState(editor, () =>
+   *  api.findNodes('variable'))`), don't store them. */
+  findNodes(name: string): FoundNode[]
+  /** Bring the content at `pos` into view (smooth, centered), e.g. a
+   *  `findNodes` hit from an outline/variables panel. Scrolling only — the
+   *  selection and focus stay where they are. */
+  scrollTo(pos: number): void
   /** Return focus to the editor (e.g. after a modal/popover closes). */
   focus(): void
   exec(commandId: string, payload?: unknown): boolean
@@ -50,6 +66,24 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     isEmpty: () => isBlankDocument(editor.state.doc),
     isSelectionEmpty: () => editor.state.selection.empty,
     hasNode: (name) => hasTopLevelNode(editor.state.doc, name),
+    findNodes: (name) => {
+      const found: FoundNode[] = []
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === name) found.push({ pos, attrs: node.attrs })
+      })
+      return found
+    },
+    scrollTo: (pos) => {
+      const clamped = Math.max(0, Math.min(pos, editor.state.doc.content.size))
+      // DOM scroll, NOT a dispatch with PM's scrollIntoView: prosemirror-view
+      // bails out of scrollToSelection while the DOM focus sits outside the
+      // view — and it does in the case this API exists for, the user just
+      // clicked a panel. (Same trap the comments panel hit.) Optional-chained:
+      // jsdom has no scrollIntoView.
+      const dom = editor.view.nodeDOM(clamped) ?? editor.view.domAtPos(clamped).node
+      const el = dom instanceof Element ? dom : dom.parentElement
+      el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    },
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
       editor.commands.setContent(doc.doc)

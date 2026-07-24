@@ -118,7 +118,9 @@ The React entry point. Three things worth knowing:
 
 `EditorStateView` is the *read* slice a bar needs (`isActive`, `canUndo`,
 `isEmpty`, `isSelectionEmpty`, …). `EditorApi` extends it with document I/O
-(`getJSON`/`setJSON`/`getHTML`), `exec(commandId)`, `hasNode`, `focus`, `on`.
+(`getJSON`/`setJSON`/`getHTML`), `exec(commandId)`, `hasNode`, `findNodes`
+(every node of a type, with live positions), `scrollTo(pos)` (DOM-based —
+works while focus sits in a panel), `focus`, `on`.
 
 `createMockEditor` implements the same interface in memory. That twin is what
 makes bar and feature wiring testable without a real ProseMirror instance

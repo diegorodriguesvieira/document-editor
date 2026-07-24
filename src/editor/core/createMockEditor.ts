@@ -1,5 +1,5 @@
 import { createEmptyDocument, type DocumentJSON } from './document'
-import type { EditorApi } from './EditorApi'
+import type { EditorApi, FoundNode } from './EditorApi'
 
 /** An entry in the mock's active set. A bare name satisfies name-only
  *  `isActive(name)` probes; give `attrs` to satisfy attribute probes too —
@@ -23,6 +23,8 @@ export interface MockEditor {
   api: EditorApi
   /** Every `api.exec` call, in order, for assertions. */
   execCalls: Array<{ commandId: string; payload?: unknown }>
+  /** Every `api.scrollTo` position, in order — the mock doesn't scroll. */
+  scrollToCalls: number[]
   /** Replace the active set and notify subscribers (selection change). */
   setActive(entries: MockActiveEntry[]): void
   emitUpdate(): void
@@ -51,6 +53,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
   let active = init.active ?? []
   let doc = init.doc ?? createEmptyDocument()
   const execCalls: Array<{ commandId: string; payload?: unknown }> = []
+  const scrollToCalls: number[] = []
   const listeners: Record<'update' | 'selection', Set<() => void>> = {
     update: new Set(),
     selection: new Set(),
@@ -66,6 +69,21 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
     isEmpty: () => init.isEmpty ?? false,
     isSelectionEmpty: () => init.isSelectionEmpty ?? true,
     hasNode: (name) => (doc.doc.content ?? []).some((node) => node.type === name),
+    // Positions here are ORDINAL (walk order: 0, 1, 2…), not ProseMirror
+    // offsets — the mock has no schema to size nodes with. Enough for wiring
+    // tests: pair a findNodes hit with the matching scrollToCalls entry.
+    findNodes: (name) => {
+      const found: FoundNode[] = []
+      const walk = (node: DocumentJSON['doc']) => {
+        if (node.type === name) found.push({ pos: found.length, attrs: node.attrs ?? {} })
+        for (const child of node.content ?? []) walk(child)
+      }
+      walk(doc.doc)
+      return found
+    },
+    scrollTo: (pos) => {
+      scrollToCalls.push(pos)
+    },
     getJSON: () => doc,
     setJSON: (next) => {
       doc = next
@@ -87,6 +105,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
   return {
     api,
     execCalls,
+    scrollToCalls,
     setActive: (entries) => {
       active = entries
       emit('selection')

@@ -130,6 +130,65 @@ export const STARTER_DOC: DocumentJSON = {
   },
 }
 
+const chip = (id: string, label: string) => ({ type: 'variable', attrs: { id, label } })
+const mixed = (...parts: Array<string | ReturnType<typeof chip>>) => ({
+  type: 'paragraph',
+  content: parts.map((part) => (typeof part === 'string' ? { type: 'text', text: part } : part)),
+})
+
+/** A LONG agreement with variable chips spread far apart — the used-variables
+ *  panel story needs real scroll distance between occurrences. Uses 3 of the
+ *  5 provider VARIABLES on purpose: the panel lists what the DOCUMENT uses,
+ *  not what the @ menu offers. `client.name` appears 3× (opening, clause 9,
+ *  signature line) so the occurrence navigator has a cycle worth walking. */
+export const VARIABLES_DOC: DocumentJSON = {
+  doc: {
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Service agreement' }] },
+      mixed(
+        'This agreement is entered into by ',
+        chip('client.name', 'Client name'),
+        ' ("the Client") and Acme Studio Ltda ("the Provider"), who agree to the terms below.',
+      ),
+      paragraph('1. Scope. The Provider will deliver the design and development services described in the attached statement of work, including revisions agreed in writing during the engagement.'),
+      paragraph('1.1. Any request outside the statement of work is a change request: the Provider estimates it separately and work starts only after the Client approves the estimate.'),
+      mixed(
+        '2. Fees. The Client shall pay the Provider ',
+        chip('amount.monthly', 'Monthly amount'),
+        ' per month, due on the fifth business day, against an invoice issued on the first.',
+      ),
+      paragraph('2.1. Late payments accrue interest of 1% per month plus monetary correction. Work may be suspended after fifteen days of delay, without prejudice to amounts already owed.'),
+      paragraph('3. Term. This agreement runs for twelve months from the signature date and renews automatically for equal periods unless either party gives thirty days’ written notice.'),
+      paragraph('3.1. Either party may terminate for material breach if the breach is not cured within fifteen days of written notice describing it.'),
+      paragraph('4. Confidentiality. Each party will keep the other’s non-public information confidential and use it only to perform this agreement, for as long as the information remains confidential.'),
+      paragraph('4.1. Disclosure required by law or court order is not a breach, provided the disclosing party notifies the other promptly and limits the disclosure to what is required.'),
+      mixed(
+        '5. Registration. This engagement is registered under contract ',
+        chip('contract.number', 'Contract number'),
+        ', which must be referenced in every invoice, notice and amendment.',
+      ),
+      paragraph('5.1. Amendments are valid only in writing and signed by both parties. E-mail exchanges do not amend this agreement unless both parties expressly say so.'),
+      paragraph('6. Intellectual property. Deliverables become the Client’s property upon full payment. The Provider retains its pre-existing tools, libraries and know-how.'),
+      paragraph('6.1. The Provider may reference the project in its portfolio unless the Client objects in writing before final delivery.'),
+      paragraph('7. Liability. Each party’s aggregate liability under this agreement is limited to the total fees paid in the twelve months preceding the event that gave rise to the claim.'),
+      paragraph('7.1. Neither party is liable for indirect damages, loss of profit or loss of data, except in cases of willful misconduct.'),
+      paragraph('8. Data protection. The parties will process personal data only as needed to perform this agreement and in accordance with the applicable data-protection legislation.'),
+      mixed(
+        '9. Notices. Notices to ',
+        chip('client.name', 'Client name'),
+        ' shall be sent to the address on file; notices to the Provider, to its registered office. Notice by e-mail counts when receipt is confirmed.',
+      ),
+      paragraph('10. Governing law. This agreement is governed by Brazilian law. The parties elect the courts of São Paulo, SP, waiving any other venue, however privileged.'),
+      mixed(
+        'Signed in two counterparts of equal content and form by ',
+        chip('client.name', 'Client name'),
+        ' and the Provider, in the presence of the witnesses below.',
+      ),
+    ],
+  },
+}
+
 /** Content under review (for the comments stories) — the comment's ANCHOR
  *  lives in the doc as a `comment` mark on "30 days"; its CONTENT (text,
  *  author) lives backend-side, seeded by the stories' fake adapter under the

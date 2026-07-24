@@ -29,7 +29,7 @@ export { useDocumentEditor } from './hooks/useDocumentEditor'
 export type { UseDocumentEditorOptions, DocumentEditorHandle } from './hooks/useDocumentEditor'
 
 // App-facing surface
-export type { EditorApi, EditorStateView } from './core/EditorApi'
+export type { EditorApi, EditorStateView, FoundNode } from './core/EditorApi'
 export { createMockEditor } from './core/createMockEditor'
 export type { MockActiveEntry, MockEditor, MockEditorInit } from './core/createMockEditor'
 export { useFeatureState } from './hooks/useFeatureState'

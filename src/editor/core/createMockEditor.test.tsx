@@ -98,6 +98,41 @@ describe('createMockEditor', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2) // detached for real
   })
 
+  it('findNodes walks the WHOLE tree (ordinal positions) and scrollTo records for assertions', () => {
+    const mock = createMockEditor({
+      doc: {
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'variable', attrs: { id: 'client.name' } }],
+            },
+            {
+              // Nested, NOT top-level — hasNode misses it, findNodes must not.
+              type: 'callout',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'variable', attrs: { id: 'amount.monthly' } }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
+
+    const found = mock.api.findNodes('variable')
+    expect(found.map((entry) => entry.attrs.id)).toEqual(['client.name', 'amount.monthly'])
+    // Ordinal, mock-only positions (no schema to size nodes with) — their job
+    // is to round-trip into scrollTo assertions.
+    expect(found.map((entry) => entry.pos)).toEqual([0, 1])
+
+    mock.api.scrollTo(found[1].pos)
+    expect(mock.scrollToCalls).toEqual([1])
+  })
+
   it('exposes both event channels to hand-drive tests (emitUpdate/emitSelection)', () => {
     const mock = createMockEditor()
     const onUpdate = vi.fn()
