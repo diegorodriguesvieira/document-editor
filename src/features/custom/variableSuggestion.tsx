@@ -54,9 +54,16 @@ export const VariableMenu = forwardRef<
  * suggestion here and the `variable.insert` command) — one shape, so the
  * "cursor isn't glued to the chip" rule can't drift between them.
  */
-export function variableInsertContent(field: { id: string; label?: string }) {
+export function variableInsertContent(field: {
+  id: string
+  label?: string
+  type?: DocumentVariable['type']
+}) {
+  // 'text' is the default — don't stamp it, so plain variables serialize
+  // without a data-variable-type attribute.
+  const type = field.type && field.type !== 'text' ? field.type : null
   return [
-    { type: 'variable', attrs: { id: field.id, label: field.label ?? field.id } },
+    { type: 'variable', attrs: { id: field.id, label: field.label ?? field.id, type } },
     { type: 'text', text: ' ' },
   ]
 }

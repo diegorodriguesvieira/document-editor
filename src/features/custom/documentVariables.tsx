@@ -5,9 +5,11 @@ export interface DocumentVariable {
   label: string
   /** Optional section for pickers (e.g. the variables panel groups by it). */
   group?: string
-  /** Value type — drives the condition builder (a 'boolean' variable locks the
-   *  operator to EQUALS and offers a True/False value). Default: 'text'. */
-  type?: 'text' | 'boolean'
+  /** Value type. Drives the condition builder (a 'boolean' variable locks the
+   *  operator to EQUALS and offers a True/False value) and rendering (a
+   *  'signature' chip is stamped into the document + styled with the
+   *  signature font). Default: 'text'. */
+  type?: 'text' | 'boolean' | 'signature'
   /** Where the variable is offered. 'document' (default) = insertable in text
    *  AND usable in conditions; 'condition' = condition builder only (never in
    *  the @ picker/panel — e.g. backend decision flags). */

@@ -30,6 +30,13 @@ export const variableStyles = css`
     user-select: none;
   }
 
+  /* Signature variables keep the chip look but render in the signature font.
+     Script faces run small — 1em compensates the base chip's 0.9em. */
+  .document-editor__surface .variable-chip--signature {
+    font-family: var(--editor-signature-font);
+    font-size: 1em;
+  }
+
   /* Positioning/portal is MUI Popper's; bg/border/shadow are the Paper's.
      The root keeps the fade the drag step-aside animates. */
   .document-editor-popup.var-panel {

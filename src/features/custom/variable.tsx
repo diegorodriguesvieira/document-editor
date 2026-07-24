@@ -36,6 +36,15 @@ const VariableNode = Node.create({
         renderHTML: (attributes) =>
           attributes.label ? { 'data-label': attributes.label as string } : {},
       },
+      // Value type from the catalog ('signature', …). Stamped into the
+      // document so the backend can tell these chips apart; absent for plain
+      // text variables.
+      type: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-variable-type'),
+        renderHTML: (attributes) =>
+          attributes.type ? { 'data-variable-type': attributes.type as string } : {},
+      },
     }
   },
 
@@ -45,17 +54,18 @@ const VariableNode = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const label = (node.attrs.label ?? node.attrs.id ?? '') as string
-    return ['span', mergeAttributes(HTMLAttributes, { class: 'variable-chip' }), `{{${label}}}`]
+    return ['span', mergeAttributes(HTMLAttributes, { class: chipClass(node.attrs.type) }), `{{${label}}}`]
   },
 
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('span')
-      dom.className = 'variable-chip'
+      dom.className = chipClass(node.attrs.type)
       dom.contentEditable = 'false'
       const id = (node.attrs.id ?? '') as string
       const label = (node.attrs.label ?? node.attrs.id ?? '') as string
       if (id) dom.setAttribute('data-variable', id)
+      if (node.attrs.type) dom.setAttribute('data-variable-type', node.attrs.type as string)
       dom.textContent = `{{${label}}}`
       return { dom }
     }
@@ -109,6 +119,11 @@ const VariableNode = Node.create({
   },
 })
 
+/** Base chip class + a per-type modifier ('signature' gets the script font). */
+function chipClass(type: unknown): string {
+  return type === 'signature' ? 'variable-chip variable-chip--signature' : 'variable-chip'
+}
+
 /**
  * The single variable chip inside a drop payload, if that's ALL the payload
  * is (a bare chip, or a chip alone inside one paragraph — both shapes come out
@@ -137,6 +152,7 @@ export function variableDragHTML(variable: DocumentVariable): string {
   const span = document.createElement('span')
   span.setAttribute('data-variable', variable.id)
   span.setAttribute('data-label', variable.label)
+  if (variable.type && variable.type !== 'text') span.setAttribute('data-variable-type', variable.type)
   span.textContent = `{{${variable.label}}}`
   return span.outerHTML
 }
@@ -405,12 +421,12 @@ export const VariableFeature = defineFeature({
   extensions: () => [VariableNode, createVariableNodeSuggestion()],
   commands: {
     'variable.insert': (editor, payload) => {
-      const field = (payload ?? {}) as { id?: string; label?: string }
+      const field = (payload ?? {}) as { id?: string; label?: string; type?: DocumentVariable['type'] }
       if (!field.id) return false
       return editor
         .chain()
         .focus()
-        .insertContent(variableInsertContent({ id: field.id, label: field.label }))
+        .insertContent(variableInsertContent({ id: field.id, label: field.label, type: field.type }))
         .run()
     },
   },

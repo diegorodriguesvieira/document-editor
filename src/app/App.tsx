@@ -82,6 +82,8 @@ export default function App() {
         { id: 'contrato.numero', label: 'Contract number', group: 'Contract details' },
         { id: 'contrato.vigencia', label: 'Term', group: 'Contract details' },
         { id: 'valor.mensal', label: 'Monthly amount', group: 'Contract details' },
+        { id: 'cliente.assinatura', label: 'Client signature', group: 'Signatures', type: 'signature' },
+        { id: 'empresa.assinatura', label: 'Company signature', group: 'Signatures', type: 'signature' },
       ])
       setDecisionFlags(normalizeConditionals(RAW_CONDITIONALS))
     }, 1500)

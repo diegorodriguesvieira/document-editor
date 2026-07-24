@@ -2,7 +2,7 @@ import { createRef, type Ref } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { VariableMenu } from './variableSuggestion'
+import { VariableMenu, variableInsertContent } from './variableSuggestion'
 import type { SuggestionPopupRef } from '../../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
@@ -75,5 +75,25 @@ describe('<VariableMenu />', () => {
     press('ArrowDown') // → Tax ID
     press('Enter')
     expect(onPick).toHaveBeenCalledWith(VARS[1])
+  })
+})
+
+describe('variableInsertContent', () => {
+  it('stamps a non-text type on the node attrs', () => {
+    expect(variableInsertContent({ id: 'a', label: 'A', type: 'signature' })[0]).toEqual({
+      type: 'variable',
+      attrs: { id: 'a', label: 'A', type: 'signature' },
+    })
+  })
+
+  it("normalizes absent and default 'text' types to null — clean HTML for the common case", () => {
+    expect(variableInsertContent({ id: 'a', label: 'A' })[0]).toEqual({
+      type: 'variable',
+      attrs: { id: 'a', label: 'A', type: null },
+    })
+    expect(variableInsertContent({ id: 'a', label: 'A', type: 'text' })[0]).toEqual({
+      type: 'variable',
+      attrs: { id: 'a', label: 'A', type: null },
+    })
   })
 })

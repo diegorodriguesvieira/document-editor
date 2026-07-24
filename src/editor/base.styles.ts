@@ -89,6 +89,7 @@ export const baseStyles = css`
     --editor-variable-bg: #e8f0fe;
     --editor-variable-border: #c6dafc;
     --editor-variable-fg: #1967d2;
+    --editor-signature-font: 'Segoe Script', 'Bradley Hand', 'Brush Script MT', cursive;
     --editor-cond-bg: #ece8fd;
     --editor-cond-border: #d5c8f7;
     --editor-cond-fg: #5b3dd4;

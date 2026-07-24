@@ -359,6 +359,65 @@ describe('variable', () => {
   })
 })
 
+describe('signature variables', () => {
+  const SIGNATURE: DocumentVariable = {
+    id: 'cliente.assinatura',
+    label: 'Client signature',
+    type: 'signature',
+  }
+
+  function emptyEditor() {
+    return renderEditor([VariableFeature], {
+      content: { doc: { type: 'doc', content: [{ type: 'paragraph' }] } },
+    })
+  }
+
+  it('stamps the type on the node — HTML carries data-variable-type + the modifier class', () => {
+    const created = emptyEditor()
+    expect(created.api.exec('variable.insert', SIGNATURE)).toBe(true)
+
+    const html = created.api.getHTML()
+    expect(html).toContain('data-variable-type="signature"')
+    expect(html).toContain('variable-chip--signature')
+    // The live node view (what the user sees while editing) carries it too.
+    expect(created.editor.view.dom.querySelector('.variable-chip--signature')).not.toBeNull()
+  })
+
+  it('plain variables stay clean — no type attribute, no modifier class', () => {
+    const created = emptyEditor()
+    created.api.exec('variable.insert', { id: 'client.name', label: 'Client name' })
+
+    expect(created.api.getHTML()).not.toContain('data-variable-type')
+    expect(created.api.getHTML()).not.toContain('variable-chip--signature')
+    expect(created.editor.view.dom.querySelector('.variable-chip--signature')).toBeNull()
+  })
+
+  it('round-trips through HTML — loading a saved document restores the type', () => {
+    const created = emptyEditor()
+    created.editor.commands.insertContent(
+      '<span data-variable="cliente.assinatura" data-label="Client signature" data-variable-type="signature">{{Client signature}}</span>',
+    )
+    expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
+      type: 'variable',
+      attrs: { id: 'cliente.assinatura', type: 'signature' },
+    })
+  })
+
+  it('the drag payload carries the type — a panel drag must not demote a signature', () => {
+    const html = variableDragHTML(SIGNATURE)
+    expect(html).toContain('data-variable-type="signature"')
+    // Untyped (default 'text') variables stay attribute-free.
+    expect(variableDragHTML(SAMPLE[0])).not.toContain('data-variable-type')
+
+    const created = emptyEditor()
+    created.editor.commands.insertContent(html)
+    expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
+      type: 'variable',
+      attrs: { id: 'cliente.assinatura', type: 'signature' },
+    })
+  })
+})
+
 describe('drop → caret to the right of the chip', () => {
   it('chipFromSlice accepts a bare chip or one chip alone in a paragraph — nothing richer', () => {
     const created = renderEditor([VariableFeature])
