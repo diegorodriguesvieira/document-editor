@@ -221,45 +221,79 @@ history and scroll survive. A consumer `renderFooter` owns its own gating.
 Programmatic `api.exec`/`api.setJSON` stay available — the prop gates the UI,
 not the API.
 
-**Comments are a REVIEW-mode surface**: they exist only while
-`editable={false}` — selecting text floats an "Add comment" balloon 6px below
-the selection; the panel opens a composer (the consumer's user avatar + field,
-Enter sends); saving goes through YOUR adapter and the SDK refetches (no
-optimistic writes). Anchors are decorations fed by the fetched comments — the
-document itself never mutates and never serializes them. In edit mode nothing
-comment-related renders.
+**Comments are anchored IN the document, owned by YOUR backend**: the anchor
+is a `comment` mark carrying only the backend's id — it SERIALIZES
+(`marks: [{ "type": "comment", "attrs": { "commentId": "<id>" } }]` in JSON,
+`<span class="comment" data-comment-id="…">` in HTML) and ProseMirror moves
+it through every edit. Everything else (text, author, replies, permission
+flags, status) lives behind your `CommentsAdapter`. Highlights, the panel
+(status tabs, replies, edit-in-place) and every action work in BOTH modes —
+only COMPOSING a new comment (the balloon) is review-only (`editable={false}`).
 
 ```tsx
 import {
   CommentsFeature, CommentsLayer, CommentsPanel, CommentsProvider,
   type CommentsAdapter,
-} from '../features'
+} from '@your-scope/document-editor'
 
-// The endpoint seam — implement over your HTTP client:
+// The endpoint seam — all six methods, over your HTTP client. IDs are minted
+// by YOUR backend and must be globally unique (update/remove/setStatus take a
+// comment id OR a reply id). Throw localized Errors: a thrown message is
+// shown VERBATIM to the user in the panel.
 const adapter: CommentsAdapter = {
-  list: () => api.get('/documents/42/comments'),
-  add: (input) => api.post('/documents/42/comments', input), // {text, quote, from, to}
-  remove: (id) => api.delete(`/documents/42/comments/${id}`),
+  list: () => api.get('/documents/42/comments'),            // EVERY status; panel filters
+  add: (input) => api.post('/documents/42/comments', input), // {text, quote} → returns {id}
+  reply: (commentId, input) => api.post(`/comments/${commentId}/replies`, input),
+  update: (id, input) => api.patch(`/comments/${id}`, input),
+  setStatus: (id, input) => api.patch(`/comments/${id}/status`, input),
+  remove: (id) => api.delete(`/comments/${id}`),
 }
 
 <CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
   <DocumentEditor
-    features={[…, CommentsFeature]}   // the decoration kernel
-    editable={!editing}
+    features={[…, CommentsFeature]}   // the mark + interaction kernel
+    editable={!preview}
     renderBubble={(ctx) => (
       <>
-        <BubbleToolbar {...ctx} />          {/* edit mode only */}
-        <CommentsLayer editor={ctx.editor} /> {/* preview only: balloon + highlights */}
+        <BubbleToolbar {...ctx} />            {/* edit mode only */}
+        <CommentsLayer editor={ctx.editor} /> {/* BOTH modes: bridge + review-only balloon */}
       </>
     )}
-    renderRightPanel={(ctx) => (preview ? <CommentsPanel editor={ctx.editor} /> : null)}
+    renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}  {/* BOTH modes */}
   />
 </CommentsProvider>
 ```
 
-Omit `user` for anonymous commenting (generic avatar); deleting requires a
-`user` — the 3-dots menu only shows on comments whose `author.id` matches.
-The active highlight is BIDIRECTIONAL: clicking a card scrolls to the range
+Things the first integration must know:
+
+- **Commenting WRITES to the document.** Anchoring a saved comment and the
+  reconciliation strips (below) dispatch real doc transactions, which fire
+  your debounced `onChange` — including while `editable={false}`. Keep your
+  save path live in review mode, or every anchor created in a review session
+  is lost on reload (the comments come back as orphans).
+- **Actions come from YOUR flags, never from authorship**: each comment
+  carries `canEdit/canReply/canDelete/canResolve/canArchive` (each reply
+  `canEdit/canDelete`) stamped by the backend; `user` only feeds the composer
+  avatar (omit it for anonymous commenting).
+- **Reconciliation**: after each successful `list()`, marks whose id is not
+  an OPEN comment are silently stripped (resolve/archive/delete sheds the
+  highlight); backend comments without a mark render as ORPHANED cards
+  (quote + hint) — still replyable/deletable. It runs from `CommentsLayer`
+  AND `CommentsPanel` (both mount `useCommentsBridge`), so mounting either
+  keeps the document clean.
+- **Custom surfaces**: a custom panel is buildable — `useCommentsBridge`,
+  `applyCommentAnchor` (the `applyAnchor` callback of `addComment`),
+  `collectCommentAnchors` and `commentBalloonShouldShow` are all exported.
+  For just EXTENDING the stock panel's 3-dots menus, pass
+  `commentMenuItems={(comment) => [{ label, onClick, confirmLabel? }]}` (and
+  `replyMenuItems={(reply, comment) => …}`) to `CommentsPanel` — items are
+  data (`ActionsMenuItem`), land between the built-ins and Delete, inherit
+  the 2-step confirm via `confirmLabel`, and are offered on every status
+  (your callback sees `comment.status` and decides what frozen cards get).
+- **i18n**: every UI string is overridable via
+  `<CommentsProvider labels={{ … }}>` (`CommentsLabels`, English defaults).
+
+The active highlight is BIDIRECTIONAL: clicking a card scrolls to the mark
 and lights it up (`comment--active`); clicking a highlight in the document
 lights (and scrolls to) its card in the panel.
 
@@ -354,8 +388,12 @@ import { DocumentVariablesProvider } from '../features'
 Backend-contract values are exported for whoever renders the document:
 `MAX_CONDITIONAL_DEPTH`, `ConditionId`, `Condition`/`ConditionLeaf`/
 `ConditionOperand`, `CONDITION_SIGNATURES` (operator arity table),
-`isCompleteCondition` (the publish gate), `DocumentComment`/`CommentUser`/
-`CommentsAdapter` (the comments backend contract).
+`isCompleteCondition` (the publish gate), and the comments backend contract:
+`DocumentComment`/`CommentReply`/`CommentStatus`/`CommentUser`/
+`CommentsAdapter`/`CommentDraft`/`CommentAnchor`, plus
+`CommentsLabels`/`DEFAULT_COMMENTS_LABELS` (the i18n seam) and the custom-
+surface toolkit `useCommentsBridge`/`applyCommentAnchor`/
+`collectCommentAnchors`/`commentBalloonShouldShow`.
 The condition grammar, coercion rules and error policy live in
 `CONDITION-FORMAT.md`.
 

@@ -1,16 +1,21 @@
-import { defineFeature, Extension } from '../../editor'
+import { defineFeature, Extension, Mark, mergeAttributes } from '../../editor'
 import type { Editor } from '../../editor'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import type { CommentDraft, DocumentComment } from './commentsProvider'
+import {
+  COMMENT_MARK,
+  collectCommentAnchors,
+  stripCommentMarksFromSlice,
+} from './commentAnchors'
+import type { CommentDraft } from './commentsProvider'
 
 /**
- * What the decoration plugin reads. {@link CommentsLayer} keeps it in sync
- * with the {@link CommentsProvider} (and nudges a re-render); the plugin only
- * ever derives from it — comments never touch the document itself.
+ * What the kernel plugin reads beyond the document itself. {@link CommentsLayer}
+ * keeps it in sync with the {@link CommentsProvider} (and nudges a re-render).
+ * The comments themselves are NOT here anymore — their anchors live in the doc
+ * as `comment` marks; only the transient review state passes through storage.
  */
 export interface CommentsStorage {
-  comments: DocumentComment[]
   draft: CommentDraft | null
   activeId: string | null
   /** Set by {@link CommentsLayer}: a document click landed ON a comment
@@ -29,47 +34,79 @@ export function getCommentsStorage(editor: Editor): CommentsStorage | undefined 
 }
 
 /**
- * Comments are a REVIEW-mode overlay: they exist only while the editor is
- * read-only, live backend-side (see {@link CommentsAdapter}) and render as
- * ProseMirror DECORATIONS — the document never mutates and never serializes
- * them. In edit mode the plugin returns nothing, deliberately: anchors are
- * absolute positions in the reviewed document, so an edited document would
- * drift them (re-anchoring by quote is a future concern, not this one's).
+ * The anchor half of a comment: a mark carrying only the backend's id. The
+ * comment CONTENT (text/author/…) stays backend-side (see `CommentsAdapter`);
+ * the mark is what lets ProseMirror move the anchor through edits for free.
+ * `inclusive: false` so typing at the edges doesn't grow the comment;
+ * `excludes: ''` so overlapping comments coexist (they render as nested
+ * spans, each with its own `data-comment-id`).
+ */
+const CommentMark = Mark.create({
+  name: COMMENT_MARK,
+  inclusive: false,
+  excludes: '',
+
+  addAttributes() {
+    return {
+      commentId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-comment-id'),
+        renderHTML: (attributes) =>
+          attributes.commentId ? { 'data-comment-id': attributes.commentId as string } : {},
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-comment-id]' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'comment' }), 0]
+  },
+})
+
+/**
+ * The interaction plugin around the mark, live in BOTH modes (highlights are
+ * part of the document now — review mode is only where NEW comments happen):
+ *
+ * - draft/active emphasis as decorations over the marked ranges;
+ * - click → innermost comment id, reported to the panel;
+ * - pasted/dropped slices stripped of comment marks. (ProseMirror also runs
+ *   `transformPasted` on internal drag-MOVES, so dragging commented text
+ *   orphans the comment — accepted, consistent with delete-and-retype.)
  */
 const CommentsKernel = Extension.create({
+  // Storage is keyed by extension name — `getCommentsStorage` depends on it.
   name: 'comments',
 
   addStorage(): CommentsStorage {
-    return { comments: [], draft: null, activeId: null, onCommentClick: null }
+    return { draft: null, activeId: null, onCommentClick: null }
   },
 
   addProseMirrorPlugins() {
-    const editor = this.editor
     const storage = this.storage as CommentsStorage
     return [
       new Plugin({
-        key: new PluginKey('commentDecorations'),
+        key: new PluginKey('commentsKernel'),
         props: {
           decorations: (state) => {
-            if (editor.isEditable) return null
-            // Backend positions can outlive the doc revision they were made
-            // on — clamp instead of throwing, and drop emptied ranges.
-            const max = state.doc.content.size
-            const clamp = (pos: number) => Math.max(0, Math.min(pos, max))
             const decorations: Decoration[] = []
-            for (const comment of storage.comments) {
-              const from = clamp(comment.from)
-              const to = clamp(comment.to)
-              if (from >= to) continue
-              const active = comment.id === storage.activeId
-              decorations.push(
-                Decoration.inline(from, to, {
-                  class: active ? 'comment comment--active' : 'comment',
-                  'data-comment-id': comment.id,
-                }),
-              )
+            if (storage.activeId) {
+              const anchor = collectCommentAnchors(state.doc).get(storage.activeId)
+              // Per SEGMENT, never the union — a fragmented mark's gap must
+              // not light up. Only the modifier class: the decoration span
+              // nests inside the mark's `.comment` span, and doubling that
+              // class would double its border.
+              for (const segment of anchor?.segments ?? []) {
+                decorations.push(
+                  Decoration.inline(segment.from, segment.to, { class: 'comment--active' }),
+                )
+              }
             }
             if (storage.draft) {
+              const max = state.doc.content.size
+              const clamp = (pos: number) => Math.max(0, Math.min(pos, max))
               const from = clamp(storage.draft.from)
               const to = clamp(storage.draft.to)
               if (from < to) {
@@ -81,19 +118,24 @@ const CommentsKernel = Extension.create({
           // Clicking a highlight activates its comment in the panel (the
           // mirror of the panel's click-to-scroll); clicking plain text
           // deactivates. Never consumes the click — the caret still lands.
-          handleClick: (_view, pos) => {
-            if (editor.isEditable) return false
+          handleClick: (view, pos) => {
             const notify = storage.onCommentClick
             if (!notify) return false
-            // Overlaps: the INNERMOST (smallest) covering comment wins.
-            let hit: DocumentComment | null = null
-            for (const comment of storage.comments) {
-              if (pos < comment.from || pos > comment.to) continue
-              if (!hit || comment.to - comment.from < hit.to - hit.from) hit = comment
+            // Overlaps: the INNERMOST (smallest total span) comment wins.
+            let hitId: string | null = null
+            let hitSpan = Infinity
+            for (const [id, anchor] of collectCommentAnchors(view.state.doc)) {
+              if (!anchor.segments.some((seg) => pos >= seg.from && pos <= seg.to)) continue
+              const span = anchor.to - anchor.from
+              if (span < hitSpan) {
+                hitId = id
+                hitSpan = span
+              }
             }
-            notify(hit ? hit.id : null)
+            notify(hitId)
             return false
           },
+          transformPasted: (slice, view) => stripCommentMarksFromSlice(slice, view.state.schema),
         },
       }),
     ]
@@ -101,14 +143,16 @@ const CommentsKernel = Extension.create({
 })
 
 /**
- * Review-mode comments: the decoration kernel only. The UI lives in
- * {@link CommentsLayer} (the "Add comment" balloon) and {@link CommentsPanel}
- * (composer + cards), both fed by {@link CommentsProvider}.
+ * Comments with in-document anchors: the `comment` mark (serializes to
+ * JSON/HTML as `data-comment-id`) plus the interaction kernel. The UI lives in
+ * {@link CommentsLayer} (the review-only "Add comment" balloon — mount it in
+ * BOTH modes; it is also the provider↔doc reconciliation bridge) and
+ * {@link CommentsPanel} (composer + cards), both fed by {@link CommentsProvider}.
  *
- * Contributes — extensions only (no bubble/insert items): comment highlights
- * as read-only decorations. In edit mode nothing renders, by design.
+ * Contributes — extensions only (no bubble/insert items). Highlights render in
+ * edit mode too; only COMPOSING a comment is review-mode-only.
  */
 export const CommentsFeature = defineFeature({
   id: 'comments',
-  extensions: () => [CommentsKernel],
+  extensions: () => [CommentMark, CommentsKernel],
 })

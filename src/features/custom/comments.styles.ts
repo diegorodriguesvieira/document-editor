@@ -1,11 +1,15 @@
-/* CommentsFeature — the review-mode highlight DECORATIONS (the document
-   itself never carries comments). Scoped: a consumer page's own '.comment'
+/* CommentsFeature — the comment highlights: `.comment` is the MARK's span
+   (the anchor lives in the document; overlapping comments nest spans, so
+   their backgrounds stack slightly darker), `--draft`/`--active` are
+   decoration emphasis on top. Scoped: a consumer page's own '.comment'
    class must not pick up SDK styles. */
 import { css } from '@emotion/react'
 
 export const commentsStyles = css`
+  /* Translucent on purpose: overlapping comments render as NESTED spans, and
+     only a see-through background lets the overlap actually read darker. */
   .document-editor__surface .comment {
-    background: var(--editor-comment-bg);
+    background: color-mix(in srgb, var(--editor-comment-accent) 18%, transparent);
     border-bottom: 2px solid var(--editor-comment-accent);
   }
 

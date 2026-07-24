@@ -3,13 +3,22 @@ import { useEffect, useRef, type RefObject } from 'react'
 type MaybeRef = RefObject<HTMLElement | null>
 
 /**
- * Escape closes surfaces innermost-first: capture-phase listeners on document
- * fire in REGISTRATION order, so without coordination a long-lived surface
- * (e.g. an open header/footer region) would swallow the Escape meant for a
- * popover opened after it. Each enabled instance registers here; only the
- * top of the stack (the most recently enabled surface) closes per press.
+ * Escape closes surfaces innermost-first — with FOCUS as the tiebreaker:
+ * capture-phase listeners on document fire in registration order, so without
+ * coordination a long-lived surface (e.g. an open header/footer region) would
+ * swallow the Escape meant for a popover opened after it. Each enabled
+ * instance registers here; the surface whose root CONTAINS the focused
+ * element closes per press (with two composers open, Escape must not destroy
+ * the one the user is NOT typing in), falling back to the most recently
+ * enabled surface when focus sits in none of them.
  */
-const escapeStack: Array<() => void> = []
+interface EscapeEntry {
+  /** null = an external owner (MUI modal, suggestion popup) — everyone yields. */
+  close: (() => void) | null
+  owns: (node: Node) => boolean
+}
+
+const escapeStack: EscapeEntry[] = []
 
 /**
  * Non-React surfaces join the same innermost-first Escape coordination (the
@@ -20,7 +29,7 @@ const escapeStack: Array<() => void> = []
  * Returns an idempotent unregister; call it on the surface's exit.
  */
 export function registerEscapeSurface(): () => void {
-  const marker = () => {}
+  const marker: EscapeEntry = { close: null, owns: () => false }
   escapeStack.push(marker)
   return () => {
     const index = escapeStack.indexOf(marker)
@@ -93,14 +102,38 @@ export function useDismissable(
       const inside = list.some((ref) => ref.current?.contains(target))
       if (!inside) close()
     }
+    const entry: EscapeEntry = {
+      close,
+      owns: (node) => {
+        const current = refsRef.current
+        const list = Array.isArray(current) ? current : [current as MaybeRef]
+        return list.some((ref) => ref.current?.contains(node) ?? false)
+      },
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
-      // Only the top surface (most recently enabled) closes on this press.
-      if (escapeStack[escapeStack.length - 1] !== close) return
+      const top = escapeStack[escapeStack.length - 1]
+      // An external owner (MUI modal, suggestion popup) tops the stack —
+      // yield the press entirely.
+      if (!top || top.close == null) return
+      // FOCUS decides: the surface holding the focused element closes; when
+      // focus sits in none, the most recently enabled surface does.
+      const active = document.activeElement
+      let chosen = top
+      if (active) {
+        for (let index = escapeStack.length - 1; index >= 0; index--) {
+          const candidate = escapeStack[index]
+          if (candidate.close != null && candidate.owns(active)) {
+            chosen = candidate
+            break
+          }
+        }
+      }
+      if (chosen !== entry) return
       event.preventDefault()
       close()
     }
-    escapeStack.push(close)
+    escapeStack.push(entry)
     document.addEventListener('mousedown', onDown, true)
     // Capture phase: ProseMirror consumes Escape (preventDefault) inside the
     // editable, which would starve a bubble-phase listener — capture runs
@@ -111,7 +144,7 @@ export function useDismissable(
       window.addEventListener('resize', close)
     }
     return () => {
-      const index = escapeStack.indexOf(close)
+      const index = escapeStack.indexOf(entry)
       if (index >= 0) escapeStack.splice(index, 1)
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('keydown', onKey, true)

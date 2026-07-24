@@ -120,9 +120,10 @@ export const STARTER_DOC: DocumentJSON = {
   },
 }
 
-/** Content under review (for the comments story) — comments live BACKEND-side
- *  now (decorations, not marks), so the doc itself is plain. The story's fake
- *  adapter seeds a comment anchored on the "30 days" range. */
+/** Content under review (for the comments stories) — the comment's ANCHOR
+ *  lives in the doc as a `comment` mark on "30 days"; its CONTENT (text,
+ *  author) lives backend-side, seeded by the stories' fake adapter under the
+ *  same id. */
 export const COMMENTED_DOC: DocumentJSON = {
   doc: {
     type: 'doc',
@@ -131,7 +132,13 @@ export const COMMENTED_DOC: DocumentJSON = {
       {
         type: 'paragraph',
         content: [
-          { type: 'text', text: 'The delivery deadline is 30 days after signature.' },
+          { type: 'text', text: 'The delivery deadline is ' },
+          {
+            type: 'text',
+            marks: [{ type: 'comment', attrs: { commentId: 'c-1' } }],
+            text: '30 days',
+          },
+          { type: 'text', text: ' after signature.' },
         ],
       },
     ],

@@ -54,6 +54,7 @@ const KITCHEN_SINK = {
           { type: 'text', text: ' italic', marks: [{ type: 'italic' }] },
           { type: 'text', text: ' link', marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] },
           { type: 'text', text: ' colored', marks: [{ type: 'textStyle', attrs: { color: '#188038' } }] },
+          { type: 'text', text: ' commented', marks: [{ type: 'comment', attrs: { commentId: 'c-ks' } }] },
           { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
         ],
       },
@@ -147,6 +148,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-conditional-block',
       '&quot;ref&quot;:&quot;pais&quot;', // condition JSON inside data-condition, entity-escaped
       'data-variable="client.name"',
+      'data-comment-id="c-ks"',
       'data-type="callout"',
       '<strong', '<em', 'href="https://example.com"',
       '<table', '<img', '<pre', '<blockquote', '<hr', '<ul',

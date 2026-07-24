@@ -142,11 +142,12 @@ describe('<App /> review comments (preview mode)', () => {
     })
   }
 
-  it('nothing comment-related exists in EDIT mode', async () => {
+  it('EDIT mode offers no way to COMMENT — and no panel while the doc has none', async () => {
     render(<App />)
     const bubble = await selectSomeText()
     expect(within(bubble).queryByRole('button', { name: 'Comment' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add comment' })).toBeNull()
+    // The panel lives in both modes now, but self-hides while empty.
     expect(screen.queryByRole('complementary', { name: 'Comments' })).toBeNull()
   })
 
@@ -174,10 +175,113 @@ describe('<App /> review comments (preview mode)', () => {
     expect(within(panel).getByText('Diego Rodrigues')).toBeInTheDocument()
     expect(within(panel).getByText('DR')).toBeInTheDocument()
     expect(within(panel).queryByText(/hello/)).toBeNull()
+    // The saved comment is ANCHORED: its mark wraps the selected word.
+    const highlight = () => document.querySelector('.ProseMirror span.comment[data-comment-id]')
+    expect(highlight()?.textContent).toBe('hello')
 
-    // Own comment → 3-dots → Delete → DELETE endpoint + refetch → card leaves.
+    // Own comment → 3-dots → Delete → DELETE endpoint + refetch → card leaves
+    // (and reconciliation sheds the now-dangling mark).
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
     await waitFor(() => expect(screen.queryByText('trocar essa palavra')).toBeNull())
+    await waitFor(() => expect(highlight()).toBeNull())
+  })
+
+  it('a saved comment can be REPLIED to from the panel — one level, via the mock API', async () => {
+    await enterPreviewSelecting()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Comment text' }),
+      'comentário raiz{Enter}',
+    )
+    await waitFor(
+      () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
+      { timeout: 3000 },
+    )
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('comentário raiz')
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Reply text' }),
+      'resposta direta{Enter}',
+    )
+
+    // Saved (300ms) + refetched (300ms): the composer closes FIRST (else a
+    // text query could match the textarea still holding the typed reply)…
+    await waitFor(
+      () => expect(screen.queryByRole('textbox', { name: 'Reply text' })).toBeNull(),
+      { timeout: 3000 },
+    )
+    // …then the reply lands nested in the thread…
+    const row = (await within(panel).findByText('resposta direta')).closest('li') as HTMLElement
+    // …which still counts as ONE open thread, and offers no reply-to-reply.
+    expect(within(panel).getByRole('tab', { name: 'Comments (1)' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Reply' })).toBeNull()
+  })
+
+  it('resolving from the panel sheds the highlight and moves the thread to the Resolved tab', async () => {
+    await enterPreviewSelecting()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Comment text' }),
+      'resolvível{Enter}',
+    )
+    await waitFor(
+      () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
+      { timeout: 3000 },
+    )
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    const card = (await within(panel).findByText('resolvível')).closest('li') as HTMLElement
+    // Only this comment carries a mark in THIS editor (earlier tests' shared
+    // db leftovers render as orphans, markless).
+    const highlight = () => document.querySelector('.ProseMirror span.comment[data-comment-id]')
+    expect(highlight()).not.toBeNull()
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Resolve' }))
+
+    // PATCH (300ms) + refetch (300ms) → reconciliation sheds the mark…
+    await waitFor(() => expect(highlight()).toBeNull(), { timeout: 3000 })
+    // …the card leaves the open tab and lives on, frozen, under Resolved.
+    expect(within(panel).queryByText('resolvível')).toBeNull()
+    await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
+    const frozen = within(panel).getByText('resolvível').closest('li') as HTMLElement
+    expect(within(frozen).getByText('“hello”')).toBeInTheDocument()
+    expect(within(frozen).queryByRole('button', { name: 'Reply' })).toBeNull()
+  })
+
+  it('the highlight and the panel SURVIVE the switch back to edit mode — only composing is review-only', async () => {
+    await enterPreviewSelecting()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: 'Comment text' }),
+      'segue no modo edição{Enter}',
+    )
+    await waitFor(
+      () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
+      { timeout: 3000 },
+    )
+    await screen.findByRole('complementary', { name: 'Comments' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await waitFor(() =>
+      expect(document.querySelector('.ProseMirror')?.getAttribute('contenteditable')).toBe('true'),
+    )
+
+    // The mark rode along into edit mode, and the panel kept its card (await:
+    // the draft clears BEFORE the refetch lands — the card can lag ~300ms).
+    expect(document.querySelector('.ProseMirror span.comment[data-comment-id]')?.textContent).toBe(
+      'hello',
+    )
+    const panel = screen.getByRole('complementary', { name: 'Comments' })
+    expect(await within(panel).findByText('segue no modo edição')).toBeInTheDocument()
+
+    // …but selecting text summons only the FORMATTING bubble, never the balloon.
+    act(() => {
+      editor().commands.setTextSelection({ from: 8, to: 12 })
+    })
+    await screen.findByRole('toolbar', { name: 'Formatting' })
+    expect(screen.queryByRole('button', { name: 'Add comment' })).toBeNull()
   })
 })

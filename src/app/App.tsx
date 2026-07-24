@@ -138,16 +138,14 @@ export default function App() {
                 </Button>
               </div>
             )}
-            // The right rail is consumer-owned. Comments are a REVIEW-mode
-            // surface — the rail only exists in preview; in edit mode there is
-            // nothing comment-related anywhere.
-            renderRightPanel={(ctx) =>
-              preview ? (
-                <div className="right-rail">
-                  <CommentsPanel editor={ctx.editor} />
-                </div>
-              ) : null
-            }
+            // The right rail is consumer-owned. The comments panel lives in
+            // BOTH modes (anchors are marks in the doc; it self-hides while
+            // empty) — only COMPOSING a comment is preview-only.
+            renderRightPanel={(ctx) => (
+              <div className="right-rail">
+                <CommentsPanel editor={ctx.editor} />
+              </div>
+            )}
             // FOOTER content (the fixed shell is the SDK's): zoom on the
             // left, the insert actions centered (headless InsertToolbar) and
             // the Send action on the right.
@@ -172,9 +170,10 @@ export default function App() {
             )}
             // The bubble is the ONLY toolbar (plus the footer insert dock).
             // Undo/redo stay out: not selection-scoped (keyboard covers them).
-            // CommentsLayer rides along: the "Add comment" balloon + comment
-            // highlights, both exclusive to preview (the bubble is exclusive
-            // to edit) — the two floating surfaces never coexist.
+            // CommentsLayer rides along in both modes: the doc↔backend
+            // reconciliation bridge, plus the "Add comment" balloon —
+            // preview-only (the bubble is edit-only), so the two floating
+            // surfaces never coexist.
             renderBubble={(ctx) => (
               <>
                 <BubbleToolbar {...ctx} filter={(item) => item.group !== 'history'} />

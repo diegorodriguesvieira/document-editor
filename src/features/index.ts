@@ -31,12 +31,22 @@ export { CommentsFeature } from './custom/comments'
 export { CommentsProvider, useComments } from './custom/commentsProvider'
 export type {
   CommentDraft,
+  CommentReply,
   CommentsAdapter,
+  CommentStatus,
   CommentUser,
   DocumentComment,
 } from './custom/commentsProvider'
-export { CommentsLayer, commentBalloonShouldShow } from './custom/commentsLayer'
+export { CommentsLayer, commentBalloonShouldShow, useCommentsBridge } from './custom/commentsLayer'
 export { CommentsPanel } from './custom/commentsPanel'
+export type { ActionsMenuItem } from './custom/commentsPanel'
+// The anchor toolkit a CUSTOM panel needs: applying the backend id over the
+// draft range (the `applyAnchor` callback of `addComment`) and deriving
+// positions/orphans from the doc.
+export { applyCommentAnchor, collectCommentAnchors } from './custom/commentAnchors'
+export type { CommentAnchor } from './custom/commentAnchors'
+export { DEFAULT_COMMENTS_LABELS } from './custom/commentsProvider'
+export type { CommentsLabels } from './custom/commentsProvider'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'
 export type { DocumentVariable } from './custom/documentVariables'
