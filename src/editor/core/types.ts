@@ -61,6 +61,13 @@ export interface NodeBubbleSection {
   items: BubbleItem[]
 }
 
+/** What a context-menu item's custom `render` receives: the live editor/api
+ *  plus `close`, so the control can dismiss the whole menu once it has acted
+ *  (a default item closes automatically after its command runs). */
+export interface ContextMenuRenderContext extends FeatureRenderContext {
+  close: () => void
+}
+
 /** A single right-click (context menu) action. */
 export interface ContextMenuItem {
   id: string
@@ -68,8 +75,9 @@ export interface ContextMenuItem {
   /** Icon for the item — a ReactNode (e.g. an @mui/icons-material element)
    *  or a short text/emoji string; the host decides how to render it. */
   icon?: ReactNode
-  /** Command id (from some feature's `commands`) to run when picked. */
-  commandId: string
+  /** Command id (from some feature's `commands`) to run when picked. Optional
+   *  when `render` provides a fully custom row. */
+  commandId?: string
   /** Render in a destructive (red) style, e.g. "Delete row". */
   danger?: boolean
   /** Show the item only when it currently applies (e.g. "Split cell" only in a
@@ -81,6 +89,11 @@ export interface ContextMenuItem {
    *  features are TipTap-native by design. The trade-off: `when` and bar-item
    *  predicates stay mock-testable; `isAvailable` needs a real editor. */
   isAvailable?: (editor: Editor) => boolean
+  /** Escape hatch: render a fully custom row (e.g. a swatch grid) instead of
+   *  the default menu item — the context-menu counterpart of a bar item's
+   *  `render`. The control acts through `ctx.api.exec(...)` and calls
+   *  `ctx.close()` to dismiss the menu. */
+  render?: (ctx: ContextMenuRenderContext) => ReactNode
 }
 
 /** A labelled group of context-menu items, e.g. "Row" / "Column" / "Cell". */

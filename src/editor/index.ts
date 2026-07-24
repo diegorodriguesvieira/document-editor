@@ -10,6 +10,7 @@ export type {
   CommandFn,
   ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuRenderContext,
   ContextMenuSection,
   FeatureDefinition,
   FeatureRenderContext,

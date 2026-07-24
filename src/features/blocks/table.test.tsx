@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createMockEditor,
   BubbleBar,
@@ -8,10 +8,10 @@ import {
   type EditorApi,
   type EditorStateView,
 } from '../../editor'
-import { docWith, jsonFindNode, renderEditor } from '../../test/editorHarness'
+import { docWith, jsonFindNode, parseSliceFromHTML, renderEditor } from '../../test/editorHarness'
 import { BoldFeature } from '../marks/bold'
-import { ColorFeature } from '../custom/color'
-import { TableColumnsFeature, TableFeature } from './table'
+import { ColorFeature, DEFAULT_PALETTE } from '../custom/color'
+import { createTableFeature, TableColumnsFeature, TableFeature } from './table'
 
 /** Minimal EditorStateView for testing a context-menu `when` predicate. */
 const stateView = (isActive: (name: string) => boolean): EditorStateView => ({
@@ -70,11 +70,15 @@ describe('table feature', () => {
     expect(section!.when(stateView((name) => name === 'table'))).toBe(true)
     expect(section!.when(stateView(() => false))).toBe(false)
 
-    // Every menu item points at a command the feature actually registers.
+    // Every default menu item points at a command the feature actually
+    // registers; the one custom row (the background swatches) ships a render
+    // instead of a commandId.
     const { commands } = resolveFeatures([TableFeature])
-    const ids = section!.groups.flatMap((group) => group.items.map((item) => item.commandId))
+    const items = section!.groups.flatMap((group) => group.items)
+    const ids = items.filter((item) => !item.render).map((item) => item.commandId)
     expect(ids.length).toBeGreaterThan(0)
-    for (const id of ids) expect(commands[id]).toBeDefined()
+    for (const id of ids) expect(id && commands[id]).toBeDefined()
+    expect(items.filter((item) => item.render).map((item) => item.id)).toEqual(['cell-background'])
   })
 
   it('gates EVERY menu item by current applicability (via editor.can)', () => {
@@ -94,6 +98,7 @@ describe('table feature', () => {
       merge: false,
       split: false,
       header: true,
+      'cell-background': true,
       'delete-table': true,
     }
     expect(items.length).toBe(Object.keys(expected).length)
@@ -147,6 +152,112 @@ describe('table feature', () => {
     expect(firstRowTypes()).toEqual(['tableCell', 'tableCell', 'tableCell'])
     expect(api.exec('table.toggleHeaderRow')).toBe(true)
     expect(firstRowTypes()).toEqual(['tableHeader', 'tableHeader', 'tableHeader'])
+  })
+})
+
+describe("table.setCellBackground (the context menu's cell background swatches)", () => {
+  /** backgroundColor of every cell (header cells included), doc order. */
+  const backgrounds = (editor: ReturnType<typeof withTable>['editor']) => {
+    const list: (string | null)[] = []
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        list.push(node.attrs.backgroundColor)
+      }
+    })
+    return list
+  }
+
+  it('stamps the color on the current cell — attrs + inline style (the backend HTML contract)', () => {
+    const { api } = withTable() // caret lands in the first HEADER cell
+    expect(api.exec('table.setCellBackground', '#f9ab00')).toBe(true)
+    expect(jsonFindNode(api.getJSON().doc, 'tableHeader')?.attrs?.backgroundColor).toBe('#f9ab00')
+    // The color must survive as cell markup — the backend renders this HTML.
+    // (jsdom serializes the style attribute normalized: hex becomes rgb().)
+    expect(api.getHTML()).toMatch(/background-color: (#f9ab00|rgb\(249, 171, 0\))/)
+  })
+
+  it('paints every cell of a multi-cell selection, and unset clears them all', async () => {
+    const { CellSelection } = await import('@tiptap/pm/tables')
+    const { editor, api } = withTable()
+
+    const cells: number[] = []
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableCell') cells.push(pos)
+    })
+    editor.view.dispatch(
+      editor.state.tr.setSelection(CellSelection.create(editor.state.doc, cells[0], cells[1])),
+    )
+
+    expect(api.exec('table.setCellBackground', 'rgb(26, 115, 232)')).toBe(true)
+    expect(backgrounds(editor).filter(Boolean)).toEqual(['rgb(26, 115, 232)', 'rgb(26, 115, 232)'])
+
+    expect(api.exec('table.unsetCellBackground')).toBe(true)
+    expect(backgrounds(editor).filter(Boolean)).toEqual([])
+  })
+
+  it('parses back from HTML — the paste/backend pipeline round-trips the inline style', () => {
+    const { editor } = withTable()
+    const slice = parseSliceFromHTML(
+      editor,
+      '<table><tbody><tr><td style="background-color: rgb(217, 48, 37)"><p>x</p></td></tr></tbody></table>',
+    )
+    let parsed: string | null = null
+    slice.content.descendants((node) => {
+      if (node.type.name === 'tableCell') parsed = node.attrs.backgroundColor
+      return parsed == null
+    })
+    expect(parsed).toBe('rgb(217, 48, 37)')
+  })
+
+  it('rejects payloads that could smuggle style declarations, leaving the cell untouched', () => {
+    const { api, editor } = withTable()
+    expect(api.exec('table.setCellBackground', 'red; background-image: url(x)')).toBe(false)
+    expect(api.exec('table.setCellBackground', '</style><script>')).toBe(false)
+    expect(api.exec('table.setCellBackground', '   ')).toBe(false)
+    expect(api.exec('table.setCellBackground')).toBe(false)
+    expect(backgrounds(editor).filter(Boolean)).toEqual([])
+  })
+})
+
+describe('createTableFeature palette (shared with the bubble text-color picker)', () => {
+  /** Mounts just the cell-background row out of the feature's context menu,
+   *  against a mock editor — the same wiring the menu's `renderCtx` provides. */
+  function renderCellBackgroundRow(feature: ReturnType<typeof createTableFeature>) {
+    const mock = createMockEditor()
+    const close = vi.fn()
+    const item = feature
+      .contextMenu![0].groups.flatMap((group) => group.items)
+      .find((candidate) => candidate.id === 'cell-background')!
+    render(<>{item.render!({ editor: null, api: mock.api, close })}</>)
+    return { mock, close }
+  }
+
+  it('defaults to the SAME palette as the bubble text-color picker', async () => {
+    const user = userEvent.setup()
+    renderCellBackgroundRow(TableFeature)
+
+    await user.click(screen.getByRole('button', { name: 'Cell background color' }))
+    for (const color of DEFAULT_PALETTE) {
+      expect(screen.getByRole('button', { name: color })).toBeInTheDocument()
+    }
+  })
+
+  it('a custom palette replaces the presets, and picking one dispatches it as the payload', async () => {
+    const user = userEvent.setup()
+    const { mock, close } = renderCellBackgroundRow(
+      createTableFeature({ palette: ['#123456', '#abcdef'] }),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cell background color' }))
+    expect(screen.getByRole('button', { name: '#123456' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: DEFAULT_PALETTE[0] })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '#abcdef' }))
+    expect(mock.execCalls).toContainEqual({
+      commandId: 'table.setCellBackground',
+      payload: '#abcdef',
+    })
+    expect(close).toHaveBeenCalled()
   })
 })
 

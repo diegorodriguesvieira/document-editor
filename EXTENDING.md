@@ -30,11 +30,17 @@ Configurable features ship as factories with a zero-config default. The color
 picker's palette, for example:
 
 ```tsx
-import { createColorFeature } from '../features'
+import { createColorFeature, createTableFeature } from '../features'
 
-const BrandColor = createColorFeature({ palette: ['#0a2540', '#635bff', '#00d4ff'] })
-<DocumentEditor features={[…, BrandColor]} />
+const palette = ['#0a2540', '#635bff', '#00d4ff']
+const BrandColor = createColorFeature({ palette })
+const BrandTable = createTableFeature({ palette }) // cell background picker — same swatches
+<DocumentEditor features={[…, BrandColor, BrandTable]} />
 ```
+
+The table's cell-background picker defaults to the same palette as the text
+color picker; when you customize one, pass the same array to both (as above)
+so the two stay in sync.
 
 Options are composition-time config — pick them when you build the array
 (identity is keyed by feature ids, so a same-id swap at runtime is ignored).
@@ -167,6 +173,9 @@ contextMenu: [{
 Every matching section from every feature is shown (registration order) — two
 features can both own the clicked spot. `isAvailable` receives the raw editor
 (deliberately: `editor.can()` probes aren't expressible on the thin state view).
+An item can swap the default row for custom UI with `render: (ctx) =>
+ReactNode` (no `commandId` then) — ctx is the bar `render` context plus
+`close()`; see the table feature's cell-background swatches.
 
 ## 6. Page regions & the side panels
 

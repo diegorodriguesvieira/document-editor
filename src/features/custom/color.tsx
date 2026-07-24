@@ -4,8 +4,9 @@ import { Color, TextStyle } from '@tiptap/extension-text-style'
 import { defineFeature, PopupShell, useFeatureState, type FeatureRenderContext } from '../../editor'
 import { popupTriggerProps } from '../promptForms'
 
-/** The default palette (Google-Docs-ish) — swap it via `createColorFeature`. */
-const DEFAULT_PALETTE = [
+/** The default palette (Google-Docs-ish) — swap it via `createColorFeature`.
+ *  Also the swatch set of the table context menu's cell-background picker. */
+export const DEFAULT_PALETTE = [
   '#000000',
   '#5f6368',
   '#d93025',
@@ -22,6 +23,20 @@ export interface ColorFeatureOptions {
   /** Preset swatches (any CSS color strings). The "Default" reset and the "+"
    *  native custom picker are always present alongside them. */
   palette?: string[]
+}
+
+/**
+ * Payload gate for colors that land in a `style` attribute of the backend/PDF
+ * HTML contract (`color.set`, `table.setCellBackground`). The regex is the
+ * injection gate (no declaration smuggling); CSS.supports refines it in real
+ * browsers (jsdom lacks it).
+ */
+export function isSafeCssColor(color: string): boolean {
+  if (!color || /[;{}<>]/.test(color)) return false
+  if (typeof CSS !== 'undefined' && CSS.supports && !CSS.supports('color', color)) {
+    return false
+  }
+  return true
 }
 
 /**
@@ -139,13 +154,9 @@ export function createColorFeature({ palette = DEFAULT_PALETTE }: ColorFeatureOp
       'color.set': (editor, payload) => {
         // The value lands in a style attribute (`color: <value>`) of the
         // backend/PDF HTML contract — validate like every payload sibling
-        // (image.insert). The regex is the injection gate (no declaration
-        // smuggling); CSS.supports refines it in real browsers (jsdom lacks it).
+        // (image.insert).
         const color = typeof payload === 'string' ? payload.trim() : ''
-        if (!color || /[;{}<>]/.test(color)) return false
-        if (typeof CSS !== 'undefined' && CSS.supports && !CSS.supports('color', color)) {
-          return false
-        }
+        if (!isSafeCssColor(color)) return false
         return editor.chain().focus().setColor(color).run()
       },
       'color.unset': (editor) => editor.chain().focus().unsetColor().run(),

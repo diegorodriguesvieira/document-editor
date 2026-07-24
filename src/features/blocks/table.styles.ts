@@ -95,4 +95,47 @@ export const tableStyles = css`
     outline: 2px solid var(--editor-accent-ink);
     outline-offset: -2px;
   }
+
+  /* The context menu's "Cell background color" row — a MenuItem look-alike
+     (the real items are MUI MenuItems; this row hosts its own popover trigger
+     so it can't be one). The dropdown-style color well sits in the icon
+     column; the picker it opens reuses the color-picker classes
+     (ColorFeature's skin) — the same popover as the bubble's text-color
+     swatch. */
+  .document-editor-popup.context-menu .cell-background__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 4px 16px;
+    border: none;
+    background: transparent;
+    color: var(--editor-control-fg);
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  /* The well shows the CURRENT fill (transparent = no fill) behind a chevron. */
+  .document-editor-popup.context-menu .cell-background__well {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 26px;
+    border: 1px solid var(--editor-border-muted);
+    border-radius: 8px;
+    color: var(--editor-text-muted);
+  }
+
+  .document-editor-popup.context-menu .cell-background__row:hover {
+    background: var(--editor-subtle-bg);
+  }
+
+  .document-editor-popup.context-menu .cell-background__row:focus-visible {
+    outline: 2px solid var(--editor-accent-ink);
+    outline-offset: -2px;
+  }
 `

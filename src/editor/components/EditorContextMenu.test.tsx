@@ -79,6 +79,56 @@ describe('<ContextMenuView />', () => {
     expect(paper.classList.contains('document-editor-popup')).toBe(true)
     expect(document.querySelector('.MuiBackdrop-root')!.classList.contains('document-editor-popup')).toBe(false)
   })
+
+  const CUSTOM_GROUPS: ContextMenuGroup[] = [
+    {
+      id: 'cell',
+      items: [
+        {
+          id: 'custom',
+          label: 'Custom row',
+          render: ({ api, close }) => (
+            <button
+              type="button"
+              onClick={() => {
+                api.exec('feature.custom', 'payload')
+                close()
+              }}
+            >
+              Pick
+            </button>
+          ),
+        },
+      ],
+    },
+  ]
+
+  it('renders a custom `render` item with the live ctx — it execs with a payload and closes the menu', async () => {
+    const user = userEvent.setup()
+    const mock = createMockEditor()
+    const onClose = vi.fn()
+    render(
+      <ContextMenuView
+        x={0}
+        y={0}
+        groups={CUSTOM_GROUPS}
+        onRun={() => {}}
+        onClose={onClose}
+        renderCtx={{ editor: null, api: mock.api }}
+      />,
+    )
+
+    // Not a menuitem — the row hosts its own controls.
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Pick' }))
+    expect(mock.execCalls).toContainEqual({ commandId: 'feature.custom', payload: 'payload' })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('skips custom items when no renderCtx is provided (the pure-view path)', () => {
+    render(<ContextMenuView x={0} y={0} groups={CUSTOM_GROUPS} onRun={() => {}} onClose={() => {}} />)
+    expect(screen.queryByRole('button', { name: 'Pick' })).toBeNull()
+  })
 })
 
 describe('<EditorContextMenu /> (the controller wired to a real editor)', () => {
@@ -132,6 +182,51 @@ describe('<EditorContextMenu /> (the controller wired to a real editor)', () => 
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull()) // runs once, then closes
     const table = jsonFindNode(created.api.getJSON().doc, 'table')
     expect(table?.content).toHaveLength(4) // 3×3 grew a row — the real command ran
+  })
+
+  it('paints the right-clicked cell through the REAL cell background picker', async () => {
+    const created = mountController()
+    created.api.exec('table.insert') // 3x3, caret in the first header cell
+    const target = cellPositions(created.editor).at(-1)! + 2 // inside the LAST cell
+
+    created.rightClick({ pos: target, inside: 0 })
+
+    // The custom row opens the same picker popover the bubble's swatch uses.
+    fireEvent.click(await screen.findByRole('button', { name: 'Cell background color' }))
+    fireEvent.click(await screen.findByRole('button', { name: '#d93025' }))
+
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull()) // picking closes it all
+    const painted: string[] = []
+    created.editor.state.doc.descendants((node) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        if (node.attrs.backgroundColor) painted.push(node.attrs.backgroundColor)
+      }
+    })
+    expect(painted).toEqual(['#d93025']) // exactly the clicked cell, nothing else
+  })
+
+  it('reflects the CURRENT fill: the well is painted and the matching swatch is marked active', async () => {
+    const created = mountController()
+    created.api.exec('table.insert') // caret lands in the first HEADER cell
+    created.api.exec('table.setCellBackground', '#d93025') // paint THAT cell
+    const target = cellPositions(created.editor)[0] + 2 // right-click the same cell
+
+    created.rightClick({ pos: target, inside: 0 })
+
+    // The row's well shows the cell's current fill (reads the tableHeader
+    // branch of the attribute lookup — the painted cell is a header cell).
+    const row = await screen.findByRole('button', { name: 'Cell background color' })
+    expect(row.querySelector('.cell-background__well')).toHaveStyle({
+      backgroundColor: '#d93025',
+    })
+
+    fireEvent.click(row)
+    // In the picker, the matching swatch is the active one — not "No fill".
+    expect(await screen.findByRole('button', { name: '#d93025' })).toHaveAttribute(
+      'data-active',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'No fill' })).toHaveAttribute('data-active', 'false')
   })
 
   it('never collapses an existing selection — the right-button mousedown is suppressed and the range survives', () => {

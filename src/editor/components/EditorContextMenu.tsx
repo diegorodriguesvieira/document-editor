@@ -9,7 +9,7 @@ import type { EditorApi } from '../core/EditorApi'
 import { useEscapeSurface } from '../hooks/useDismissable'
 import { POPUP_CLASS } from '../base.styles'
 import { tokenVar } from '../theme'
-import type { ContextMenuGroup, ContextMenuSection } from '../core/types'
+import type { ContextMenuGroup, ContextMenuSection, FeatureRenderContext } from '../core/types'
 
 /**
  * Pure presentational menu — grouped actions at (x, y), on MUI's Menu: the
@@ -23,12 +23,17 @@ export function ContextMenuView({
   groups,
   onRun,
   onClose,
+  renderCtx,
 }: {
   x: number
   y: number
   groups: ContextMenuGroup[]
   onRun: (commandId: string) => void
   onClose: () => void
+  /** Context handed to custom `render` items (the controller passes the live
+   *  editor + api). Without it — the pure-view path — custom items are skipped,
+   *  keeping the view testable with data alone. */
+  renderCtx?: FeatureRenderContext
 }) {
   // MUI owns this surface's Escape (onClose 'escapeKeyDown') — older
   // useDismissable surfaces (an open region, the pinned panel) must yield.
@@ -65,30 +70,42 @@ export function ContextMenuView({
             {group.label}
           </ListSubheader>
         ) : null,
-        ...group.items.map((item) => (
-          <MenuItem
-            key={item.id}
-            className={
-              item.danger ? 'context-menu__item context-menu__item--danger' : 'context-menu__item'
-            }
-            sx={
-              item.danger
-                ? {
-                    color: tokenVar('--editor-danger'),
-                    // The red hover the CSS skin used to give danger items —
-                    // and the one consumer keeping --editor-danger-bg alive.
-                    '&:hover': { backgroundColor: tokenVar('--editor-danger-bg') },
-                  }
-                : undefined
-            }
-            onClick={() => onRun(item.commandId)}
-          >
-            {item.icon ? (
-              <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>{item.icon}</ListItemIcon>
-            ) : null}
-            {item.label}
-          </MenuItem>
-        )),
+        ...group.items.map((item) => {
+          if (item.render) {
+            // Not a MenuItem: the row hosts its own interactive controls, and
+            // nesting those inside a menuitem would break both ARIA and MUI's
+            // arrow-key traversal (which skips children without a tabindex).
+            return renderCtx ? (
+              <li key={item.id} role="presentation" className="context-menu__custom">
+                {item.render({ ...renderCtx, close: onClose })}
+              </li>
+            ) : null
+          }
+          return (
+            <MenuItem
+              key={item.id}
+              className={
+                item.danger ? 'context-menu__item context-menu__item--danger' : 'context-menu__item'
+              }
+              sx={
+                item.danger
+                  ? {
+                      color: tokenVar('--editor-danger'),
+                      // The red hover the CSS skin used to give danger items —
+                      // and the one consumer keeping --editor-danger-bg alive.
+                      '&:hover': { backgroundColor: tokenVar('--editor-danger-bg') },
+                    }
+                  : undefined
+              }
+              onClick={() => item.commandId && onRun(item.commandId)}
+            >
+              {item.icon ? (
+                <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>{item.icon}</ListItemIcon>
+              ) : null}
+              {item.label}
+            </MenuItem>
+          )
+        }),
       ])}
     </Menu>
   )
@@ -178,6 +195,7 @@ export function EditorContextMenu({ editor, api, sections }: EditorContextMenuPr
       x={open.x}
       y={open.y}
       groups={open.groups}
+      renderCtx={{ editor, api }}
       onRun={(commandId) => {
         api.exec(commandId)
         setOpen(null)
