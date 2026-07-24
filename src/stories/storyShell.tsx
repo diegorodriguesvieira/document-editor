@@ -139,8 +139,11 @@ const mixed = (...parts: Array<string | ReturnType<typeof chip>>) => ({
 /** A LONG agreement with variable chips spread far apart — the used-variables
  *  panel story needs real scroll distance between occurrences. Uses 3 of the
  *  5 provider VARIABLES on purpose: the panel lists what the DOCUMENT uses,
- *  not what the @ menu offers. `client.name` appears 3× (opening, clause 9,
- *  signature line) so the occurrence navigator has a cycle worth walking. */
+ *  not what the @ menu offers. TWO variables repeat — `client.name` 3×
+ *  (opening, clause 9, signature line) and `contract.number` 2× (clause 5,
+ *  signature line) — so the occurrence navigator has cycles worth walking AND
+ *  a repeated→repeated switch to exercise; `amount.monthly` stays single so
+ *  clicking it closes the pill. */
 export const VARIABLES_DOC: DocumentJSON = {
   doc: {
     type: 'doc',
@@ -183,7 +186,9 @@ export const VARIABLES_DOC: DocumentJSON = {
       mixed(
         'Signed in two counterparts of equal content and form by ',
         chip('client.name', 'Client name'),
-        ' and the Provider, in the presence of the witnesses below.',
+        ' and the Provider, under contract ',
+        chip('contract.number', 'Contract number'),
+        ', in the presence of the witnesses below.',
       ),
     ],
   },

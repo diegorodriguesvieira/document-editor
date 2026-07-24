@@ -176,6 +176,11 @@ function UsedVariablesPanel({ editor, api }: DocumentEditorRenderContext) {
               if (variable.positions.length > 1) {
                 setActive({ id: variable.id, index: goTo(variable.positions, 0) })
               } else {
+                // Single occurrence: nothing to step through — dismiss an open
+                // pill first (collapsing its node-selection outline, same as
+                // the × button), then plain-jump without selecting.
+                if (openFor) editor.commands.setTextSelection(openFor.positions[activeIndex])
+                setActive(null)
                 api.scrollTo(variable.positions[0])
               }
             }}
@@ -292,8 +297,10 @@ export const UsedVariablesInTheLeftPanel: Story = {
           'chevrons wrap around the occurrences, each jump is consumer code composing the seams — ' +
           '`editor.commands.setNodeSelection(pos)` for the highlight (`scrollTo` never touches ' +
           'selection) plus `api.scrollTo(pos)` — and Esc/× close it via the shared dismiss contract ' +
-          '(`useDismissable`), while outside clicks keep it open, like Docs. Delete chips while it is ' +
-          'open: the count shrinks live and the pill closes itself below two occurrences.',
+          '(`useDismissable`), while outside clicks keep it open, like Docs. Clicking a ' +
+          'SINGLE-occurrence variable plain-jumps and dismisses an open pill (nothing to step ' +
+          'through). Delete chips while it is open: the count shrinks live and the pill closes ' +
+          'itself below two occurrences.',
       },
     },
   },
