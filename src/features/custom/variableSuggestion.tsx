@@ -59,11 +59,11 @@ export function variableInsertContent(field: {
   label?: string
   type?: DocumentVariable['type']
 }) {
-  // 'text' is the default — don't stamp it, so plain variables serialize
-  // without a data-variable-type attribute.
-  const type = field.type && field.type !== 'text' ? field.type : null
+  // The catalog type picks WHICH chip node lands in the document — signature
+  // is its own node type, not a typed variable (future kinds add cases here).
+  const nodeType = field.type === 'signature' ? 'signature' : 'variable'
   return [
-    { type: 'variable', attrs: { id: field.id, label: field.label ?? field.id, type } },
+    { type: nodeType, attrs: { id: field.id, label: field.label ?? field.id } },
     { type: 'text', text: ' ' },
   ]
 }

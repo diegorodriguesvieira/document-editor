@@ -30,8 +30,9 @@ export const variableStyles = css`
     user-select: none;
   }
 
-  /* Signature variables keep the chip look but render in the signature font.
-     Script faces run small — 1em compensates the base chip's 0.9em. */
+  /* Signature chips (the dedicated signature node) keep the chip look but
+     render in the signature font. Script faces run small — 1em compensates
+     the base chip's 0.9em. */
   .document-editor__surface .variable-chip--signature {
     font-family: var(--editor-signature-font);
     font-size: 1em;

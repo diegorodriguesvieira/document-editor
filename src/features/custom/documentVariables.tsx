@@ -6,9 +6,9 @@ export interface DocumentVariable {
   /** Optional section for pickers (e.g. the variables panel groups by it). */
   group?: string
   /** Value type. Drives the condition builder (a 'boolean' variable locks the
-   *  operator to EQUALS and offers a True/False value) and rendering (a
-   *  'signature' chip is stamped into the document + styled with the
-   *  signature font). Default: 'text'. */
+   *  operator to EQUALS and offers a True/False value) and which chip node an
+   *  insertion lands (a 'signature' variable inserts the dedicated
+   *  `signature` node — script-font styled). Default: 'text'. */
   type?: 'text' | 'boolean' | 'signature'
   /** Where the variable is offered. 'document' (default) = insertable in text
    *  AND usable in conditions; 'condition' = condition builder only (never in

@@ -79,21 +79,21 @@ describe('<VariableMenu />', () => {
 })
 
 describe('variableInsertContent', () => {
-  it('stamps a non-text type on the node attrs', () => {
+  it('a signature-typed catalog entry inserts the dedicated signature NODE', () => {
     expect(variableInsertContent({ id: 'a', label: 'A', type: 'signature' })[0]).toEqual({
-      type: 'variable',
-      attrs: { id: 'a', label: 'A', type: 'signature' },
+      type: 'signature',
+      attrs: { id: 'a', label: 'A' },
     })
   })
 
-  it("normalizes absent and default 'text' types to null — clean HTML for the common case", () => {
+  it("absent and default 'text' types insert a plain variable node — no type attr anywhere", () => {
     expect(variableInsertContent({ id: 'a', label: 'A' })[0]).toEqual({
       type: 'variable',
-      attrs: { id: 'a', label: 'A', type: null },
+      attrs: { id: 'a', label: 'A' },
     })
     expect(variableInsertContent({ id: 'a', label: 'A', type: 'text' })[0]).toEqual({
       type: 'variable',
-      attrs: { id: 'a', label: 'A', type: null },
+      attrs: { id: 'a', label: 'A' },
     })
   })
 })

@@ -36,15 +36,6 @@ const VariableNode = Node.create({
         renderHTML: (attributes) =>
           attributes.label ? { 'data-label': attributes.label as string } : {},
       },
-      // Value type from the catalog ('signature', …). Stamped into the
-      // document so the backend can tell these chips apart; absent for plain
-      // text variables.
-      type: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-variable-type'),
-        renderHTML: (attributes) =>
-          attributes.type ? { 'data-variable-type': attributes.type as string } : {},
-      },
     }
   },
 
@@ -54,18 +45,17 @@ const VariableNode = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const label = (node.attrs.label ?? node.attrs.id ?? '') as string
-    return ['span', mergeAttributes(HTMLAttributes, { class: chipClass(node.attrs.type) }), `{{${label}}}`]
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'variable-chip' }), `{{${label}}}`]
   },
 
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('span')
-      dom.className = chipClass(node.attrs.type)
+      dom.className = 'variable-chip'
       dom.contentEditable = 'false'
       const id = (node.attrs.id ?? '') as string
       const label = (node.attrs.label ?? node.attrs.id ?? '') as string
       if (id) dom.setAttribute('data-variable', id)
-      if (node.attrs.type) dom.setAttribute('data-variable-type', node.attrs.type as string)
       dom.textContent = `{{${label}}}`
       return { dom }
     }
@@ -119,24 +109,81 @@ const VariableNode = Node.create({
   },
 })
 
-/** Base chip class + a per-type modifier ('signature' gets the script font). */
-function chipClass(type: unknown): string {
-  return type === 'signature' ? 'variable-chip variable-chip--signature' : 'variable-chip'
-}
+/**
+ * Signature chip — its OWN node type, not a typed `variable` (same pattern as
+ * `conditionalBlock`): value kinds with distinct backend semantics get
+ * distinct node types, dispatched on `type` alone in JSON and a dedicated
+ * `data-signature` attribute in HTML. Future kinds follow this shape.
+ * Editing behavior is identical to the variable chip — the drop plugin and
+ * both insertion paths handle either node name.
+ */
+const SignatureNode = Node.create({
+  name: 'signature',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-signature'),
+        renderHTML: (attributes) =>
+          attributes.id ? { 'data-signature': attributes.id as string } : {},
+      },
+      label: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-label'),
+        renderHTML: (attributes) =>
+          attributes.label ? { 'data-label': attributes.label as string } : {},
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-signature]' }]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const label = (node.attrs.label ?? node.attrs.id ?? '') as string
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, { class: 'variable-chip variable-chip--signature' }),
+      `{{${label}}}`,
+    ]
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('span')
+      dom.className = 'variable-chip variable-chip--signature'
+      dom.contentEditable = 'false'
+      const id = (node.attrs.id ?? '') as string
+      const label = (node.attrs.label ?? node.attrs.id ?? '') as string
+      if (id) dom.setAttribute('data-signature', id)
+      dom.textContent = `{{${label}}}`
+      return { dom }
+    }
+  },
+})
+
+/** The chip node names both insertion/drop paths treat interchangeably. */
+const CHIP_NODES = new Set(['variable', 'signature'])
 
 /**
- * The single variable chip inside a drop payload, if that's ALL the payload
- * is (a bare chip, or a chip alone inside one paragraph — both shapes come out
- * of parsing the panel's text/html). Anything richer falls back to PM's
- * default drop. Exported for tests.
+ * The single chip (variable or signature) inside a drop payload, if that's
+ * ALL the payload is (a bare chip, or a chip alone inside one paragraph —
+ * both shapes come out of parsing the panel's text/html). Anything richer
+ * falls back to PM's default drop. Exported for tests.
  */
 export function chipFromSlice(slice: Slice): PMNode | null {
   const first = slice.content.firstChild
   if (!first || slice.content.childCount !== 1) return null
-  if (first.type.name === 'variable') return first
+  if (CHIP_NODES.has(first.type.name)) return first
   if (first.type.name === 'paragraph' && first.childCount === 1) {
     const inner = first.firstChild
-    if (inner?.type.name === 'variable') return inner
+    if (inner && CHIP_NODES.has(inner.type.name)) return inner
   }
   return null
 }
@@ -144,15 +191,15 @@ export function chipFromSlice(slice: Slice): PMNode | null {
 /**
  * The drag payload IS the chip's HTML serialization: ProseMirror handles
  * `text/html` drops natively (position mapping + schema parse — the same
- * pipeline as paste), and `span[data-variable]` already has a parse rule.
- * So dragging a variable from the panel onto the page needs NO drop handler
- * anywhere. Built via DOM so ids/labels are attribute-escaped correctly.
+ * pipeline as paste), and `span[data-variable]` / `span[data-signature]`
+ * both have parse rules. So dragging a variable from the panel onto the page
+ * needs NO drop handler anywhere. Built via DOM so ids/labels are
+ * attribute-escaped correctly.
  */
 export function variableDragHTML(variable: DocumentVariable): string {
   const span = document.createElement('span')
-  span.setAttribute('data-variable', variable.id)
+  span.setAttribute(variable.type === 'signature' ? 'data-signature' : 'data-variable', variable.id)
   span.setAttribute('data-label', variable.label)
-  if (variable.type && variable.type !== 'text') span.setAttribute('data-variable-type', variable.type)
   span.textContent = `{{${variable.label}}}`
   return span.outerHTML
 }
@@ -417,8 +464,8 @@ function VariableInsert({ api }: { api: EditorApi }) {
  */
 export const VariableFeature = defineFeature({
   id: 'variable',
-  // The node (chip) + the `@` typing trigger that inserts it.
-  extensions: () => [VariableNode, createVariableNodeSuggestion()],
+  // Both chip nodes + the `@` typing trigger that inserts them.
+  extensions: () => [VariableNode, SignatureNode, createVariableNodeSuggestion()],
   commands: {
     'variable.insert': (editor, payload) => {
       const field = (payload ?? {}) as { id?: string; label?: string; type?: DocumentVariable['type'] }

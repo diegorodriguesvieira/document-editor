@@ -372,48 +372,52 @@ describe('signature variables', () => {
     })
   }
 
-  it('stamps the type on the node — HTML carries data-variable-type + the modifier class', () => {
+  it('inserts the dedicated `signature` node — HTML carries data-signature + the modifier class', () => {
     const created = emptyEditor()
     expect(created.api.exec('variable.insert', SIGNATURE)).toBe(true)
 
+    expect(jsonHasNode(created.api.getJSON().doc, 'signature')).toBe(true)
     const html = created.api.getHTML()
-    expect(html).toContain('data-variable-type="signature"')
+    expect(html).toContain('data-signature="cliente.assinatura"')
     expect(html).toContain('variable-chip--signature')
+    // No typed-variable leftovers: not a `variable` node in disguise.
+    expect(html).not.toContain('data-variable')
     // The live node view (what the user sees while editing) carries it too.
     expect(created.editor.view.dom.querySelector('.variable-chip--signature')).not.toBeNull()
   })
 
-  it('plain variables stay clean — no type attribute, no modifier class', () => {
+  it('plain variables stay clean — no signature attribute, no modifier class', () => {
     const created = emptyEditor()
     created.api.exec('variable.insert', { id: 'client.name', label: 'Client name' })
 
-    expect(created.api.getHTML()).not.toContain('data-variable-type')
+    expect(created.api.getHTML()).not.toContain('data-signature')
     expect(created.api.getHTML()).not.toContain('variable-chip--signature')
     expect(created.editor.view.dom.querySelector('.variable-chip--signature')).toBeNull()
   })
 
-  it('round-trips through HTML — loading a saved document restores the type', () => {
+  it('round-trips through HTML — loading a saved document restores the signature node', () => {
     const created = emptyEditor()
     created.editor.commands.insertContent(
-      '<span data-variable="cliente.assinatura" data-label="Client signature" data-variable-type="signature">{{Client signature}}</span>',
+      '<span data-signature="cliente.assinatura" data-label="Client signature">{{Client signature}}</span>',
     )
     expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
-      type: 'variable',
-      attrs: { id: 'cliente.assinatura', type: 'signature' },
+      type: 'signature',
+      attrs: { id: 'cliente.assinatura', label: 'Client signature' },
     })
   })
 
-  it('the drag payload carries the type — a panel drag must not demote a signature', () => {
+  it('the drag payload carries the node identity — a panel drag must not demote a signature', () => {
     const html = variableDragHTML(SIGNATURE)
-    expect(html).toContain('data-variable-type="signature"')
-    // Untyped (default 'text') variables stay attribute-free.
-    expect(variableDragHTML(SAMPLE[0])).not.toContain('data-variable-type')
+    expect(html).toContain('data-signature="cliente.assinatura"')
+    // Plain variables keep the variable attribute — the two never mix.
+    expect(variableDragHTML(SAMPLE[0])).toContain('data-variable=')
+    expect(variableDragHTML(SAMPLE[0])).not.toContain('data-signature')
 
     const created = emptyEditor()
     created.editor.commands.insertContent(html)
     expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
-      type: 'variable',
-      attrs: { id: 'cliente.assinatura', type: 'signature' },
+      type: 'signature',
+      attrs: { id: 'cliente.assinatura', label: 'Client signature' },
     })
   })
 })
@@ -428,6 +432,12 @@ describe('drop → caret to the right of the chip', () => {
 
     const inParagraph = parse(`<p>${variableDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(inParagraph)?.attrs.id).toBe('client.name')
+
+    // Signature chips ride the same drop path — same caret-after-drop feel.
+    const signature = parse(
+      variableDragHTML({ id: 'cliente.assinatura', label: 'Client signature', type: 'signature' }),
+    )
+    expect(chipFromSlice(signature)?.type.name).toBe('signature')
 
     const richer = parse(`<p>texto ${variableDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(richer)).toBeNull()
