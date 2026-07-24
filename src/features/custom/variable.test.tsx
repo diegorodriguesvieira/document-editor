@@ -78,6 +78,23 @@ describe('variable', () => {
     expect(screen.queryByRole('button', { name: 'Client name' })).toBeNull()
   })
 
+  it('hides condition-scoped variables — decision flags are predicates, not insertable text', async () => {
+    const user = userEvent.setup()
+    renderRail([
+      ...SAMPLE,
+      {
+        id: 'EC_DECISION_FULLTIME',
+        label: 'If contract is full-time',
+        type: 'boolean',
+        scope: 'condition',
+      },
+    ])
+
+    await user.click(screen.getByRole('button', { name: 'Variables' }))
+    expect(screen.getByRole('button', { name: 'Client name' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'If contract is full-time' })).toBeNull()
+  })
+
   it('groups variables by their optional `group` (ungrouped = flat, no header)', async () => {
     const user = userEvent.setup()
     renderRail([

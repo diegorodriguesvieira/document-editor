@@ -30,6 +30,19 @@ describe('<VariableMenu />', () => {
     expect(screen.getAllByRole('option')).toHaveLength(3)
   })
 
+  it('hides condition flags — the @ list only offers insertable variables', () => {
+    render(
+      <DocumentVariablesProvider
+        variables={VARS}
+        conditions={[{ id: 'EC_DECISION_FULLTIME', label: 'If contract is full-time' }]}
+      >
+        <VariableMenu query="" command={vi.fn()} />
+      </DocumentVariablesProvider>,
+    )
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+    expect(screen.queryByRole('option', { name: /If contract is full-time/ })).toBeNull()
+  })
+
   it('filters to labels that start with the typed query', () => {
     renderMenu('cli') // matches "Client name" only
     expect(screen.getByRole('option', { name: /Client name/ })).toBeInTheDocument()

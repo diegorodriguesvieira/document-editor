@@ -6,7 +6,7 @@ import {
   useListKeyboardNav,
   type SuggestionPopupRef,
 } from '../../editor'
-import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { useMentionVariables, type DocumentVariable } from './documentVariables'
 
 /**
  * Floating list shown while typing `@…`. Reads the (consumer-provided)
@@ -18,7 +18,8 @@ export const VariableMenu = forwardRef<
   SuggestionPopupRef,
   { query: string; command: (variable: DocumentVariable) => void }
 >(function VariableMenu({ query, command }, ref) {
-  const variables = useDocumentVariables()
+  // Mention scope only: condition-scoped variables can't be inserted in text.
+  const variables = useMentionVariables()
   const items = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return variables

@@ -94,7 +94,9 @@ Operador desconhecido ou aridade errada = **erro de validação** (§5), nunca i
 
 ### 2.4 Coerção e valores ausentes — regras normativas
 
-Tipagem de variáveis está **adiada** (decisão de 2026-07-02). Até lá, as regras abaixo são o contrato — definidas de forma **independente de linguagem** (não dependa de peculiaridades do `Number()`/`String()` de JS):
+> **Tipagem declarada no registry (2026-07-24):** o registry de variáveis do editor agora aceita um tipo declarado por variável (`type: 'text' | 'boolean'`; default `'text'`). Isso é metadado de **UI**: uma variável `boolean` (ex.: as decision flags do catálogo EOR, `EC_DECISION_*`) trava o builder em `EQUALS` com valor True/False, e o editor emite o literal **booleano** correspondente (`{"type":"literal","value":true}` — nunca as strings `"true"`/`"false"`). **Nada muda neste contrato**: o wire format é o mesmo, e as regras de coerção abaixo continuam normativas — `EQUALS` entre um boolean resolvido e um literal boolean compara via string (`"true"`/`"false"`), como já especificado. O registry também aceita `scope: 'document' | 'condition'` (visibilidade de picker — irrelevante para o backend).
+
+As regras abaixo são o contrato — definidas de forma **independente de linguagem** (não dependa de peculiaridades do `Number()`/`String()` de JS):
 
 **Valor ausente** (variável fora do mapa de dados, ou com valor `null`):
 
@@ -119,7 +121,7 @@ Tipagem de variáveis está **adiada** (decisão de 2026-07-02). Até lá, as re
 
 Operando **inválido** em comparação numérica → a folha avalia `false` (opcionalmente logar warning).
 
-Quando o registry de variáveis ganhar tipos declarados, esta seção será revisada.
+Tipos declarados hoje cobrem `'text' | 'boolean'` (nota no topo desta seção). Extensões futuras (`number`, `enum` com opções) revisarão esta seção se afetarem coerção.
 
 ---
 

@@ -380,10 +380,20 @@ them async doesn't recreate the editor:
 ```tsx
 import { DocumentVariablesProvider } from '../features'
 
-<DocumentVariablesProvider variables={vars}>
+<DocumentVariablesProvider variables={vars} conditions={decisionFlags}>
   <DocumentEditor features={…} />
 </DocumentVariablesProvider>
 ```
+
+`conditions` (optional, `ConditionFlag[]` = `{ id, label, group? }`) is the
+spelling for backend decision catalogs: boolean predicates offered ONLY in the
+conditional-block builder (operator pinned to "is equal to", True/False value)
+and never in the @ picker. The provider folds them into the same registry
+stamped `type: 'boolean'` + `scope: 'condition'` — you can set those two
+fields on a `DocumentVariable` yourself, but the prop makes forgetting the
+scope (and leaking a flag into the @ menu) impossible. One registry, one ref
+namespace: in `data-condition` both spellings serialize to the same
+`{ type: 'variable', ref }` operand.
 
 Backend-contract values are exported for whoever renders the document:
 `MAX_CONDITIONAL_DEPTH`, `ConditionId`, `Condition`/`ConditionLeaf`/

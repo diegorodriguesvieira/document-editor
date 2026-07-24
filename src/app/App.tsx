@@ -13,10 +13,12 @@ import {
   CommentsPanel,
   CommentsProvider,
   DocumentVariablesProvider,
+  type ConditionFlag,
   type DocumentVariable,
 } from '../features'
 import { contractTemplate } from './contractTemplate'
 import { createFakeCommentsAdapter, MOCK_USER } from './commentsMock'
+import { normalizeConditionals, RAW_CONDITIONALS } from './decisionConditionals'
 import { ZoomControls } from './ZoomControls'
 import { fullFeatures } from './presets'
 import './styles.css' // demo-app chrome (the SDK skin now ships inside the components)
@@ -65,10 +67,13 @@ export default function App() {
   // hides its OWN mutating chrome (the insert actions); the SDK hides the rest.
   const [preview, setPreview] = useState(false)
 
-  // Fake API: @-variables arrive ~1.5s after mount. Because they flow through
-  // context (not the `features` list), the editor mounts immediately and does
-  // NOT remount when they arrive — only the @ modal fills in.
+  // Fake API: @-variables and the EOR decision catalog arrive ~1.5s after
+  // mount. Because they flow through context (not the `features` list), the
+  // editor mounts immediately and does NOT remount when they arrive — only
+  // the pickers fill in. Decisions go through the `conditions` prop: the
+  // provider scopes them to the conditional-block builder (never the @ menu).
   const [docVariables, setDocVariables] = useState<DocumentVariable[]>([])
+  const [decisionFlags, setDecisionFlags] = useState<ConditionFlag[]>([])
   useEffect(() => {
     const timer = setTimeout(() => {
       setDocVariables([
@@ -78,6 +83,7 @@ export default function App() {
         { id: 'contrato.vigencia', label: 'Term', group: 'Contract details' },
         { id: 'valor.mensal', label: 'Monthly amount', group: 'Contract details' },
       ])
+      setDecisionFlags(normalizeConditionals(RAW_CONDITIONALS))
     }, 1500)
     return () => clearTimeout(timer)
   }, [])
@@ -86,8 +92,9 @@ export default function App() {
     <div className="app">
       <main className="app__canvas">
         {/* Document variables come from here (consumer), via context — shared by
-            variables and conditional blocks. */}
-        <DocumentVariablesProvider variables={docVariables}>
+            variables and conditional blocks. `conditions` = the backend decision
+            catalog, offered only in the conditional-block builder. */}
+        <DocumentVariablesProvider variables={docVariables} conditions={decisionFlags}>
           {/* Review comments: identity + endpoints come from the consumer.
               Context reaches every surface, including the body-portaled
               balloon and the right-rail panel. */}

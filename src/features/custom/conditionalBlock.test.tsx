@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
@@ -697,6 +697,146 @@ describe('<ConditionEditor />', () => {
     })
   })
 
+  // Backend decision catalogs (e.g. EOR flags) arrive as condition-scoped
+  // BOOLEAN variables: predicate semantics — operator pinned, value True/False.
+  const TYPED_VARS: DocumentVariable[] = [
+    ...VARS,
+    {
+      id: 'EC_DECISION_FULLTIME',
+      label: 'If contract is full-time',
+      type: 'boolean',
+      scope: 'condition',
+    },
+    {
+      id: 'EC_DECISION_HAS_PROBATION',
+      label: 'If there is probation period',
+      type: 'boolean',
+      scope: 'condition',
+    },
+  ]
+
+  it('pins EQUALS (disabled) for a boolean variable and emits a REAL boolean literal', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={TYPED_VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'EC_DECISION_FULLTIME')
+
+    const condition = screen.getByLabelText('Condition') as HTMLSelectElement
+    expect(condition.value).toBe('EQUALS')
+    expect(condition).toBeDisabled()
+    // No literal/variable toggle: a boolean predicate only compares to True/False.
+    expect(screen.queryByLabelText('Compare with')).toBeNull()
+
+    // The value starts EMPTY — publishing still requires an explicit pick.
+    expect((screen.getByLabelText('Value') as HTMLSelectElement).value).toBe('')
+    expect(isCompleteCondition(last)).toBe(false)
+
+    await user.selectOptions(screen.getByLabelText('Value'), 'true')
+    expect(last).toEqual({
+      all: [
+        {
+          op: 'EQUALS',
+          params: [
+            { type: 'variable', ref: 'EC_DECISION_FULLTIME' },
+            { type: 'literal', value: true }, // boolean, never the string "true"
+          ],
+        },
+      ],
+    })
+    expect(isCompleteCondition(last)).toBe(true)
+
+    await user.selectOptions(screen.getByLabelText('Value'), 'false')
+    expect((last as unknown as { all: [{ params: unknown[] }] }).all[0].params[1]).toEqual({
+      type: 'literal',
+      value: false,
+    })
+  })
+
+  it('keeps the True/False pick when switching between two boolean variables', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={TYPED_VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'EC_DECISION_FULLTIME')
+    await user.selectOptions(screen.getByLabelText('Value'), 'true')
+    await user.selectOptions(screen.getByLabelText('Variable'), 'EC_DECISION_HAS_PROBATION')
+
+    expect(last).toEqual({
+      all: [
+        {
+          op: 'EQUALS',
+          params: [
+            { type: 'variable', ref: 'EC_DECISION_HAS_PROBATION' },
+            { type: 'literal', value: true },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('unlocks the operator and clears the stale boolean when switching to a text variable', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={TYPED_VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'EC_DECISION_FULLTIME')
+    await user.selectOptions(screen.getByLabelText('Value'), 'true')
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+
+    // Crossing the boolean/text line: `true` must not leak into the text input.
+    expect(last).toEqual({
+      all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'gross.salary' }, null] }],
+    })
+    expect(screen.getByLabelText('Condition')).toBeEnabled()
+    expect((screen.getByLabelText('Value') as HTMLInputElement).value).toBe('')
+  })
+
+  it('clears a typed literal when switching from a text to a boolean variable', async () => {
+    const user = userEvent.setup()
+    let last: Condition | null = null
+    render(<ControlledEditor variables={TYPED_VARS} onState={(next) => (last = next)} />)
+
+    await user.selectOptions(screen.getByLabelText('Variable'), 'gross.salary')
+    await user.selectOptions(screen.getByLabelText('Condition'), 'EQUALS')
+    await user.type(screen.getByLabelText('Value'), 'hello')
+    await user.selectOptions(screen.getByLabelText('Variable'), 'EC_DECISION_FULLTIME')
+
+    expect(last).toEqual({
+      all: [{ op: 'EQUALS', params: [{ type: 'variable', ref: 'EC_DECISION_FULLTIME' }, null] }],
+    })
+    // The True/False select shows the placeholder, not the stale free text.
+    expect((screen.getByLabelText('Value') as HTMLSelectElement).value).toBe('')
+  })
+
+  it('lists condition-scoped variables — the builder is where they DO show', () => {
+    render(<ControlledEditor variables={TYPED_VARS} />)
+    const select = screen.getByLabelText('Variable') as HTMLSelectElement
+    expect(
+      within(select).getByRole('option', { name: 'If contract is full-time' }),
+    ).toBeInTheDocument()
+    // The catalog carries no groups — flat options, no invented <optgroup>.
+    expect(select.querySelector('optgroup')).toBeNull()
+  })
+
+  it('renders <optgroup> sections only for variables that DO declare a group', () => {
+    render(
+      <ControlledEditor
+        variables={[
+          { id: 'client.name', label: 'Client name', group: 'Client details' },
+          { id: 'EC_DECISION_FULLTIME', label: 'If contract is full-time', type: 'boolean', scope: 'condition' },
+        ]}
+      />,
+    )
+    const select = screen.getByLabelText('Variable') as HTMLSelectElement
+    const grouped = select.querySelector('optgroup[label="Client details"]')
+    expect(grouped).not.toBeNull()
+    expect(within(grouped as HTMLElement).getByRole('option', { name: 'Client name' })).toBeInTheDocument()
+    // The ungrouped decision stays a top-level option.
+    const flat = within(select).getByRole('option', { name: 'If contract is full-time' })
+    expect(flat.closest('optgroup')).toBeNull()
+  })
+
   it('refuses to flatten a multi-condition tree it cannot represent', () => {
     const leaves = [
       { op: 'EXISTS' as const, params: [{ type: 'variable' as const, ref: 'a' }] },
@@ -752,6 +892,22 @@ describe('conditional block — summary bar text', () => {
         ],
       }),
     ).toBe('Gross salary is greater than 10000')
+  })
+
+  it('renders boolean literals as True/False, not JSON true/false', async () => {
+    expect(
+      await renderSummary({
+        all: [
+          {
+            op: 'EQUALS',
+            params: [
+              { type: 'variable', ref: 'gross.salary' },
+              { type: 'literal', value: true },
+            ],
+          },
+        ],
+      }),
+    ).toBe('Gross salary is equal to True')
   })
 
   it('renders a draft as "no conditions set"', async () => {

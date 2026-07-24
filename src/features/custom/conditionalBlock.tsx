@@ -13,7 +13,7 @@ import {
 import { GapCursor } from '@tiptap/pm/gapcursor'
 import { type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model'
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state'
-import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { groupVariables, useDocumentVariables, type DocumentVariable } from './documentVariables'
 import AddCircleOutline from '@mui/icons-material/AddCircleOutline'
 import KeyboardArrowDown from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUp from '@mui/icons-material/KeyboardArrowUp'
@@ -257,11 +257,58 @@ function VariableSelect({
         }
       >
         <option value="">Select a variable *</option>
-        {variables.map((variable) => (
-          <option key={variable.id} value={variable.id}>
-            {variable.label}
-          </option>
-        ))}
+        {/* Variables that declare a `group` render under an <optgroup>;
+            ungrouped ones (e.g. backend decision flags) stay flat. */}
+        {groupVariables(variables).map(([group, items]) => {
+          const options = items.map((variable) => (
+            <option key={variable.id} value={variable.id}>
+              {variable.label}
+            </option>
+          ))
+          return group ? (
+            <optgroup key={group} label={group}>
+              {options}
+            </optgroup>
+          ) : (
+            <Fragment key="ungrouped">{options}</Fragment>
+          )
+        })}
+      </TextField>
+    </div>
+  )
+}
+
+/** The boolean face of the right-hand operand: an explicit True/False pick
+ * emitting a REAL boolean literal (never the strings "true"/"false"). Starts
+ * empty — the publish gate keeps requiring a conscious choice, like every
+ * other select in the builder. */
+function BooleanValueSelect({
+  value,
+  onPick,
+}: {
+  value: boolean | null
+  onPick: (operand: ConditionOperand | null) => void
+}) {
+  return (
+    <div className="cond-editor__group">
+      <span className="cond-editor__label">Value</span>
+      <TextField
+        select
+        className="cond-editor__field"
+        size="small"
+        value={value == null ? '' : String(value)}
+        slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Value' } }}
+        onChange={(event) =>
+          onPick(
+            event.target.value === ''
+              ? null
+              : { type: 'literal', value: event.target.value === 'true' },
+          )
+        }
+      >
+        <option value="">Select a value *</option>
+        <option value="true">True</option>
+        <option value="false">False</option>
       </TextField>
     </div>
   )
@@ -305,6 +352,12 @@ export function ConditionEditor({
 
   const option = CONDITIONS.find((c) => c.id === leaf.op)
   const left = leaf.params[0] ?? null
+  // The left variable's DECLARED type drives the rest of the form: a boolean
+  // variable (e.g. a backend decision flag) reads as a predicate — operator
+  // pinned to EQUALS (select disabled), value a plain True/False.
+  const leftVariable =
+    left?.type === 'variable' ? variables.find((v) => v.id === left.ref) : undefined
+  const isBooleanVar = leftVariable?.type === 'boolean'
   // Always emit the canonical shape; never mutate — PM history shares attr refs.
   const commit = (next: ConditionLeaf) => onChange({ all: [next] })
 
@@ -315,13 +368,31 @@ export function ConditionEditor({
     commit({ op, params: Array.from({ length: arity }, (_, i) => leaf.params[i] ?? null) })
   }
 
+  const setLeft = (operand: ConditionOperand | null) => {
+    const picked =
+      operand?.type === 'variable' ? variables.find((v) => v.id === operand.ref) : undefined
+    const pickedBoolean = picked?.type === 'boolean'
+    // Picking a boolean variable pins the operator right away; and crossing
+    // the boolean/text line invalidates the right operand (a `true` must not
+    // leak into the text input, nor free text into the True/False select).
+    const op = pickedBoolean ? 'EQUALS' : leaf.op
+    const keepRight = pickedBoolean === isBooleanVar
+    const arity = op ? CONDITION_SIGNATURES[op] : 2
+    commit({
+      op,
+      params: Array.from({ length: arity }, (_, i) =>
+        i === 0 ? operand : keepRight ? (leaf.params[i] ?? null) : null,
+      ),
+    })
+  }
+
   return (
     <div className="cond-editor">
       <VariableSelect
         variables={variables}
         value={left?.type === 'variable' ? left.ref : ''}
         ariaLabel="Variable"
-        onPick={(operand) => commit({ ...leaf, params: withParam(leaf.params, 0, operand) })}
+        onPick={setLeft}
       />
 
       <div className="cond-editor__group">
@@ -331,6 +402,7 @@ export function ConditionEditor({
           className="cond-editor__field"
           size="small"
           value={leaf.op ?? ''}
+          disabled={isBooleanVar}
           slotProps={{ select: { native: true }, htmlInput: { 'aria-label': 'Condition' } }}
           onChange={(event) => setOp(event.target.value)}
         >
@@ -343,7 +415,15 @@ export function ConditionEditor({
         </TextField>
       </div>
 
-      {option?.arity === 2 ? (
+      {isBooleanVar ? (
+        // No "Compare with": a boolean predicate only compares to True/False.
+        // Committing re-pins op/arity — heals externally-authored leaves that
+        // carry a boolean variable with a stray operator or a 1-slot draft.
+        <BooleanValueSelect
+          value={right?.type === 'literal' && typeof right.value === 'boolean' ? right.value : null}
+          onPick={(operand) => commit({ op: 'EQUALS', params: [left, operand] })}
+        />
+      ) : option?.arity === 2 ? (
         <>
           <div className="cond-editor__group">
             <span className="cond-editor__label">Compare with</span>
@@ -400,6 +480,9 @@ function operandPart(operand: ConditionOperand | null, variables: DocumentVariab
   if (!operand) return { kind: 'text', text: '…' }
   if (operand.type === 'variable')
     return { kind: 'chip', text: variables.find((v) => v.id === operand.ref)?.label ?? operand.ref }
+  // Boolean literals read as the True/False the author picked, not JSON "true".
+  if (typeof operand.value === 'boolean')
+    return { kind: 'text', text: operand.value ? 'True' : 'False' }
   return { kind: 'text', text: String(operand.value) }
 }
 

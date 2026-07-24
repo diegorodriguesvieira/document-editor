@@ -8,7 +8,7 @@ import type { Node as PMNode, Slice } from '@tiptap/pm/model'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { dropPoint } from '@tiptap/pm/transform'
 import { icons } from '../icons'
-import { useDocumentVariables, type DocumentVariable } from './documentVariables'
+import { groupVariables, useMentionVariables, type DocumentVariable } from './documentVariables'
 import { createVariableNodeSuggestion, variableInsertContent } from './variableSuggestion'
 
 /**
@@ -139,16 +139,6 @@ export function variableDragHTML(variable: DocumentVariable): string {
   span.setAttribute('data-label', variable.label)
   span.textContent = `{{${variable.label}}}`
   return span.outerHTML
-}
-
-function groupVariables(variables: DocumentVariable[]): Array<[string, DocumentVariable[]]> {
-  const groups = new Map<string, DocumentVariable[]>()
-  for (const variable of variables) {
-    const key = variable.group ?? ''
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(variable)
-  }
-  return [...groups.entries()]
 }
 
 /**
@@ -367,7 +357,8 @@ function VariablePanel({
 function VariableInsert({ api }: { api: EditorApi }) {
   const [open, setOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const variables = useDocumentVariables()
+  // Mention scope only: condition-scoped variables can't be inserted in text.
+  const variables = useMentionVariables()
   return (
     <>
       <IconButton

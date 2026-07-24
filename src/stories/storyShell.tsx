@@ -18,6 +18,7 @@ import {
   VariableFeature,
   QuoteFeature,
   TableFeature,
+  type ConditionFlag,
   type DocumentVariable,
 } from '../features'
 import type { DocumentJSON } from '../editor'
@@ -53,6 +54,13 @@ export const VARIABLES: DocumentVariable[] = [
   { id: 'amount.monthly', label: 'Monthly amount', group: 'Contract details' },
 ]
 
+/** Sample backend decision catalog — boolean flags the provider scopes to the
+ *  conditional-block builder (they never show in the @ picker). */
+export const CONDITION_FLAGS: ConditionFlag[] = [
+  { id: 'EC_DECISION_FULLTIME', label: 'If contract is full-time' },
+  { id: 'EC_DECISION_HAS_PROBATION', label: 'If there is probation period' },
+]
+
 /**
  * The documented mount recipe: a sized flex parent (the editor as flex: 1
  * comes from the shell CSS below) + the consumer-owned variables context.
@@ -74,7 +82,9 @@ export function Shell({ children, style }: { children: ReactNode; style?: CSSPro
         .sb-shell-grow > .document-editor { flex: 1 0 auto; }
       `}</style>
       <div className="sb-shell-grow" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <DocumentVariablesProvider variables={VARIABLES}>{children}</DocumentVariablesProvider>
+        <DocumentVariablesProvider variables={VARIABLES} conditions={CONDITION_FLAGS}>
+          {children}
+        </DocumentVariablesProvider>
       </div>
     </div>
   )

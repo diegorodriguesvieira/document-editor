@@ -49,7 +49,7 @@ export { DEFAULT_COMMENTS_LABELS } from './custom/commentsProvider'
 export type { CommentsLabels } from './custom/commentsProvider'
 export { HeaderFooterFeature } from './custom/headerFooter'
 export { DocumentVariablesProvider } from './custom/documentVariables'
-export type { DocumentVariable } from './custom/documentVariables'
+export type { ConditionFlag, DocumentVariable } from './custom/documentVariables'
 
 // Editor tooling
 export { HistoryFeature } from './history'
