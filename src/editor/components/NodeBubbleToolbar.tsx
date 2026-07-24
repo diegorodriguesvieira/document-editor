@@ -101,6 +101,12 @@ export function NodeBubbleToolbar({
       // subtree the CSS `zoom` would scale the bubble and feed Floating UI
       // zoom-unaware rects (mispositioned bubble at any zoom ≠ 1).
       appendTo={() => document.body}
+      // No debounce: TipTap defaults updateDelay to 250ms, which exists so
+      // the TEXT bubble doesn't chase a drag-selection. A NODE selection has
+      // no drag-flicker, and alignment moves the image in the SAME
+      // transaction — the bubble must follow in the same frame (the image
+      // node view syncs its DOM before plugin views measure), not 250ms late.
+      updateDelay={0}
       options={{ placement: 'bottom' }}
       // The popup namespace is FUNCTIONAL, not cosmetic: the region-editing
       // gate keeps an open header/footer open for clicks inside any surface

@@ -37,6 +37,9 @@ describe('<NodeBubbleToolbar /> → BubbleMenu wiring', () => {
     expect((props.appendTo as () => HTMLElement)()).toBe(document.body)
     // Below the node — on top it would sit on an image's resize handles.
     expect((props.options as { placement: string }).placement).toBe('bottom')
+    // No debounce: TipTap's 250ms default exists for drag-selections; a NODE
+    // bubble must follow an alignment change in the SAME frame.
+    expect(props.updateDelay).toBe(0)
   })
 
   it("keeps the FUNCTIONAL popup namespace even under a consumer className (the region gate's marker)", () => {
