@@ -7,8 +7,8 @@ import {
   CommentsProvider,
   useComments,
   type CommentsAdapter,
-  type DocumentComment,
 } from '../features'
+import { createFakeCommentsBackend } from '../app/commentsMock'
 import { ALL_FEATURES, Shell, COMMENTED_DOC } from './storyShell'
 
 
@@ -36,128 +36,47 @@ const meta = {
 export default meta
 type Story = StoryObj
 
-// In-memory adapter seeded with the comment whose mark COMMENTED_DOC carries
-// ('c-1' on "30 days") — the story-sized version of a real HTTP adapter. The
-// backend owns content, IDs and the PERMISSION flags: Rita's comment is not
-// yours (reply only), your own content gets edit/delete. `add` returns the
-// created comment so the editor can anchor its mark; `update`/`remove` take a
-// comment OR reply id (ids are globally unique).
+// The SAME fake backend the demo app uses (endpoints + permission
+// serializer, see src/app/commentsMock.ts), configured for the story: YOU
+// are the session AND the document owner (moderation rights); the SEED is
+// server rows — no flags, the serializer computes them per request. 'c-1'
+// matches the mark COMMENTED_DOC carries on "30 days".
 const YOU = { id: 'u-you', name: 'You' }
+const RITA = { id: 'u-reviewer', name: 'Rita Reviewer' }
 
-function storyAdapter(): CommentsAdapter {
-  let db: DocumentComment[] = [
-    {
-      id: 'c-1',
-      quote: '30 days',
-      text: 'Can we make this 15 days?',
-      author: { id: 'u-reviewer', name: 'Rita Reviewer' },
-      createdAt: '2026-07-15T12:00:00Z',
-      status: 'open',
-      canEdit: false,
-      canReply: true,
-      canDelete: false,
-      // Resolving/archiving SOMEONE ELSE's comment is normal reviewer work.
-      canResolve: true,
-      canArchive: true,
-      replies: [
-        {
-          id: 'r-1',
-          text: 'Checking with legal, one sec.',
-          author: YOU,
-          createdAt: '2026-07-15T14:00:00Z',
-          canEdit: true,
-          canDelete: true,
-        },
-      ],
-    },
-    // Already resolved (no mark in COMMENTED_DOC — resolved comments carry
-    // none) so the Resolved tab opens populated.
-    {
-      id: 'c-2',
-      quote: 'Review me',
-      text: 'Title casing looks off.',
-      author: { id: 'u-reviewer', name: 'Rita Reviewer' },
-      createdAt: '2026-07-14T09:00:00Z',
-      status: 'resolved',
-      canEdit: false,
-      canReply: true,
-      canDelete: true,
-      canResolve: false,
-      canArchive: false,
-      replies: [],
-    },
-  ]
-  return {
-    async list() {
-      return db.map((comment) => ({
-        ...comment,
-        replies: comment.replies?.map((reply) => ({ ...reply })),
-      }))
-    },
-    async add(input) {
-      const created: DocumentComment = {
-        ...input,
-        id: `c-${db.length + 1}`,
-        author: YOU,
-        createdAt: new Date().toISOString(),
+const storyAdapter = (): CommentsAdapter =>
+  createFakeCommentsBackend({
+    sessionUser: YOU,
+    seed: [
+      {
+        id: 'c-1',
+        quote: '30 days',
+        text: 'Can we make this 15 days?',
+        author: RITA,
+        createdAt: '2026-07-15T12:00:00Z',
         status: 'open',
-        canEdit: true,
-        canReply: true,
-        canDelete: true,
-        canResolve: true,
-        canArchive: true,
+        replies: [
+          {
+            id: 'r-1',
+            text: 'Checking with legal, one sec.',
+            author: YOU,
+            createdAt: '2026-07-15T14:00:00Z',
+          },
+        ],
+      },
+      // Already resolved (no mark in COMMENTED_DOC — resolved comments carry
+      // none) so the Resolved tab opens populated.
+      {
+        id: 'c-2',
+        quote: 'Review me',
+        text: 'Title casing looks off.',
+        author: RITA,
+        createdAt: '2026-07-14T09:00:00Z',
+        status: 'resolved',
         replies: [],
-      }
-      db = [...db, created]
-      return created
-    },
-    async reply(commentId, input) {
-      db = db.map((comment) =>
-        comment.id === commentId
-          ? {
-              ...comment,
-              replies: [
-                ...(comment.replies ?? []),
-                {
-                  ...input,
-                  id: `r-${Math.random().toString(36).slice(2, 8)}`,
-                  author: YOU,
-                  createdAt: new Date().toISOString(),
-                  canEdit: true,
-                  canDelete: true,
-                },
-              ],
-            }
-          : comment,
-      )
-    },
-    async update(id, input) {
-      db = db.map((comment) =>
-        comment.id === id
-          ? { ...comment, text: input.text }
-          : {
-              ...comment,
-              replies: comment.replies?.map((reply) =>
-                reply.id === id ? { ...reply, text: input.text } : reply,
-              ),
-            },
-      )
-    },
-    async setStatus(id, input) {
-      db = db.map((comment) =>
-        comment.id === id ? { ...comment, status: input.status } : comment,
-      )
-    },
-    async remove(id) {
-      db = db
-        .filter((comment) => comment.id !== id)
-        .map((comment) => ({
-          ...comment,
-          replies: comment.replies?.filter((reply) => reply.id !== id),
-        }))
-    },
-  }
-}
+      },
+    ],
+  })
 
 // Story-only debugging: dumps the doc on EVERY change (typing, a comment mark
 // landing/leaving) and the backend list whenever it refetches (add/remove).
@@ -208,10 +127,11 @@ export const ReviewMode: Story = {
         story:
           'The full review loop: selecting text floats the "Add comment" balloon (`CommentsLayer`), ' +
           'the panel opens its composer on the captured draft, and saving anchors the backend\'s id ' +
-          'into the doc as a mark. Clicking a highlight activates its card and vice-versa. Rita\'s ' +
-          'seeded thread shows the permission flags at work: her comment offers only Reply (not ' +
-          'yours to edit/delete), while your own seeded reply — and anything you create — carries ' +
-          'the 3-dots with Edit/Delete.',
+          'into the doc as a mark. Clicking a highlight activates its card and vice-versa. The ' +
+          'adapter is the SAME fake backend as the demo app (`createFakeCommentsBackend`): flags ' +
+          'come from its permission SERIALIZER, not from fixtures — Rita\'s comment is not yours ' +
+          'to Edit, but as the document OWNER you can Delete (moderate) it; your own reply gets ' +
+          'Edit + Delete.',
       },
     },
   },
@@ -268,9 +188,9 @@ export const CustomMenuItems: Story = {
         story:
           'The stock panel, EXTENDED by the consumer: `commentMenuItems`/`replyMenuItems` return ' +
           'plain `ActionsMenuItem` data — "Copy link" and a 2-step "Report" (`confirmLabel`) on ' +
-          'every card, "Quote reply" on reply rows. Items land between the built-ins and Delete; ' +
-          'open the browser console to see them fire. Rita\'s comment (no edit/delete flags) shows ' +
-          'the menu rendering with consumer items even where the backend grants nothing.',
+          'every card, "Quote reply" on reply rows. Items land between the flag-driven built-ins ' +
+          'and Delete; open the browser console to see them fire (and the fake backend\'s ' +
+          'endpoint logs alongside).',
       },
     },
   },
