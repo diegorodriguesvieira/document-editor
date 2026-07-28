@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core'
 import type { AnyExtension } from '@tiptap/core'
 import { Document as DocumentNode } from '@tiptap/extension-document'
+import { HardBreak } from '@tiptap/extension-hard-break'
 import { Paragraph } from '@tiptap/extension-paragraph'
 import { Text as TextNode } from '@tiptap/extension-text'
 import { Dropcursor, Gapcursor } from '@tiptap/extensions'
@@ -10,6 +11,9 @@ import type { ResolvedFeatures } from './registry'
 /**
  * The always-on schema kernel. You can't have a document without a top node,
  * paragraphs and text, so these are never opt-in — features build on top.
+ * HardBreak is kernel for the same reason: Shift+Enter is basic typing, not a
+ * feature (it ships its own Shift-Enter/Mod-Enter bindings and serializes as a
+ * plain <br>, so the backend HTML contract is untouched).
  * BodyTrailingNode keeps an empty paragraph after the last BODY block (table,
  * code, conditional block…) so you can always click below it and keep typing —
  * kept just above a bottom-pinned page region (e.g. a document footer), which
@@ -32,6 +36,7 @@ function kernelExtensions(resolved: ResolvedFeatures): AnyExtension[] {
     DocumentNode,
     Paragraph,
     TextNode,
+    HardBreak,
     Gapcursor,
     Dropcursor,
     BodyTrailingNode.configure({ notAfter: bottomRegions }),

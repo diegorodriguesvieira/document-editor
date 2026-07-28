@@ -38,6 +38,9 @@ importers:
       '@tiptap/extension-document':
         specifier: 3.17.0
         version: 3.17.0(@tiptap/core@3.17.0(@tiptap/pm@3.17.0))
+      '@tiptap/extension-hard-break':
+        specifier: 3.17.0
+        version: 3.17.0(@tiptap/core@3.17.0(@tiptap/pm@3.17.0))
       '@tiptap/extension-heading':
         specifier: 3.17.0
         version: 3.17.0(@tiptap/core@3.17.0(@tiptap/pm@3.17.0))
@@ -1160,6 +1163,11 @@ packages:
       '@floating-ui/dom': ^1.0.0
       '@tiptap/core': 3.27.1
       '@tiptap/pm': 3.27.1
+
+  '@tiptap/extension-hard-break@3.17.0':
+    resolution: {integrity: sha512-8/HIdIXkTmg0Xl/43ySUAvgv3o4hZ0UWkB8xyiSyBhv21rHV9cC8U26I2tSCWPXDPO30sRbhZiUUTWtMivM+EA==}
+    peerDependencies:
+      '@tiptap/core': ^3.17.0
 
   '@tiptap/extension-heading@3.17.0':
     resolution: {integrity: sha512-iXAlQfMum1wEWsq0hy4e+Ph1Qs6QoPFV+HtsoTgPxVMaYeskF/e0E6Ig/Qqbi6rwLnu1OmOxzj1ZVOq5HQgU+g==}
@@ -3243,6 +3251,10 @@ snapshots:
       '@tiptap/core': 3.17.0(@tiptap/pm@3.17.0)
       '@tiptap/pm': 3.17.0
     optional: true
+
+  '@tiptap/extension-hard-break@3.17.0(@tiptap/core@3.17.0(@tiptap/pm@3.17.0))':
+    dependencies:
+      '@tiptap/core': 3.17.0(@tiptap/pm@3.17.0)
 
   '@tiptap/extension-heading@3.17.0(@tiptap/core@3.17.0(@tiptap/pm@3.17.0))':
     dependencies:
