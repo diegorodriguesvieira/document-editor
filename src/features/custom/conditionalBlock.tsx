@@ -514,8 +514,15 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
   const [editing, setEditing] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   // Read-only keeps the bar (summary + collapse are just reading) but drops
-  // every mutating control: nest, delete and the condition editor.
+  // every mutating control: nest, delete and the condition editor. Handlers
+  // ALSO re-check `editor.isEditable` at call time: a click can land on
+  // stale-rendered chrome (setEditable dispatches no transaction of its own,
+  // and `setEditable(x, false)` suppresses even the update event), and none
+  // of updateAttributes/deleteNode/chained commands are engine-gated.
   const editable = useFeatureState(editor, (current) => current.isEditable) ?? true
+  // Read-only CLOSES an open panel (not just hides it) — flipping back to
+  // editable must not resurrect a panel the author never reopened.
+  if (editing && !editable) setEditing(false)
   // setJSON doesn't go through parseHTML — guard the attr shape here too.
   const raw: unknown = node.attrs.condition
   const cond: Condition = isConditionShape(raw) ? raw : DRAFT_CONDITION
@@ -539,6 +546,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
     }
   }
   const addNested = () => {
+    if (!editor.isEditable) return
     // Read the position fresh — the render-time one can be stale if the node moved.
     if (typeof getPos !== 'function') return
     const at = getPos()
@@ -593,7 +601,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
           <button
             type="button"
             className="conditional-block__summary"
-            onClick={() => editable && setEditing((open) => !open)}
+            onClick={() => editor.isEditable && setEditing((open) => !open)}
           >
             <span className="conditional-block__icon" aria-hidden>
               {icons.conditional}
@@ -632,7 +640,7 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
                 size="small"
                 className="conditional-block__delete"
                 aria-label="Remove conditional block"
-                onClick={() => deleteNode()}
+                onClick={() => editor.isEditable && deleteNode()}
               >
                 {icons.delete}
               </IconButton>
@@ -643,7 +651,9 @@ function ConditionalBlockView({ node, updateAttributes, deleteNode, editor, getP
           <ConditionEditor
             variables={variables}
             value={cond}
-            onChange={(next) => updateAttributes({ condition: next })}
+            onChange={(next) => {
+              if (editor.isEditable) updateAttributes({ condition: next })
+            }}
             onDone={() => setEditing(false)}
           />
         ) : null}

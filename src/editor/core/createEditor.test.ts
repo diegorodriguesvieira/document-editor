@@ -32,3 +32,34 @@ describe('content validation (enableContentCheck)', () => {
     }).toThrow()
   })
 })
+
+describe('setEditable re-render nudge (baseEditorOptions.onUpdate)', () => {
+  it('a direct setEditable dispatches ONE no-op transaction so subscribed UI re-renders', () => {
+    const { editor, api } = renderEditor([BoldFeature], { content: { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] } } })
+    const before = api.getJSON()
+    let transactions = 0
+    editor.on('transaction', () => {
+      transactions += 1
+    })
+
+    editor.setEditable(false)
+    expect(editor.isEditable).toBe(false)
+    // Exactly one nudge — more would mean the handler re-entered itself.
+    expect(transactions).toBe(1)
+    // The nudge is a NO-OP: the document must be untouched.
+    expect(api.getJSON()).toEqual(before)
+
+    editor.setEditable(true)
+    expect(transactions).toBe(2)
+  })
+
+  it('doc-changing updates do not echo an extra no-op transaction', () => {
+    const { editor } = renderEditor([BoldFeature])
+    let noOps = 0
+    editor.on('transaction', ({ transaction }) => {
+      if (!transaction.docChanged) noOps += 1
+    })
+    editor.commands.insertContent('hello')
+    expect(noOps).toBe(0)
+  })
+})

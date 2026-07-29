@@ -961,4 +961,80 @@ describe('conditional block — read-only', () => {
     rerender(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
     await waitFor(() => expect(screen.getByLabelText('Add nested condition')).toBeInTheDocument())
   })
+
+  it('a DIRECT editor.setEditable(false) — not the prop — also drops the controls', async () => {
+    // The path a consumer outside useDocumentEditor takes: setEditable emits
+    // no transaction, so this relies on the engine nudge (baseEditorOptions).
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    await screen.findByLabelText('Remove conditional block')
+
+    act(() => {
+      editorFromDOM().setEditable(false)
+    })
+    await waitFor(() => expect(screen.queryByLabelText('Remove conditional block')).toBeNull())
+    expect(screen.queryByLabelText('Add nested condition')).toBeNull()
+  })
+
+  it('STALE-rendered controls cannot mutate (setEditable with emitUpdate=false)', async () => {
+    // Suppressing the update event leaves the chrome rendered as editable —
+    // the call-time `editor.isEditable` guards are the only defense.
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    const deleteBtn = await screen.findByLabelText('Remove conditional block')
+    const editor = editorFromDOM()
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+
+    act(() => {
+      editor.setEditable(false, false)
+    })
+    expect(screen.getByLabelText('Remove conditional block')).toBeInTheDocument()
+
+    await userEvent.click(deleteBtn) // stale 🗑 — must not delete
+    expect(jsonHasNode(editor.getJSON(), 'conditionalBlock')).toBe(true)
+
+    await userEvent.click(screen.getByLabelText('Add nested condition')) // stale ＋
+    expect(editor.getJSON().content?.[0]?.content?.map((k) => k.type)).toEqual(['paragraph'])
+
+    await userEvent.click(screen.getByText('Show if')) // stale summary — no panel
+    expect(document.querySelector('.cond-editor')).toBeNull()
+  })
+
+  it('a panel left open by a stale render cannot commit condition edits', async () => {
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    await screen.findByText('Show if')
+    const editor = editorFromDOM()
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+    await userEvent.click(screen.getByText('Show if'))
+    const opSelect = await screen.findByLabelText('Condition')
+
+    // No update event → no re-render → the open panel stays on screen.
+    act(() => {
+      editor.setEditable(false, false)
+    })
+    expect(screen.getByLabelText('Condition')).toBeInTheDocument()
+
+    await userEvent.selectOptions(opSelect, 'NOT_EXISTS')
+    const block = editor.getJSON().content?.find((n) => n.type === 'conditionalBlock')
+    expect(block?.attrs?.condition).toEqual(existsCondition('pais')) // unchanged
+  })
+
+  it('read-only CLOSES an open panel; re-enabling does not resurrect it', async () => {
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    await screen.findByText('Show if')
+    const editor = editorFromDOM()
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+    await userEvent.click(screen.getByText('Show if'))
+    await screen.findByLabelText('Condition')
+
+    act(() => {
+      editor.setEditable(false)
+    })
+    await waitFor(() => expect(screen.queryByLabelText('Condition')).toBeNull())
+
+    act(() => {
+      editor.setEditable(true)
+    })
+    // Controls come back, but the panel stays closed — the author never reopened it.
+    await screen.findByLabelText('Add nested condition')
+    expect(screen.queryByLabelText('Condition')).toBeNull()
+  })
 })

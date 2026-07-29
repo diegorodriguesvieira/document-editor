@@ -1,4 +1,5 @@
 import { Editor } from '@tiptap/core'
+import type { Transaction } from '@tiptap/pm/state'
 import { buildExtensions } from './buildExtensions'
 import { createEditorApi, type EditorApi } from './EditorApi'
 import { createEmptyDocument, type DocumentJSON } from './document'
@@ -39,6 +40,18 @@ export function baseEditorOptions(
     onContentError: ({ error }: { error: Error }) => {
       if (options.onContentError) options.onContentError(error)
       else throw error
+    },
+    // setEditable emits 'update' but no TRANSACTION, and React node views +
+    // `useEditorState` subscribe to transactions — without a nudge, every
+    // isEditable-driven chrome (conditional-block controls, region bars)
+    // keeps rendering the stale mode after a direct `editor.setEditable`.
+    // An update without a doc change IS the setEditable signature (core
+    // gates every other 'update' on docChanged), and the no-op dispatch
+    // can't re-enter: it emits only 'transaction', never 'update'.
+    onUpdate: ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
+      if (!transaction.docChanged && !editor.isDestroyed) {
+        editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
+      }
     },
   }
 }

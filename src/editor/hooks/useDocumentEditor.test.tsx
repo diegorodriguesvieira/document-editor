@@ -63,6 +63,24 @@ describe('useDocumentEditor', () => {
     expect(onChange.mock.calls.at(-1)![0]).toHaveProperty('doc')
   })
 
+  it('a read-only toggle does NOT fire onChange — no phantom dirty/autosave', async () => {
+    const onChange = vi.fn()
+    const { result, rerender, unmount } = renderHook((props) => useDocumentEditor(props), {
+      initialProps: { features: [BoldFeature], editable: true, onChange },
+    })
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+
+    // setEditable emits 'update' with an empty transaction (no doc change) —
+    // the debounced serialize must not be scheduled for it.
+    rerender({ features: [BoldFeature], editable: false, onChange })
+    await waitFor(() => expect(result.current.editor!.isEditable).toBe(false))
+
+    // Unmount flushes any pending debounce SYNCHRONOUSLY — if the toggle had
+    // scheduled one, this surfaces it without waiting out the debounce window.
+    unmount()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('flushes a pending onChange on unmount — the last edits are never lost', async () => {
     const onChange = vi.fn()
     const { result, unmount } = renderHook(() =>

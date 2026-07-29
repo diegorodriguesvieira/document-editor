@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useEditor } from '@tiptap/react'
-import type { Editor } from '@tiptap/core'
+import type { Editor, EditorEvents } from '@tiptap/core'
 import { createEditorApi, type EditorApi } from '../core/EditorApi'
 import { baseEditorOptions } from '../core/createEditor'
 import type { DocumentJSON } from '../core/document'
@@ -28,7 +28,9 @@ export interface UseDocumentEditorOptions {
    *  route here; it throws synchronously — try/catch your async load. */
   onContentError?: (error: Error) => void
   /** Called (debounced) with the serialized document after each change.
-   *  `getJSON` is O(n), so this is debounced — never serialize per keystroke. */
+   *  `getJSON` is O(n), so this is debounced — never serialize per keystroke.
+   *  Fires only on real doc changes — a read-only toggle (`setEditable`)
+   *  never reaches it, so it's safe to treat every call as dirty. */
   onChange?: (doc: DocumentJSON) => void
   /** Called with the api when the editor becomes ready — once per editor
    *  instance (a feature-set change recreates the editor and fires it again
@@ -85,15 +87,12 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
     [resolved],
   )
 
-  // Live editable toggle — setEditable, not recreation. setEditable emits
-  // 'update' but no TRANSACTION, and React node views + `useEditorState`
-  // subscribe to transactions — so nudge them with a no-op dispatch or the
-  // isEditable-driven chrome (region bars, conditional-block controls) would
-  // keep rendering the stale mode.
+  // Live editable toggle — setEditable, not recreation. The re-render nudge
+  // for isEditable-driven chrome (setEditable emits no transaction) lives in
+  // baseEditorOptions.onUpdate, shared by every construction path.
   useEffect(() => {
     if (!editor || editor.isDestroyed || editor.isEditable === editable) return
     editor.setEditable(editable)
-    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
   }, [editor, editable])
 
   const api = useMemo(
@@ -135,7 +134,13 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
       pendingDoc = undefined
       if (doc) onChangeRef.current?.({ doc: doc.toJSON() })
     }
-    const handler = () => {
+    const handler = ({ transaction, appendedTransactions }: EditorEvents['update']) => {
+      // setEditable also emits 'update' (empty tr, no doc change) — a
+      // read-only toggle must not serialize an unchanged doc into onChange
+      // (phantom dirty/autosave). Appended trs count as changes: core can
+      // emit with a no-op root tr whose appendTransaction results DID
+      // change the doc.
+      if (!transaction.docChanged && !appendedTransactions.some((tr) => tr.docChanged)) return
       if (!onChangeRef.current) return
       pendingDoc = editor.state.doc
       clearTimeout(timer)
