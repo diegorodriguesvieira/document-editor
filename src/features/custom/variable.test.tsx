@@ -361,7 +361,7 @@ describe('variable', () => {
 
 describe('signature variables', () => {
   const SIGNATURE: DocumentVariable = {
-    id: 'cliente.assinatura',
+    id: 'client.signature',
     label: 'Client signature',
     type: 'signature',
   }
@@ -378,7 +378,7 @@ describe('signature variables', () => {
 
     expect(jsonHasNode(created.api.getJSON().doc, 'signature')).toBe(true)
     const html = created.api.getHTML()
-    expect(html).toContain('data-signature="cliente.assinatura"')
+    expect(html).toContain('data-signature="client.signature"')
     expect(html).toContain('variable-chip--signature')
     // No typed-variable leftovers: not a `variable` node in disguise.
     expect(html).not.toContain('data-variable')
@@ -398,17 +398,17 @@ describe('signature variables', () => {
   it('round-trips through HTML — loading a saved document restores the signature node', () => {
     const created = emptyEditor()
     created.editor.commands.insertContent(
-      '<span data-signature="cliente.assinatura" data-label="Client signature">{{Client signature}}</span>',
+      '<span data-signature="client.signature" data-label="Client signature">{{Client signature}}</span>',
     )
     expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
       type: 'signature',
-      attrs: { id: 'cliente.assinatura', label: 'Client signature' },
+      attrs: { id: 'client.signature', label: 'Client signature' },
     })
   })
 
   it('the drag payload carries the node identity — a panel drag must not demote a signature', () => {
     const html = variableDragHTML(SIGNATURE)
-    expect(html).toContain('data-signature="cliente.assinatura"')
+    expect(html).toContain('data-signature="client.signature"')
     // Plain variables keep the variable attribute — the two never mix.
     expect(variableDragHTML(SAMPLE[0])).toContain('data-variable=')
     expect(variableDragHTML(SAMPLE[0])).not.toContain('data-signature')
@@ -417,7 +417,7 @@ describe('signature variables', () => {
     created.editor.commands.insertContent(html)
     expect(created.api.getJSON().doc.content?.[0]?.content?.[0]).toMatchObject({
       type: 'signature',
-      attrs: { id: 'cliente.assinatura', label: 'Client signature' },
+      attrs: { id: 'client.signature', label: 'Client signature' },
     })
   })
 })
@@ -435,11 +435,11 @@ describe('drop → caret to the right of the chip', () => {
 
     // Signature chips ride the same drop path — same caret-after-drop feel.
     const signature = parse(
-      variableDragHTML({ id: 'cliente.assinatura', label: 'Client signature', type: 'signature' }),
+      variableDragHTML({ id: 'client.signature', label: 'Client signature', type: 'signature' }),
     )
     expect(chipFromSlice(signature)?.type.name).toBe('signature')
 
-    const richer = parse(`<p>texto ${variableDragHTML(SAMPLE[0])}</p>`)
+    const richer = parse(`<p>words ${variableDragHTML(SAMPLE[0])}</p>`)
     expect(chipFromSlice(richer)).toBeNull()
   })
 
@@ -499,7 +499,7 @@ describe('drop → caret to the right of the chip', () => {
     vi.spyOn(view, 'posAtCoords').mockReturnValue({ pos: 3, inside: 0 })
     const before = created.editor.state
 
-    expect(drop(parse(`<p>texto ${variableDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
+    expect(drop(parse(`<p>words ${variableDragHTML(SAMPLE[0])}</p>`))).toBeFalsy()
     expect(created.editor.state).toBe(before)
   })
 

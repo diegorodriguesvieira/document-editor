@@ -189,9 +189,9 @@ describe('<CommentsPanel />', () => {
     renderPanel({ adapter, draft: DRAFT })
     const field = await screen.findByRole('textbox', { name: 'Comment text' })
 
-    await userEvent.type(field, 'linha um{Shift>}{Enter}{/Shift}linha dois')
+    await userEvent.type(field, 'line one{Shift>}{Enter}{/Shift}line two')
     expect(adapter.add).not.toHaveBeenCalled() // Shift+Enter only broke the line
-    expect(field).toHaveValue('linha um\nlinha dois')
+    expect(field).toHaveValue('line one\nline two')
 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull())
@@ -203,10 +203,10 @@ describe('<CommentsPanel />', () => {
     renderPanel({ adapter, draft: DRAFT })
     const field = await screen.findByRole('textbox', { name: 'Comment text' })
 
-    await userEvent.type(field, 'direto no enter{Enter}')
+    await userEvent.type(field, 'straight to enter{Enter}')
 
     await waitFor(() =>
-      expect(adapter.add).toHaveBeenCalledWith({ text: 'direto no enter', quote: 'hello' }),
+      expect(adapter.add).toHaveBeenCalledWith({ text: 'straight to enter', quote: 'hello' }),
     )
   })
 
@@ -219,7 +219,7 @@ describe('<CommentsPanel />', () => {
     const field = await screen.findByRole('textbox', { name: 'Comment text' })
     // Typed text does not arm a guard: clicking away discards it, exactly
     // like Escape already does.
-    await userEvent.type(field, 'metade digitada')
+    await userEvent.type(field, 'typed halfway')
 
     fireEvent.mouseDown(document.body)
 
@@ -232,16 +232,16 @@ describe('<CommentsPanel />', () => {
   })
 
   it('a mousedown INSIDE the panel (reading cards mid-draft) keeps the composer', async () => {
-    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'do beto')]), draft: DRAFT })
+    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'from beto')]), draft: DRAFT })
     await screen.findByRole('textbox', { name: 'Comment text' })
 
-    fireEvent.mouseDown(await screen.findByText('do beto'))
+    fireEvent.mouseDown(await screen.findByText('from beto'))
 
     expect(screen.getByRole('textbox', { name: 'Comment text' })).toBeInTheDocument()
   })
 
   it('dismissing the card menu (backdrop mousedown, Escape) does not throw the draft away', async () => {
-    renderPanel({ adapter: fakeAdapter([saved('c-1', ANA, 'meu')]), draft: DRAFT })
+    renderPanel({ adapter: fakeAdapter([saved('c-1', ANA, 'mine')]), draft: DRAFT })
     await screen.findByRole('textbox', { name: 'Comment text' })
     await userEvent.click(await screen.findByRole('button', { name: 'Comment actions' }))
     await screen.findByRole('menuitem', { name: 'Delete' })
@@ -262,19 +262,19 @@ describe('<CommentsPanel />', () => {
   it('actions come from the BACKEND flags — authorship is irrelevant', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', ANA, 'meu, tudo liberado'),
-        saved('c-2', BETO, 'alheio, sem nada', { canEdit: false, canDelete: false }),
-        saved('c-3', BETO, 'alheio, só delete', { canEdit: false, canDelete: true }),
+        saved('c-1', ANA, 'mine, all allowed'),
+        saved('c-2', BETO, 'not mine, nothing', { canEdit: false, canDelete: false }),
+        saved('c-3', BETO, 'not mine, delete only', { canEdit: false, canDelete: true }),
       ]),
     })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('meu, tudo liberado')
+    await within(panel).findByText('mine, all allowed')
     const cardOf = (text: string) => within(panel).getByText(text).closest('li') as HTMLElement
 
     // All flags true → menu with Edit + Delete.
     await userEvent.click(
-      within(cardOf('meu, tudo liberado')).getByRole('button', { name: 'Comment actions' }),
+      within(cardOf('mine, all allowed')).getByRole('button', { name: 'Comment actions' }),
     )
     expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
@@ -283,13 +283,13 @@ describe('<CommentsPanel />', () => {
 
     // No flags → no menu at all (no dead 3-dots).
     expect(
-      within(cardOf('alheio, sem nada')).queryByRole('button', { name: 'Comment actions' }),
+      within(cardOf('not mine, nothing')).queryByRole('button', { name: 'Comment actions' }),
     ).toBeNull()
 
     // SOMEONE ELSE's comment with canDelete → Delete-only menu: the backend
     // grants, the client never infers from author identity.
     await userEvent.click(
-      within(cardOf('alheio, só delete')).getByRole('button', { name: 'Comment actions' }),
+      within(cardOf('not mine, delete only')).getByRole('button', { name: 'Comment actions' }),
     )
     expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
@@ -300,40 +300,40 @@ describe('<CommentsPanel />', () => {
     // swallow an explicit undefined, so mount the provider directly.
     render(
       <CommentsProvider
-        adapter={fakeAdapter([saved('c-1', ANA, 'de alguém', { canEdit: false, canDelete: true })])}
+        adapter={fakeAdapter([saved('c-1', ANA, 'from someone else', { canEdit: false, canDelete: true })])}
       >
         <CommentsPanel editor={null} />
       </CommentsProvider>,
     )
-    await screen.findByText('de alguém')
+    await screen.findByText('from someone else')
     expect(screen.getByRole('button', { name: 'Comment actions' })).toBeInTheDocument()
   })
 
   it('Delete calls the adapter and the card leaves after the refetch', async () => {
-    const adapter = fakeAdapter([saved('c-1', ANA, 'apagável')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'deletable')])
     renderPanel({ adapter })
-    await screen.findByText('apagável')
+    await screen.findByText('deletable')
 
     await userEvent.click(screen.getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
 
     expect(adapter.remove).toHaveBeenCalledWith('c-1')
-    await waitFor(() => expect(screen.queryByText('apagável')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('deletable')).toBeNull())
   })
 
   it('clicking a card jumps the document to the MARK (collapsed caret) and lights comment--active', async () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
     created.editor.setEditable(false)
     applyCommentAnchor(created.editor, 'c-1', { from: 7, to: 12 })
-    const comment = saved('c-1', BETO, 'olha isso', { quote: 'world' })
+    const comment = saved('c-1', BETO, 'look at this', { quote: 'world' })
     // jsdom ships no scrollIntoView — define it to pin the DOM-scroll path
     // (PM's own scrollIntoView is a no-op while focus sits in the panel).
     const scrollSpy = vi.fn()
     Element.prototype.scrollIntoView = scrollSpy
 
     renderPanel({ adapter: fakeAdapter([comment]), editor: created.editor })
-    await userEvent.click(await screen.findByText('olha isso'))
+    await userEvent.click(await screen.findByText('look at this'))
 
     // The caret landed at the mark's start — derived from the DOC, the panel
     // knows no positions of its own anymore.
@@ -346,7 +346,7 @@ describe('<CommentsPanel />', () => {
     const span = created.editor.view.dom.querySelector('[data-comment-id="c-1"]')
     expect(scrollSpy.mock.contexts).toContain(span)
     // The card itself lights up too (the active state is shared both ways).
-    expect(screen.getByText('olha isso').closest('li')).toHaveClass(
+    expect(screen.getByText('look at this').closest('li')).toHaveClass(
       'comments-panel__card--active',
     )
     // Mirror activeId into storage the way the layer would, then re-render.
@@ -358,12 +358,12 @@ describe('<CommentsPanel />', () => {
 
   it('a comment whose mark is GONE from the doc shows as orphaned: quote + hint, no jump, Delete kept', async () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    const adapter = fakeAdapter([saved('c-1', ANA, 'ficou órfão')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'left orphaned')])
 
     renderPanel({ adapter, editor: created.editor })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('ficou órfão')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('left orphaned')).closest('li') as HTMLElement
     expect(within(card).getByText('“hello”')).toBeInTheDocument()
     expect(within(card).getByText('Original text was removed')).toBeInTheDocument()
     // The body is inert (no jump ButtonBase) — what remains is Reply (the
@@ -385,12 +385,12 @@ describe('<CommentsPanel />', () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
     expect(created.editor.isEditable).toBe(true)
     applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', ANA, 'no modo edição')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'in edit mode')])
 
     renderPanel({ adapter, editor: created.editor })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('no modo edição')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('in edit mode')).closest('li') as HTMLElement
     // Anchored → a live card: jump body + Reply + menu, no orphan hint.
     expect(within(card).queryByText('Original text was removed')).toBeNull()
     expect(within(card).getAllByRole('button')).toHaveLength(3)
@@ -399,7 +399,7 @@ describe('<CommentsPanel />', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
     expect(adapter.remove).toHaveBeenCalledWith('c-1')
-    await waitFor(() => expect(screen.queryByText('no modo edição')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('in edit mode')).toBeNull())
   })
 
   it('a failed add keeps the composer (text intact) and shows the error', async () => {
@@ -408,13 +408,13 @@ describe('<CommentsPanel />', () => {
     renderPanel({ adapter, draft: DRAFT })
     const field = await screen.findByRole('textbox', { name: 'Comment text' })
 
-    await userEvent.type(field, 'não perde isso{Enter}')
+    await userEvent.type(field, 'do not lose this{Enter}')
 
     // The failure shows twice on purpose: the alert banner AND the field's
     // helperText (error at the point of action).
     expect(await screen.findAllByText('comments service down')).not.toHaveLength(0)
     expect(screen.getByRole('alert')).toHaveTextContent('comments service down')
-    expect(screen.getByRole('textbox', { name: 'Comment text' })).toHaveValue('não perde isso')
+    expect(screen.getByRole('textbox', { name: 'Comment text' })).toHaveValue('do not lose this')
   })
 })
 
@@ -422,11 +422,11 @@ describe('<CommentsPanel /> replies', () => {
   it('renders the thread: seeded replies under the parent card, and NO reply-to-reply affordance', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'comentário pai', {
+        saved('c-1', BETO, 'parent comment', {
           replies: [
             {
               id: 'r-1',
-              text: 'resposta da ana',
+              text: 'reply from ana',
               author: ANA,
               createdAt: 'now',
               canEdit: true,
@@ -438,8 +438,8 @@ describe('<CommentsPanel /> replies', () => {
     })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('comentário pai')).closest('li') as HTMLElement
-    const row = within(card).getByText('resposta da ana').closest('li') as HTMLElement
+    const card = (await within(panel).findByText('parent comment')).closest('li') as HTMLElement
+    const row = within(card).getByText('reply from ana').closest('li') as HTMLElement
     expect(within(row).getByText('Ana Lima')).toBeInTheDocument()
     // One level only: the ROW offers no Reply button (only the card does).
     expect(within(row).queryByRole('button', { name: 'Reply' })).toBeNull()
@@ -450,53 +450,53 @@ describe('<CommentsPanel /> replies', () => {
   it('the Reply button exists only when the backend granted canReply', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'pode responder'),
-        saved('c-2', BETO, 'não pode responder', { canReply: false }),
+        saved('c-1', BETO, 'can reply'),
+        saved('c-2', BETO, 'cannot reply', { canReply: false }),
       ]),
     })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('pode responder')
+    await within(panel).findByText('can reply')
     const cardOf = (text: string) => within(panel).getByText(text).closest('li') as HTMLElement
-    expect(within(cardOf('pode responder')).getByRole('button', { name: 'Reply' })).toBeInTheDocument()
-    expect(within(cardOf('não pode responder')).queryByRole('button', { name: 'Reply' })).toBeNull()
+    expect(within(cardOf('can reply')).getByRole('button', { name: 'Reply' })).toBeInTheDocument()
+    expect(within(cardOf('cannot reply')).queryByRole('button', { name: 'Reply' })).toBeNull()
   })
 
   it('reply flow: Reply → focused field → Enter sends → refetched row lands, composer closes', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'comentário pai')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'parent comment')])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('comentário pai')
+    await within(panel).findByText('parent comment')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
     const field = await screen.findByRole('textbox', { name: 'Reply text' })
     expect(field).toHaveFocus()
-    await userEvent.type(field, 'de acordo{Enter}')
+    await userEvent.type(field, 'agreed{Enter}')
 
-    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'de acordo' })
+    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'agreed' })
     // Refetch-after-write: the composer closes, the SERVER's reply lands.
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Reply text' })).toBeNull())
-    expect(await within(panel).findByText('de acordo')).toBeInTheDocument()
+    expect(await within(panel).findByText('agreed')).toBeInTheDocument()
   })
 
   it('an outside mousedown does NOT discard a reply in progress (unlike the draft composer)', async () => {
-    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'pai')]) })
+    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'parent')]) })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('pai')
+    await within(panel).findByText('parent')
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
     const field = await screen.findByRole('textbox', { name: 'Reply text' })
-    await userEvent.type(field, 'metade da resposta')
+    await userEvent.type(field, 'half a reply')
 
     fireEvent.mouseDown(document.body)
 
-    expect(screen.getByRole('textbox', { name: 'Reply text' })).toHaveValue('metade da resposta')
+    expect(screen.getByRole('textbox', { name: 'Reply text' })).toHaveValue('half a reply')
   })
 
   it('Escape closes surfaces innermost-first: the reply composer goes, the DRAFT survives', async () => {
-    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'pai')]), draft: DRAFT })
+    renderPanel({ adapter: fakeAdapter([saved('c-1', BETO, 'parent')]), draft: DRAFT })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await screen.findByRole('textbox', { name: 'Comment text' })
-    await within(panel).findByText('pai')
+    await within(panel).findByText('parent')
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
     await screen.findByRole('textbox', { name: 'Reply text' })
 
@@ -510,68 +510,68 @@ describe('<CommentsPanel /> replies', () => {
 
   it('an ORPHANED comment still accepts replies — the thread outlives the anchored text', async () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    const adapter = fakeAdapter([saved('c-1', ANA, 'ficou órfão')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'left orphaned')])
     renderPanel({ adapter, editor: created.editor })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await within(panel).findByText('Original text was removed')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Reply text' }), 'segue vivo{Enter}')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Reply text' }), 'still alive{Enter}')
 
-    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'segue vivo' })
-    expect(await within(panel).findByText('segue vivo')).toBeInTheDocument()
+    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'still alive' })
+    expect(await within(panel).findByText('still alive')).toBeInTheDocument()
   })
 
   it('replying works with an EDITABLE editor — replies are not review-only', async () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
     expect(created.editor.isEditable).toBe(true)
     applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', BETO, 'no modo edição')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'in edit mode')])
     renderPanel({ adapter, editor: created.editor })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('no modo edição')
+    await within(panel).findByText('in edit mode')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Reply text' }), 'editando e respondendo{Enter}')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Reply text' }), 'editing and replying{Enter}')
 
-    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'editando e respondendo' })
-    expect(await within(panel).findByText('editando e respondendo')).toBeInTheDocument()
+    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'editing and replying' })
+    expect(await within(panel).findByText('editing and replying')).toBeInTheDocument()
   })
 
   it('reply rows carry their OWN flag-driven menu: Edit and Delete hit the reply id', async () => {
     const adapter = fakeAdapter([
-      saved('c-1', BETO, 'pai', {
+      saved('c-1', BETO, 'parent', {
         replies: [
-          { id: 'r-1', text: 'minha resposta', author: ANA, createdAt: 'now', canEdit: true, canDelete: true },
-          { id: 'r-2', text: 'resposta travada', author: BETO, createdAt: 'now', canEdit: false, canDelete: false },
+          { id: 'r-1', text: 'my reply', author: ANA, createdAt: 'now', canEdit: true, canDelete: true },
+          { id: 'r-2', text: 'locked reply', author: BETO, createdAt: 'now', canEdit: false, canDelete: false },
         ],
       }),
     ])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('minha resposta')
+    await within(panel).findByText('my reply')
     const rowOf = (text: string) => within(panel).getByText(text).closest('li') as HTMLElement
 
     // Flags all false → no menu on that row.
-    expect(within(rowOf('resposta travada')).queryByRole('button', { name: 'Reply actions' })).toBeNull()
+    expect(within(rowOf('locked reply')).queryByRole('button', { name: 'Reply actions' })).toBeNull()
 
     // Edit: prefilled field → Save → adapter.update with the REPLY id.
-    await userEvent.click(within(rowOf('minha resposta')).getByRole('button', { name: 'Reply actions' }))
+    await userEvent.click(within(rowOf('my reply')).getByRole('button', { name: 'Reply actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const field = await screen.findByRole('textbox', { name: 'Edit text' })
-    expect(field).toHaveValue('minha resposta')
+    expect(field).toHaveValue('my reply')
     await userEvent.clear(field)
-    await userEvent.type(field, 'resposta revisada')
+    await userEvent.type(field, 'revised reply')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(adapter.update).toHaveBeenCalledWith('r-1', { text: 'resposta revisada' })
-    expect(await within(panel).findByText('resposta revisada')).toBeInTheDocument()
+    expect(adapter.update).toHaveBeenCalledWith('r-1', { text: 'revised reply' })
+    expect(await within(panel).findByText('revised reply')).toBeInTheDocument()
 
     // Delete hits the reply id and the row leaves after the refetch.
-    await userEvent.click(within(rowOf('resposta revisada')).getByRole('button', { name: 'Reply actions' }))
+    await userEvent.click(within(rowOf('revised reply')).getByRole('button', { name: 'Reply actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
     expect(adapter.remove).toHaveBeenCalledWith('r-1')
-    await waitFor(() => expect(within(panel).queryByText('resposta revisada')).toBeNull())
+    await waitFor(() => expect(within(panel).queryByText('revised reply')).toBeNull())
   })
 })
 
@@ -591,9 +591,9 @@ describe('<CommentsPanel /> status tabs', () => {
   it('renders the three tabs — the first counts OPEN threads only and starts selected', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'aberto'),
-        saved('c-2', BETO, 'resolvido', { status: 'resolved' }),
-        saved('c-3', BETO, 'arquivado', { status: 'archived' }),
+        saved('c-1', BETO, 'open thread'),
+        saved('c-2', BETO, 'resolved thread', { status: 'resolved' }),
+        saved('c-3', BETO, 'archived thread', { status: 'archived' }),
       ]),
     })
 
@@ -603,24 +603,24 @@ describe('<CommentsPanel /> status tabs', () => {
     expect(within(panel).getByRole('tab', { name: 'Resolved' })).toBeInTheDocument()
     expect(within(panel).getByRole('tab', { name: 'Archived' })).toBeInTheDocument()
     // Only the OPEN thread shows on the default tab.
-    expect(within(panel).getByText('aberto')).toBeInTheDocument()
-    expect(within(panel).queryByText('resolvido')).toBeNull()
-    expect(within(panel).queryByText('arquivado')).toBeNull()
+    expect(within(panel).getByText('open thread')).toBeInTheDocument()
+    expect(within(panel).queryByText('resolved thread')).toBeNull()
+    expect(within(panel).queryByText('archived thread')).toBeNull()
   })
 
   it('tabs filter by status; an empty tab shows its hint', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'aberto'),
-        saved('c-2', BETO, 'resolvido', { status: 'resolved' }),
+        saved('c-1', BETO, 'open thread'),
+        saved('c-2', BETO, 'resolved thread', { status: 'resolved' }),
       ]),
     })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('aberto')
+    await within(panel).findByText('open thread')
 
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    expect(within(panel).getByText('resolvido')).toBeInTheDocument()
-    expect(within(panel).queryByText('aberto')).toBeNull()
+    expect(within(panel).getByText('resolved thread')).toBeInTheDocument()
+    expect(within(panel).queryByText('open thread')).toBeNull()
 
     await userEvent.click(within(panel).getByRole('tab', { name: 'Archived' }))
     expect(within(panel).getByText('No archived comments')).toBeInTheDocument()
@@ -629,35 +629,35 @@ describe('<CommentsPanel /> status tabs', () => {
   it('the ✓ Resolve button exists only when the backend granted canResolve', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'resolvível', { canResolve: true }),
-        saved('c-2', BETO, 'não resolvível'),
+        saved('c-1', BETO, 'resolvable', { canResolve: true }),
+        saved('c-2', BETO, 'not resolvable'),
       ]),
     })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('resolvível')
+    await within(panel).findByText('resolvable')
     const cardOf = (text: string) => within(panel).getByText(text).closest('li') as HTMLElement
 
-    expect(within(cardOf('resolvível')).getByRole('button', { name: 'Resolve' })).toBeInTheDocument()
-    expect(within(cardOf('não resolvível')).queryByRole('button', { name: 'Resolve' })).toBeNull()
+    expect(within(cardOf('resolvable')).getByRole('button', { name: 'Resolve' })).toBeInTheDocument()
+    expect(within(cardOf('not resolvable')).queryByRole('button', { name: 'Resolve' })).toBeNull()
   })
 
   it('resolve flow: ✓ → setStatus → the card leaves the open tab and lands FROZEN in Resolved', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvível', { canResolve: true })])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvable', { canResolve: true })])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('resolvível')
+    await within(panel).findByText('resolvable')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Resolve' }))
 
     expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'resolved' })
     // Refetch-after-write: the open tab empties (bare label + hint)…
-    await waitFor(() => expect(within(panel).queryByText('resolvível')).toBeNull())
+    await waitFor(() => expect(within(panel).queryByText('resolvable')).toBeNull())
     expect(within(panel).getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
     expect(within(panel).getByText('No open comments')).toBeInTheDocument()
 
     // …and the thread lives on the Resolved tab: frozen body with the quote.
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    const card = within(panel).getByText('resolvível').closest('li') as HTMLElement
+    const card = within(panel).getByText('resolvable').closest('li') as HTMLElement
     expect(within(card).getByText('“hello”')).toBeInTheDocument()
     expect(card.querySelector('.comments-panel__card-body')?.tagName).toBe('DIV') // no jump
     expect(within(card).queryByRole('button', { name: 'Resolve' })).toBeNull()
@@ -666,39 +666,39 @@ describe('<CommentsPanel /> status tabs', () => {
 
   it('archive flow: 3-dots → Archive → the card lands in Archived', async () => {
     const adapter = fakeAdapter([
-      saved('c-1', BETO, 'arquivável', { canEdit: false, canDelete: false, canArchive: true }),
+      saved('c-1', BETO, 'archivable', { canEdit: false, canDelete: false, canArchive: true }),
     ])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('arquivável')
+    await within(panel).findByText('archivable')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'archived' })
-    await waitFor(() => expect(within(panel).queryByText('arquivável')).toBeNull())
+    await waitFor(() => expect(within(panel).queryByText('archivable')).toBeNull())
     await userEvent.click(within(panel).getByRole('tab', { name: 'Archived' }))
-    expect(within(panel).getByText('arquivável')).toBeInTheDocument()
+    expect(within(panel).getByText('archivable')).toBeInTheDocument()
   })
 
   it('frozen threads are read-only + Delete: no reply/edit/resolve, plain reply rows', async () => {
     const adapter = fakeAdapter([
-      saved('c-1', BETO, 'congelado', {
+      saved('c-1', BETO, 'frozen', {
         status: 'resolved',
         canResolve: true, // must NOT surface a Resolve button while frozen
         canEdit: true, // must NOT surface Edit either
         canDelete: true,
         replies: [
-          { id: 'r-1', text: 'resposta congelada', author: ANA, createdAt: 'now', canEdit: true, canDelete: true },
+          { id: 'r-1', text: 'frozen reply', author: ANA, createdAt: 'now', canEdit: true, canDelete: true },
         ],
       }),
     ])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    const card = (await within(panel).findByText('congelado')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('frozen')).closest('li') as HTMLElement
 
-    expect(within(card).getByText('resposta congelada')).toBeInTheDocument()
+    expect(within(card).getByText('frozen reply')).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: 'Resolve' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Reply' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Reply actions' })).toBeNull()
@@ -713,11 +713,11 @@ describe('<CommentsPanel /> status tabs', () => {
     expect(adapter.remove).toHaveBeenCalledWith('c-1')
     // Screen-level: deleting the LAST comment unmounts the whole panel, and
     // a within() query would still see the detached node's children.
-    await waitFor(() => expect(screen.queryByText('congelado')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('frozen')).toBeNull())
   })
 
   it('capturing a draft flips back to the Comments tab, composer visible', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'aberto')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'open thread')])
     render(
       <CommentsProvider user={ANA} adapter={adapter}>
         <StateProbe draft={DRAFT} />
@@ -725,9 +725,9 @@ describe('<CommentsPanel /> status tabs', () => {
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('aberto')
+    await within(panel).findByText('open thread')
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    expect(within(panel).queryByText('aberto')).toBeNull()
+    expect(within(panel).queryByText('open thread')).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'probe-capture' }))
 
@@ -739,7 +739,7 @@ describe('<CommentsPanel /> status tabs', () => {
   })
 
   it('an activated highlight (activeId) flips back to the Comments tab', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'aberto')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'open thread')])
     render(
       <CommentsProvider user={ANA} adapter={adapter}>
         <StateProbe draft={DRAFT} />
@@ -747,7 +747,7 @@ describe('<CommentsPanel /> status tabs', () => {
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('aberto')
+    await within(panel).findByText('open thread')
     await userEvent.click(within(panel).getByRole('tab', { name: 'Archived' }))
 
     await userEvent.click(screen.getByRole('button', { name: 'probe-activate' }))
@@ -756,15 +756,15 @@ describe('<CommentsPanel /> status tabs', () => {
       'aria-selected',
       'true',
     )
-    expect(within(panel).getByText('aberto')).toBeInTheDocument()
+    expect(within(panel).getByText('open thread')).toBeInTheDocument()
   })
 
   it('the whole corner (Resolve + 3-dots) hides while editing', async () => {
     renderPanel({
-      adapter: fakeAdapter([saved('c-1', ANA, 'editando', { canResolve: true })]),
+      adapter: fakeAdapter([saved('c-1', ANA, 'mid-edit', { canResolve: true })]),
     })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('editando')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('mid-edit')).closest('li') as HTMLElement
     expect(within(card).getByRole('button', { name: 'Resolve' })).toBeInTheDocument()
 
     await userEvent.click(within(card).getByRole('button', { name: 'Comment actions' }))
@@ -787,7 +787,7 @@ describe('<CommentsPanel /> review-round hardening', () => {
   })
 
   it('a pending mutation disables the corner and never double-hits the API', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'pendente', { canResolve: true })])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'pending', { canResolve: true })])
     adapter.setStatus.mockImplementation(() => new Promise(() => {})) // never lands
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
@@ -803,19 +803,19 @@ describe('<CommentsPanel /> review-round hardening', () => {
   })
 
   it('after Resolve the focus lands on the panel, never on <body>', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvível', { canResolve: true })])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvable', { canResolve: true })])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Resolve' }))
 
-    await waitFor(() => expect(within(panel).queryByText('resolvível')).toBeNull())
+    await waitFor(() => expect(within(panel).queryByText('resolvable')).toBeNull())
     expect(document.activeElement).not.toBe(document.body)
     expect(panel.contains(document.activeElement)).toBe(true)
   })
 
   it('mutation outcomes are ANNOUNCED to assistive tech', async () => {
-    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvível', { canResolve: true })])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'resolvable', { canResolve: true })])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
 
@@ -827,10 +827,10 @@ describe('<CommentsPanel /> review-round hardening', () => {
   })
 
   it('Delete confirms in place — closing the menu resets the armed state', async () => {
-    const adapter = fakeAdapter([saved('c-1', ANA, 'guardado')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'kept')])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('guardado')
+    await within(panel).findByText('kept')
 
     // First click only ARMS the confirmation — nothing deleted.
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
@@ -853,11 +853,11 @@ describe('<CommentsPanel /> review-round hardening', () => {
   it('cards and replies render a relative <time> from createdAt', async () => {
     renderPanel({
       adapter: fakeAdapter([
-        saved('c-1', BETO, 'com hora', {
+        saved('c-1', BETO, 'with time', {
           replies: [
             {
               id: 'r-1',
-              text: 'resposta com hora',
+              text: 'reply with time',
               author: ANA,
               createdAt: '2026-07-20T12:00:00Z',
               canEdit: false,
@@ -868,7 +868,7 @@ describe('<CommentsPanel /> review-round hardening', () => {
       ]),
     })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('com hora')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('with time')).closest('li') as HTMLElement
 
     const times = card.querySelectorAll('time')
     expect(times).toHaveLength(2) // card + reply
@@ -880,15 +880,15 @@ describe('<CommentsPanel /> review-round hardening', () => {
     render(
       <CommentsProvider
         user={ANA}
-        adapter={fakeAdapter([saved('c-1', BETO, 'traduzido')])}
-        labels={{ reply: 'Responder', tabOpen: 'Comentários', emptyOpen: 'Sem comentários' }}
+        adapter={fakeAdapter([saved('c-1', BETO, 'relabeled')])}
+        labels={{ reply: 'Write back', tabOpen: 'Notes', emptyOpen: 'No notes' }}
       >
         <CommentsPanel editor={null} />
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    expect(within(panel).getByRole('tab', { name: 'Comentários (1)' })).toBeInTheDocument()
-    expect(within(panel).getByRole('button', { name: 'Responder' })).toBeInTheDocument()
+    expect(within(panel).getByRole('tab', { name: 'Notes (1)' })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Write back' })).toBeInTheDocument()
   })
 
   it('Escape closes the FOCUSED composer, not the most recent one', async () => {
@@ -904,11 +904,11 @@ describe('<CommentsPanel /> review-round hardening', () => {
     // Open A's reply composer FIRST, then B's edit — B tops the stack.
     await userEvent.click(within(cardOf('card A')).getByRole('button', { name: 'Reply' }))
     const replyField = await screen.findByRole('textbox', { name: 'Reply text' })
-    await userEvent.type(replyField, 'não me perca')
+    await userEvent.type(replyField, 'do not drop me')
     await userEvent.click(within(cardOf('card B')).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const editField = await screen.findByRole('textbox', { name: 'Edit text' })
-    await userEvent.type(editField, ' com edição pendente')
+    await userEvent.type(editField, ' with a pending edit')
 
     // Focus back in A's reply field; Escape must close A — B's typed edit
     // survives (the stack alone would kill B, the newest surface).
@@ -917,14 +917,14 @@ describe('<CommentsPanel /> review-round hardening', () => {
 
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Reply text' })).toBeNull())
     expect(screen.getByRole('textbox', { name: 'Edit text' })).toHaveValue(
-      'card B com edição pendente',
+      'card B with a pending edit',
     )
   })
 
   it('reconciliation runs with the PANEL alone — no CommentsLayer required', async () => {
     const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
     applyCommentAnchor(created.editor, 'c-ghost', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', BETO, 'conhecido')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'known')])
 
     // ONLY the panel mounted — the bridge inside it must still strip.
     renderPanel({ adapter, editor: created.editor })
@@ -939,7 +939,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
   it('custom items land BETWEEN the built-ins and Delete, and fire with the comment', async () => {
     const onCopy = vi.fn()
     render(
-      <CommentsProvider user={ANA} adapter={fakeAdapter([saved('c-1', ANA, 'extensível')])}>
+      <CommentsProvider user={ANA} adapter={fakeAdapter([saved('c-1', ANA, 'extensible')])}>
         <CommentsPanel
           editor={null}
           commentMenuItems={(comment) => [
@@ -949,7 +949,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('extensível')
+    await within(panel).findByText('extensible')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     const menuItems = await screen.findAllByRole('menuitem')
@@ -962,7 +962,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
   it('a custom item can opt into the 2-step confirm', async () => {
     const onReport = vi.fn()
     render(
-      <CommentsProvider user={ANA} adapter={fakeAdapter([saved('c-1', ANA, 'reportável')])}>
+      <CommentsProvider user={ANA} adapter={fakeAdapter([saved('c-1', ANA, 'reportable')])}>
         <CommentsPanel
           editor={null}
           commentMenuItems={() => [
@@ -972,7 +972,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('reportável')
+    await within(panel).findByText('reportable')
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
 
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Report' }))
@@ -986,14 +986,14 @@ describe('<CommentsPanel /> consumer menu items', () => {
       <CommentsProvider
         user={ANA}
         adapter={fakeAdapter([
-          saved('c-1', BETO, 'sem flags', { canEdit: false, canDelete: false }),
+          saved('c-1', BETO, 'no flags', { canEdit: false, canDelete: false }),
         ])}
       >
         <CommentsPanel editor={null} commentMenuItems={() => [{ label: 'Pin', onClick: vi.fn() }]} />
       </CommentsProvider>,
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('sem flags')
+    await within(panel).findByText('no flags')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     const menuItems = await screen.findAllByRole('menuitem')
@@ -1006,12 +1006,12 @@ describe('<CommentsPanel /> consumer menu items', () => {
       <CommentsProvider
         user={ANA}
         adapter={fakeAdapter([
-          saved('c-1', BETO, 'thread congelada', {
+          saved('c-1', BETO, 'frozen thread', {
             status: 'resolved',
             replies: [
               {
                 id: 'r-1',
-                text: 'resposta congelada',
+                text: 'frozen reply',
                 author: ANA,
                 createdAt: 'now',
                 canEdit: true, // frozen: built-ins stay out regardless
@@ -1032,7 +1032,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    const row = (await within(panel).findByText('resposta congelada')).closest('li') as HTMLElement
+    const row = (await within(panel).findByText('frozen reply')).closest('li') as HTMLElement
 
     expect(seen).toContainEqual(['r-1', 'c-1'])
     // Frozen row: no built-in Edit/Delete — the consumer's item alone.
@@ -1044,46 +1044,46 @@ describe('<CommentsPanel /> consumer menu items', () => {
 
 describe('<CommentsPanel /> edit-in-place', () => {
   it('edit flow: menu → Edit → prefilled field, inert body, no 3-dots → Save persists', async () => {
-    const adapter = fakeAdapter([saved('c-1', ANA, 'texto original')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'original text')])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('texto original')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('original text')).closest('li') as HTMLElement
 
     await userEvent.click(within(card).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
 
     const field = await screen.findByRole('textbox', { name: 'Edit text' })
-    expect(field).toHaveValue('texto original')
+    expect(field).toHaveValue('original text')
     expect(field).toHaveFocus() // disableRestoreFocus: the menu must not steal it back
     // While editing: the body is inert (no jump ButtonBase) and the 3-dots hides.
     expect(card.querySelector('.comments-panel__card-body')?.tagName).toBe('DIV')
     expect(within(card).queryByRole('button', { name: 'Comment actions' })).toBeNull()
 
     await userEvent.clear(field)
-    await userEvent.type(field, 'texto melhorado')
+    await userEvent.type(field, 'improved text')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(adapter.update).toHaveBeenCalledWith('c-1', { text: 'texto melhorado' })
+    expect(adapter.update).toHaveBeenCalledWith('c-1', { text: 'improved text' })
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit text' })).toBeNull())
-    expect(await within(panel).findByText('texto melhorado')).toBeInTheDocument()
+    expect(await within(panel).findByText('improved text')).toBeInTheDocument()
   })
 
   it('Escape cancels the edit without saving', async () => {
-    const adapter = fakeAdapter([saved('c-1', ANA, 'não muda')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'unchanged')])
     renderPanel({ adapter })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('não muda')
+    await within(panel).findByText('unchanged')
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const field = await screen.findByRole('textbox', { name: 'Edit text' })
     await userEvent.clear(field)
-    await userEvent.type(field, 'mudança abandonada')
+    await userEvent.type(field, 'abandoned change')
 
     await userEvent.keyboard('{Escape}')
 
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit text' })).toBeNull())
     expect(adapter.update).not.toHaveBeenCalled()
-    expect(within(panel).getByText('não muda')).toBeInTheDocument()
+    expect(within(panel).getByText('unchanged')).toBeInTheDocument()
   })
 
   it('a failed save keeps the edit field (text intact) and shows the error', async () => {
@@ -1096,9 +1096,9 @@ describe('<CommentsPanel /> edit-in-place', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const field = await screen.findByRole('textbox', { name: 'Edit text' })
     await userEvent.clear(field)
-    await userEvent.type(field, 'tentativa{Enter}')
+    await userEvent.type(field, 'attempt{Enter}')
 
     expect(await screen.findAllByText('PATCH exploded')).not.toHaveLength(0)
-    expect(screen.getByRole('textbox', { name: 'Edit text' })).toHaveValue('tentativa')
+    expect(screen.getByRole('textbox', { name: 'Edit text' })).toHaveValue('attempt')
   })
 })

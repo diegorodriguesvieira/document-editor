@@ -131,7 +131,7 @@ describe('useDocumentEditor', () => {
     await waitFor(() => expect(result.current.editor).not.toBeNull())
 
     act(() => {
-      result.current.editor!.commands.insertContent('quase perdido')
+      result.current.editor!.commands.insertContent('almost lost')
     })
     expect(onChange).not.toHaveBeenCalled() // inside the debounce window
 
@@ -139,7 +139,7 @@ describe('useDocumentEditor', () => {
     // the flush must still deliver the snapshot taken at schedule time.
     rerender({ features: [BoldFeature, ItalicFeature], onChange })
     await waitFor(() =>
-      expect(onChange.mock.calls.some((call) => JSON.stringify(call[0].doc).includes('quase perdido'))).toBe(true),
+      expect(onChange.mock.calls.some((call) => JSON.stringify(call[0].doc).includes('almost lost'))).toBe(true),
     )
   })
 
@@ -157,7 +157,7 @@ describe('useDocumentEditor', () => {
     // event must be ref-routed to reach the CURRENT prop — contentError also
     // fires long after creation (e.g. from paste with content check on).
     rerender({ features: [BoldFeature], onContentError: second })
-    const error = new Error('conteúdo inválido')
+    const error = new Error('invalid content')
     act(() => {
       editor.emit('contentError', { editor, error, disableCollaboration: () => {} })
     })

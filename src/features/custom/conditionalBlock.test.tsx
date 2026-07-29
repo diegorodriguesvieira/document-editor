@@ -131,7 +131,7 @@ describe('conditional block', () => {
   })
 
   it('parses its own HTML back to the same condition (paste round-trip)', () => {
-    const condition = equalsCondition('valor.mensal', 10000)
+    const condition = equalsCondition('amount.monthly', 10000)
     const source = renderEditor([ConditionalBlockFeature])
     source.api.setJSON({
       doc: {
@@ -158,7 +158,7 @@ describe('conditional block', () => {
     const created = renderEditor([ConditionalBlockFeature])
     // Legacy HTML: data-condition used to carry the bare operator id — not JSON.
     created.editor.commands.insertContent(
-      '<div data-conditional-block data-variable="pais" data-condition="EQUALS" data-value="brazil"><p>x</p></div>',
+      '<div data-conditional-block data-variable="country" data-condition="EQUALS" data-value="brazil"><p>x</p></div>',
     )
     const block = created.api
       .getJSON()
@@ -236,7 +236,7 @@ describe('conditional block', () => {
               {
                 type: 'conditionalBlock',
                 // Legacy doc JSON: condition carried the bare operator string.
-                attrs: { variable: 'pais', condition: 'EQUALS', value: 'brazil' },
+                attrs: { variable: 'country', condition: 'EQUALS', value: 'brazil' },
                 content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
               },
             ],
@@ -250,8 +250,8 @@ describe('conditional block', () => {
 
 describe('isCompleteCondition', () => {
   it('accepts a finished comparison and full trees', () => {
-    expect(isCompleteCondition(equalsCondition('pais', 'brazil'))).toBe(true)
-    expect(isCompleteCondition(existsCondition('pais'))).toBe(true)
+    expect(isCompleteCondition(equalsCondition('country', 'brazil'))).toBe(true)
+    expect(isCompleteCondition(existsCondition('country'))).toBe(true)
     expect(
       isCompleteCondition({
         any: [
@@ -361,7 +361,7 @@ describe('conditional block — editing around the isolating boundary', () => {
           content: [
             {
               type: 'conditionalBlock',
-              attrs: { condition: equalsCondition('pais', 'brazil') },
+              attrs: { condition: equalsCondition('country', 'brazil') },
               content: [
                 { type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] },
                 {
@@ -458,7 +458,7 @@ describe('conditional block — the ＋ (add nested) button', () => {
             content: [
               {
                 type: 'conditionalBlock',
-                attrs: { condition: equalsCondition('pais', 'brazil') },
+                attrs: { condition: equalsCondition('country', 'brazil') },
                 content: [{ type: 'paragraph', content: [{ type: 'text', text: 'brazil' }] }],
               },
             ],
@@ -935,7 +935,7 @@ describe('conditional block — read-only', () => {
       content: [
         {
           type: 'conditionalBlock',
-          attrs: { condition: existsCondition('pais') },
+          attrs: { condition: existsCondition('country') },
           content: [{ type: 'paragraph', content: [{ type: 'text', text: 'clause' }] }],
         },
       ],
@@ -1014,7 +1014,7 @@ describe('conditional block — read-only', () => {
 
     await userEvent.selectOptions(opSelect, 'NOT_EXISTS')
     const block = editor.getJSON().content?.find((n) => n.type === 'conditionalBlock')
-    expect(block?.attrs?.condition).toEqual(existsCondition('pais')) // unchanged
+    expect(block?.attrs?.condition).toEqual(existsCondition('country')) // unchanged
   })
 
   it('read-only CLOSES an open panel; re-enabling does not resurrect it', async () => {
@@ -1036,5 +1036,36 @@ describe('conditional block — read-only', () => {
     // Controls come back, but the panel stays closed — the author never reopened it.
     await screen.findByLabelText('Add nested condition')
     expect(screen.queryByLabelText('Condition')).toBeNull()
+  })
+
+  it('after the round-trip back to edit mode the controls MUTATE again — not just render', async () => {
+    // The comeback tests above pin control PRESENCE; this pins FUNCTION. The
+    // call-time isEditable guards must release after re-enabling — a refactor
+    // that captured the render-time `editable` in a handler would still pass
+    // the presence tests and only fail here.
+    render(<DocumentEditor features={[ConditionalBlockFeature]} content={lockedDoc} />)
+    await screen.findByText('Show if')
+    const editor = editorFromDOM()
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null)
+
+    act(() => {
+      editor.setEditable(false)
+    })
+    await waitFor(() => expect(screen.queryByLabelText('Remove conditional block')).toBeNull())
+    act(() => {
+      editor.setEditable(true)
+    })
+
+    // Condition edits commit again (summary opens the panel, select commits)…
+    await userEvent.click(await screen.findByText('Show if'))
+    await userEvent.selectOptions(await screen.findByLabelText('Condition'), 'NOT_EXISTS')
+    const block = editor.getJSON().content?.find((n) => n.type === 'conditionalBlock')
+    expect(block?.attrs?.condition).toEqual({
+      all: [{ op: 'NOT_EXISTS', params: [{ type: 'variable', ref: 'country' }] }],
+    })
+
+    // …and delete works again too.
+    await userEvent.click(screen.getByLabelText('Remove conditional block'))
+    expect(jsonHasNode(editor.getJSON(), 'conditionalBlock')).toBe(false)
   })
 })

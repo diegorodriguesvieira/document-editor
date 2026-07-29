@@ -32,7 +32,7 @@ describe('platform features', () => {
 
   it('every block/mark command the presets rely on actually applies', () => {
     const { editor, api } = renderEditor([HeadingFeature, ListsFeature, ItalicFeature], {
-      content: docWith('texto'),
+      content: docWith('hello'),
     })
     // Caret INSIDE the paragraph — node isActive reads the ancestor chain (a
     // select-all would drag the kernel's trailing paragraph into the math).
@@ -53,7 +53,7 @@ describe('platform features', () => {
       expect(editor.isActive('heading', { level })).toBe(true)
     }
 
-    editor.commands.setTextSelection({ from: 1, to: 6 }) // "texto"
+    editor.commands.setTextSelection({ from: 1, to: 6 }) // "hello"
     expect(api.exec('italic.toggle')).toBe(true)
     expect(editor.isActive('italic')).toBe(true)
   })

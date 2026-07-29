@@ -53,7 +53,7 @@ describe('insert shortcuts (the insert-dock features)', () => {
   it('Mod-Alt-b wraps in a conditional block', () => {
     const created = renderEditor([ConditionalBlockFeature])
     created.editor.commands.focus()
-    created.editor.commands.insertContent('cláusula')
+    created.editor.commands.insertContent('clause')
     created.editor.view.dom.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }),
     )

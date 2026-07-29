@@ -250,7 +250,7 @@ describe('<EditorContextMenu /> (the controller wired to a real editor)', () => 
   })
 
   it('falls back to the native menu when no section matches the clicked spot', () => {
-    const created = mountController({ content: docWith('parágrafo fora de tabela') })
+    const created = mountController({ content: docWith('paragraph outside a table') })
 
     const nativeAllowed = created.rightClick({ pos: 3, inside: 0 })
 

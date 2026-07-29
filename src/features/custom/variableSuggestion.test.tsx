@@ -7,9 +7,9 @@ import type { SuggestionPopupRef } from '../../editor'
 import { DocumentVariablesProvider, type DocumentVariable } from './documentVariables'
 
 const VARS: DocumentVariable[] = [
-  { id: 'cliente.nome', label: 'Client name' },
-  { id: 'cliente.cnpj', label: 'Tax ID' },
-  { id: 'contrato.numero', label: 'Contract number' },
+  { id: 'client.name', label: 'Client name' },
+  { id: 'client.taxId', label: 'Tax ID' },
+  { id: 'contract.number', label: 'Contract number' },
 ]
 
 function renderMenu(

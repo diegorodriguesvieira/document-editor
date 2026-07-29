@@ -58,7 +58,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
   if (has('documentHeader')) {
     content.push({
       type: 'documentHeader',
-      content: [paragraph(text('ACME Services Ltd. — Confidential · Contract '), field('contrato.numero', 'Contract number'))],
+      content: [paragraph(text('ACME Services Ltd. — Confidential · Contract '), field('contract.number', 'Contract number'))],
     })
   }
 
@@ -68,11 +68,11 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
     h(1, 'Service agreement'),
     paragraph(
       text('This agreement is made between ACME Services Ltd. and '),
-      field('cliente.nome', 'Client name'),
+      field('client.name', 'Client name'),
       text(', tax ID '),
-      field('cliente.cnpj', 'Tax ID'),
+      field('client.taxId', 'Tax ID'),
       text(', under contract '),
-      field('contrato.numero', 'Contract number'),
+      field('contract.number', 'Contract number'),
       text('.'),
     ),
     h(2, 'Parties & terms'),
@@ -86,16 +86,16 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
           type: 'tableRow',
           content: [cell('tableHeader', text('Item')), cell('tableHeader', text('Detail'))],
         },
-        row('Client', field('cliente.nome', 'Client name')),
-        row('Term (months)', field('contrato.vigencia', 'Term')),
-        row('Monthly amount', field('valor.mensal', 'Monthly amount')),
+        row('Client', field('client.name', 'Client name')),
+        row('Term (months)', field('contract.term', 'Term')),
+        row('Monthly amount', field('amount.monthly', 'Monthly amount')),
       ],
     })
   } else {
     content.push(
-      paragraph(text('Client: '), field('cliente.nome', 'Client name')),
-      paragraph(text('Term (months): '), field('contrato.vigencia', 'Term')),
-      paragraph(text('Monthly amount: '), field('valor.mensal', 'Monthly amount')),
+      paragraph(text('Client: '), field('client.name', 'Client name')),
+      paragraph(text('Term (months): '), field('contract.term', 'Term')),
+      paragraph(text('Monthly amount: '), field('amount.monthly', 'Monthly amount')),
     )
   }
 
@@ -121,7 +121,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
               {
                 op: 'GREATER_THAN',
                 params: [
-                  { type: 'variable', ref: 'valor.mensal' },
+                  { type: 'variable', ref: 'amount.monthly' },
                   { type: 'literal', value: 10000 },
                 ],
               },
@@ -139,7 +139,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
                   {
                     op: 'EQUALS',
                     params: [
-                      { type: 'variable', ref: 'contrato.vigencia' },
+                      { type: 'variable', ref: 'contract.term' },
                       { type: 'literal', value: 12 },
                     ],
                   },
@@ -173,7 +173,7 @@ export function contractTemplate(editor: SchemaSource): DocJSON {
   if (has('documentFooter')) {
     content.push({
       type: 'documentFooter',
-      content: [paragraph(text('ACME Services Ltd. · Contract '), field('contrato.numero', 'Contract number'))],
+      content: [paragraph(text('ACME Services Ltd. · Contract '), field('contract.number', 'Contract number'))],
     })
   }
 

@@ -8,7 +8,7 @@ import App from './App'
 async function selectSomeText() {
   await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
   act(() => {
-    editor().commands.insertContent('hello mundo')
+    editor().commands.insertContent('hello world')
     editor().commands.setTextSelection({ from: 1, to: 6 })
   })
   return await screen.findByRole('toolbar', { name: 'Formatting' })
@@ -97,7 +97,7 @@ describe('<App /> preview mode', () => {
     expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull()
 
     act(() => {
-      editor().commands.insertContent('agora tem conteúdo')
+      editor().commands.insertContent('now with content')
     })
     expect(await screen.findByRole('button', { name: 'Preview' })).toBeInTheDocument()
   })
@@ -108,7 +108,7 @@ describe('<App /> preview mode', () => {
     const surface = () => document.querySelector('.ProseMirror') as HTMLElement
     expect(surface().getAttribute('contenteditable')).toBe('true')
     act(() => {
-      editor().commands.insertContent('hello mundo')
+      editor().commands.insertContent('hello world')
     })
     await screen.findByRole('toolbar', { name: 'Insert' })
 
@@ -131,7 +131,7 @@ describe('<App /> review comments (preview mode)', () => {
     render(<App />)
     await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
     act(() => {
-      editor().commands.insertContent('hello mundo para revisar')
+      editor().commands.insertContent('hello world for review')
     })
     await userEvent.click(await screen.findByRole('button', { name: 'Preview' }))
     await waitFor(() =>
@@ -160,7 +160,7 @@ describe('<App /> review comments (preview mode)', () => {
     // The panel opens with the composer; typing reveals the actions.
     const field = await screen.findByRole('textbox', { name: 'Comment text' })
     expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull()
-    await userEvent.type(field, 'trocar essa palavra{Enter}')
+    await userEvent.type(field, 'change this word{Enter}')
 
     // Saved on the fake backend (300ms) → refetched (300ms more) → the
     // composer closes and the card lands: avatar initials + author + text,
@@ -171,7 +171,7 @@ describe('<App /> review comments (preview mode)', () => {
       { timeout: 3000 },
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    expect(await within(panel).findByText('trocar essa palavra')).toBeInTheDocument()
+    expect(await within(panel).findByText('change this word')).toBeInTheDocument()
     expect(within(panel).getByText('Diego Rodrigues')).toBeInTheDocument()
     expect(within(panel).getByText('DR')).toBeInTheDocument()
     expect(within(panel).queryByText(/hello/)).toBeNull()
@@ -184,7 +184,7 @@ describe('<App /> review comments (preview mode)', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
-    await waitFor(() => expect(screen.queryByText('trocar essa palavra')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('change this word')).toBeNull())
     await waitFor(() => expect(highlight()).toBeNull())
   })
 
@@ -193,19 +193,19 @@ describe('<App /> review comments (preview mode)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
     await userEvent.type(
       await screen.findByRole('textbox', { name: 'Comment text' }),
-      'comentário raiz{Enter}',
+      'root comment{Enter}',
     )
     await waitFor(
       () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
       { timeout: 3000 },
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    await within(panel).findByText('comentário raiz')
+    await within(panel).findByText('root comment')
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
     await userEvent.type(
       await screen.findByRole('textbox', { name: 'Reply text' }),
-      'resposta direta{Enter}',
+      'direct reply{Enter}',
     )
 
     // Saved (300ms) + refetched (300ms): the composer closes FIRST (else a
@@ -215,7 +215,7 @@ describe('<App /> review comments (preview mode)', () => {
       { timeout: 3000 },
     )
     // …then the reply lands nested in the thread…
-    const row = (await within(panel).findByText('resposta direta')).closest('li') as HTMLElement
+    const row = (await within(panel).findByText('direct reply')).closest('li') as HTMLElement
     // …which still counts as ONE open thread, and offers no reply-to-reply.
     expect(within(panel).getByRole('tab', { name: 'Comments (1)' })).toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: 'Reply' })).toBeNull()
@@ -226,14 +226,14 @@ describe('<App /> review comments (preview mode)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
     await userEvent.type(
       await screen.findByRole('textbox', { name: 'Comment text' }),
-      'resolvível{Enter}',
+      'resolvable{Enter}',
     )
     await waitFor(
       () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
       { timeout: 3000 },
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
-    const card = (await within(panel).findByText('resolvível')).closest('li') as HTMLElement
+    const card = (await within(panel).findByText('resolvable')).closest('li') as HTMLElement
     // Only this comment carries a mark in THIS editor (earlier tests' shared
     // db leftovers render as orphans, markless).
     const highlight = () => document.querySelector('.ProseMirror span.comment[data-comment-id]')
@@ -244,9 +244,9 @@ describe('<App /> review comments (preview mode)', () => {
     // PATCH (300ms) + refetch (300ms) → reconciliation sheds the mark…
     await waitFor(() => expect(highlight()).toBeNull(), { timeout: 3000 })
     // …the card leaves the open tab and lives on, frozen, under Resolved.
-    expect(within(panel).queryByText('resolvível')).toBeNull()
+    expect(within(panel).queryByText('resolvable')).toBeNull()
     await userEvent.click(within(panel).getByRole('tab', { name: 'Resolved' }))
-    const frozen = within(panel).getByText('resolvível').closest('li') as HTMLElement
+    const frozen = within(panel).getByText('resolvable').closest('li') as HTMLElement
     expect(within(frozen).getByText('“hello”')).toBeInTheDocument()
     expect(within(frozen).queryByRole('button', { name: 'Reply' })).toBeNull()
   })
@@ -256,7 +256,7 @@ describe('<App /> review comments (preview mode)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add comment' }))
     await userEvent.type(
       await screen.findByRole('textbox', { name: 'Comment text' }),
-      'segue no modo edição{Enter}',
+      'survives edit mode{Enter}',
     )
     await waitFor(
       () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
@@ -275,7 +275,7 @@ describe('<App /> review comments (preview mode)', () => {
       'hello',
     )
     const panel = screen.getByRole('complementary', { name: 'Comments' })
-    expect(await within(panel).findByText('segue no modo edição')).toBeInTheDocument()
+    expect(await within(panel).findByText('survives edit mode')).toBeInTheDocument()
 
     // …but selecting text summons only the FORMATTING bubble, never the balloon.
     act(() => {

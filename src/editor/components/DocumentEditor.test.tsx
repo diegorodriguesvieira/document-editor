@@ -93,14 +93,14 @@ describe('<DocumentEditor /> chrome shells and layout', () => {
 
   it('renderHeader fills the fixed shell; returning null hides the bar (teams without a header)', async () => {
     const { rerender } = render(
-      <DocumentEditor features={[BoldFeature]} renderHeader={() => <span>Meu título</span>} />,
+      <DocumentEditor features={[BoldFeature]} renderHeader={() => <span>My title</span>} />,
     )
     const header = await waitFor(() => {
       const el = document.querySelector('.document-editor__header')
       expect(el).not.toBeNull()
       return el!
     })
-    expect(within(header as HTMLElement).getByText('Meu título')).toBeInTheDocument()
+    expect(within(header as HTMLElement).getByText('My title')).toBeInTheDocument()
 
     rerender(<DocumentEditor features={[BoldFeature]} renderHeader={() => null} />)
     expect(document.querySelector('.document-editor__header')).toBeNull()
@@ -170,7 +170,7 @@ describe('<DocumentEditor /> chrome shells and layout', () => {
       <DocumentEditor
         features={[TableFeature]}
         renderFooter={(ctx) => (
-          <div className="minha-composicao">
+          <div className="my-composition">
             <InsertToolbar {...ctx} className="acoes" />
             <button type="button">Enviar</button>
           </div>
@@ -183,7 +183,7 @@ describe('<DocumentEditor /> chrome shells and layout', () => {
       expect(el).not.toBeNull()
       return el as HTMLElement
     })
-    expect(footer.querySelector('.minha-composicao')).not.toBeNull()
+    expect(footer.querySelector('.my-composition')).not.toBeNull()
     expect(within(footer).getByRole('toolbar', { name: 'Insert' })).toBeInTheDocument()
     expect(within(footer).getByRole('button', { name: 'Enviar' })).toBeInTheDocument()
   })

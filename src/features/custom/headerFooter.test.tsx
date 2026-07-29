@@ -150,33 +150,33 @@ describe('header/footer feature', () => {
   it('Cmd+A in the body includes a leading IMAGE — Delete removes it and restores an empty body', () => {
     const created = renderEditor([HeaderFooterFeature, ImageFeature])
     created.api.setJSON(
-      regionsDoc({ type: 'image', attrs: { src: 'data:,logo' } }, para('texto do corpo')),
+      regionsDoc({ type: 'image', attrs: { src: 'data:,logo' } }, para('body words')),
     )
     const doc = created.editor.state.doc
     const headerSize = doc.firstChild!.nodeSize
     const imageSize = doc.child(1).nodeSize
 
     created.editor.commands.focus()
-    created.editor.commands.setTextSelection(headerSize + imageSize + 2) // caret no corpo
+    created.editor.commands.setTextSelection(headerSize + imageSize + 2) // caret in the body
     pressModA(created.editor)
 
-    // A seleção começa ANTES da imagem (TextSelection a pularia).
+    // The selection starts BEFORE the image (a TextSelection would skip it).
     expect(created.editor.state.selection.from).toBe(headerSize)
     expect(created.editor.state.selection.from).toBeLessThanOrEqual(headerSize + imageSize - 1)
 
     created.editor.commands.deleteSelection()
     const nodes = created.api.getJSON().doc.content ?? []
     expect(nodes.some((n) => n.type === 'image')).toBe(false)
-    // Regiões intactas + corpo restaurado com um parágrafo vazio editável.
+    // Regions intact + body restored with one empty editable paragraph.
     expect(nodes.map((n) => n.type)).toEqual(['documentHeader', 'paragraph', 'documentFooter'])
     const bounds = created.editor.state.doc.firstChild!.nodeSize
-    expect(created.editor.state.selection.from).toBe(bounds + 1) // caret no corpo
+    expect(created.editor.state.selection.from).toBe(bounds + 1) // caret in the body
   })
 
   it('deleting ALL of an open region keeps the caret inside it (typing refills the region)', () => {
     const created = newEditor()
     created.api.exec('header.add')
-    created.editor.commands.insertContent('titulo aqui')
+    created.editor.commands.insertContent('title here')
 
     // Cmd+A inside the region, then delete everything.
     created.editor.commands.focus()
@@ -188,9 +188,9 @@ describe('header/footer feature', () => {
     expect(created.editor.state.selection.from).toBeLessThan(headerSize)
 
     // …so typing refills the header, not the body.
-    created.editor.commands.insertContent('NOVO')
+    created.editor.commands.insertContent('FRESH')
     const nodes = created.api.getJSON().doc.content ?? []
-    expect(nodes[0]?.content?.[0]?.content?.[0]?.text).toBe('NOVO')
+    expect(nodes[0]?.content?.[0]?.content?.[0]?.text).toBe('FRESH')
   })
 
   it('an OPEN region admits the caret; closeRegion expels it and seals the region', async () => {
@@ -240,7 +240,7 @@ describe('header/footer feature', () => {
 
 describe('header/footer guard — edge paths', () => {
   it('Mod+A with no regions in the doc falls through to the native select-all', () => {
-    const created = renderEditor([HeaderFooterFeature], { content: docWith('corpo inteiro') })
+    const created = renderEditor([HeaderFooterFeature], { content: docWith('whole body') })
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(3)
 
@@ -253,7 +253,7 @@ describe('header/footer guard — edge paths', () => {
 
   it('the body select-all survives a JSON round-trip (RangeSelection is serializable)', async () => {
     const created = newEditor()
-    created.api.setJSON(regionsDoc(para('corpo')))
+    created.api.setJSON(regionsDoc(para('body')))
     created.editor.commands.focus()
     created.editor.commands.setTextSelection(created.editor.state.doc.firstChild!.nodeSize + 2)
     pressModA(created.editor)
@@ -297,7 +297,7 @@ describe('header/footer guard — edge paths', () => {
 
     // One transaction that BOTH changes the doc and parks the caret in the
     // body — the shape PM produces when a delete refills the schema hole.
-    let tr = view.state.tr.insertText('corpo', bodyPos)
+    let tr = view.state.tr.insertText('body', bodyPos)
     tr = tr.setSelection(TextSelection.create(tr.doc, bodyPos + 2))
     view.dispatch(tr)
 
@@ -312,7 +312,7 @@ describe('header/footer guard — edge paths', () => {
     created.api.exec('footer.add') // gate open, caret inside the footer
     const view = created.editor.view
 
-    let tr = view.state.tr.insertText('corpo', 1) // the body paragraph comes first
+    let tr = view.state.tr.insertText('body', 1) // the body paragraph comes first
     tr = tr.setSelection(TextSelection.create(tr.doc, 2))
     view.dispatch(tr)
 
@@ -420,7 +420,7 @@ describe('header/footer guard — closed regions are sealed on EVERY path', () =
 describe('header/footer node view (the React chrome)', () => {
   // Header-only (no footer): the node-view tests double-click INTO the header.
   const REGION_DOC = {
-    doc: { type: 'doc', content: [region('documentHeader', 'head'), para('corpo')] },
+    doc: { type: 'doc', content: [region('documentHeader', 'head'), para('body')] },
   }
 
   /** DocumentEditor host (node views need the React mount), plus a toolbar
@@ -521,7 +521,7 @@ describe('header/footer node view (the React chrome)', () => {
     expect(gate(editor).editing).toBe('documentHeader')
 
     // Clicking elsewhere IN the document — closes (and the caret is expelled).
-    fireEvent.mouseDown(screen.getByText('corpo'))
+    fireEvent.mouseDown(screen.getByText('body'))
     expect(gate(editor).editing).toBeNull()
 
     // Reopen; clicking app chrome OUTSIDE the shell also closes.

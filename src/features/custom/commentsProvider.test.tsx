@@ -116,7 +116,7 @@ function mount(adapter: CommentsAdapter, user: CommentUser | undefined = ANA) {
 
 describe('CommentsProvider', () => {
   it('fetches the list on mount', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
 
     await waitFor(() => expect(result.current!.loading).toBe(false))
@@ -207,21 +207,21 @@ describe('CommentsProvider', () => {
   })
 
   it('replyToComment trims, sends, refetches — the reply lands nested in its thread', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
 
     await act(async () => {
-      expect(await result.current!.replyToComment('c-1', '  de acordo  ')).toBe(true)
+      expect(await result.current!.replyToComment('c-1', '  agreed  ')).toBe(true)
     })
 
-    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'de acordo' })
+    expect(adapter.reply).toHaveBeenCalledWith('c-1', { text: 'agreed' })
     expect(adapter.list).toHaveBeenCalledTimes(2) // refetch-after-write
-    expect(result.current!.comments[0].replies?.map((reply) => reply.text)).toEqual(['de acordo'])
+    expect(result.current!.comments[0].replies?.map((reply) => reply.text)).toEqual(['agreed'])
   })
 
   it('replyToComment with whitespace only is a no-op; a failed reply surfaces the error', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
 
@@ -232,37 +232,37 @@ describe('CommentsProvider', () => {
 
     adapter.reply.mockRejectedValueOnce(new Error('replies service down'))
     await act(async () => {
-      expect(await result.current!.replyToComment('c-1', 'vai falhar')).toBe(false)
+      expect(await result.current!.replyToComment('c-1', 'will fail')).toBe(false)
     })
     expect(result.current!.error).toBe('replies service down')
     expect(adapter.list).toHaveBeenCalledTimes(1) // no refetch on failure
   })
 
   it('updateComment rewrites a COMMENT or a REPLY by id (globally-unique ids) and refetches', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
     await act(async () => {
-      await result.current!.replyToComment('c-1', 'resposta')
+      await result.current!.replyToComment('c-1', 'a reply')
     })
 
     await act(async () => {
-      expect(await result.current!.updateComment('c-1', '  texto novo  ')).toBe(true)
+      expect(await result.current!.updateComment('c-1', '  new text  ')).toBe(true)
     })
-    expect(adapter.update).toHaveBeenCalledWith('c-1', { text: 'texto novo' })
-    expect(result.current!.comments[0].text).toBe('texto novo')
+    expect(adapter.update).toHaveBeenCalledWith('c-1', { text: 'new text' })
+    expect(result.current!.comments[0].text).toBe('new text')
 
     // A reply id passes through the same seam, verbatim.
     const replyId = result.current!.comments[0].replies![0].id
     await act(async () => {
-      expect(await result.current!.updateComment(replyId, 'resposta editada')).toBe(true)
+      expect(await result.current!.updateComment(replyId, 'edited reply')).toBe(true)
     })
-    expect(adapter.update).toHaveBeenCalledWith(replyId, { text: 'resposta editada' })
-    expect(result.current!.comments[0].replies![0].text).toBe('resposta editada')
+    expect(adapter.update).toHaveBeenCalledWith(replyId, { text: 'edited reply' })
+    expect(result.current!.comments[0].replies![0].text).toBe('edited reply')
   })
 
   it('updateComment: whitespace no-op; failure sets the error and keeps the list', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'intacto')])
+    const adapter = fakeAdapter([saved('c-1', 'untouched')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
 
@@ -273,14 +273,14 @@ describe('CommentsProvider', () => {
 
     adapter.update.mockRejectedValueOnce(new Error('PATCH exploded'))
     await act(async () => {
-      expect(await result.current!.updateComment('c-1', 'vai falhar')).toBe(false)
+      expect(await result.current!.updateComment('c-1', 'will fail')).toBe(false)
     })
     expect(result.current!.error).toBe('PATCH exploded')
-    expect(result.current!.comments[0].text).toBe('intacto')
+    expect(result.current!.comments[0].text).toBe('untouched')
   })
 
   it('setCommentStatus PATCHes the lifecycle, clears a matching active highlight, refetches', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'aberto')])
+    const adapter = fakeAdapter([saved('c-1', 'open thread')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
     act(() => result.current!.setActiveId('c-1'))
@@ -298,7 +298,7 @@ describe('CommentsProvider', () => {
   })
 
   it('a failed setStatus surfaces the error and keeps the status', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'aberto')])
+    const adapter = fakeAdapter([saved('c-1', 'open thread')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
     adapter.setStatus.mockRejectedValueOnce(new Error('PATCH status down'))
@@ -313,7 +313,7 @@ describe('CommentsProvider', () => {
   })
 
   it('removeComment deletes on the server, clears the active highlight and refetches', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
 
@@ -328,7 +328,7 @@ describe('CommentsProvider', () => {
   })
 
   it('a repeat mutation for the SAME id while one is in flight is ignored', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'travado')])
+    const adapter = fakeAdapter([saved('c-1', 'locked')])
     let release!: () => void
     adapter.setStatus.mockImplementation(
       () =>
@@ -374,7 +374,7 @@ describe('CommentsProvider', () => {
   })
 
   it('a failed list keeps the last good list (an offline blip must not blank the panel)', async () => {
-    const adapter = fakeAdapter([saved('c-1', 'primeiro')])
+    const adapter = fakeAdapter([saved('c-1', 'first one')])
     const { result } = mount(adapter)
     await waitFor(() => expect(result.current!.comments.length).toBe(1))
 

@@ -77,13 +77,13 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDocVariables([
-        { id: 'cliente.nome', label: 'Client name', group: 'Client details' },
-        { id: 'cliente.cnpj', label: 'Tax ID', group: 'Client details' },
-        { id: 'contrato.numero', label: 'Contract number', group: 'Contract details' },
-        { id: 'contrato.vigencia', label: 'Term', group: 'Contract details' },
-        { id: 'valor.mensal', label: 'Monthly amount', group: 'Contract details' },
-        { id: 'cliente.assinatura', label: 'Client signature', group: 'Signatures', type: 'signature' },
-        { id: 'empresa.assinatura', label: 'Company signature', group: 'Signatures', type: 'signature' },
+        { id: 'client.name', label: 'Client name', group: 'Client details' },
+        { id: 'client.taxId', label: 'Tax ID', group: 'Client details' },
+        { id: 'contract.number', label: 'Contract number', group: 'Contract details' },
+        { id: 'contract.term', label: 'Term', group: 'Contract details' },
+        { id: 'amount.monthly', label: 'Monthly amount', group: 'Contract details' },
+        { id: 'client.signature', label: 'Client signature', group: 'Signatures', type: 'signature' },
+        { id: 'company.signature', label: 'Company signature', group: 'Signatures', type: 'signature' },
       ])
       setDecisionFlags(normalizeConditionals(RAW_CONDITIONALS))
     }, 1500)

@@ -84,7 +84,7 @@ const KITCHEN_SINK = {
               {
                 op: 'EQUALS',
                 params: [
-                  { type: 'variable', ref: 'pais' },
+                  { type: 'variable', ref: 'country' },
                   { type: 'literal', value: 'brazil' },
                 ],
               },
@@ -146,7 +146,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-document-header',
       'data-document-footer',
       'data-conditional-block',
-      '&quot;ref&quot;:&quot;pais&quot;', // condition JSON inside data-condition, entity-escaped
+      '&quot;ref&quot;:&quot;country&quot;', // condition JSON inside data-condition, entity-escaped
       'data-variable="client.name"',
       'data-comment-id="c-ks"',
       'data-type="callout"',

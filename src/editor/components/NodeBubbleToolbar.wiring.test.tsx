@@ -47,8 +47,8 @@ describe('<NodeBubbleToolbar /> → BubbleMenu wiring', () => {
     render(<NodeBubbleToolbar editor={editor} api={api} resolved={resolved} />)
     expect(captured.at(-1)?.className).toBe('document-editor-popup bubble-toolbar node-bubble-toolbar')
 
-    render(<NodeBubbleToolbar editor={editor} api={api} resolved={resolved} className="minha-bolha" />)
-    expect(captured.at(-1)?.className).toBe('document-editor-popup minha-bolha')
+    render(<NodeBubbleToolbar editor={editor} api={api} resolved={resolved} className="my-bubble" />)
+    expect(captured.at(-1)?.className).toBe('document-editor-popup my-bubble')
   })
 })
 
@@ -72,10 +72,10 @@ describe('<DocumentEditor /> node bubble surface', () => {
     render(
       <DocumentEditor
         features={[ImageFeature]}
-        renderNodeBubble={(ctx) => <div>minha bolha {String(Boolean(ctx.api))}</div>}
+        renderNodeBubble={(ctx) => <div>my bubble {String(Boolean(ctx.api))}</div>}
       />,
     )
-    expect(await screen.findByText('minha bolha true')).toBeInTheDocument()
+    expect(await screen.findByText('my bubble true')).toBeInTheDocument()
     expect(nodeBubbleMounts()).toHaveLength(0) // the default did NOT mount
   })
 })
