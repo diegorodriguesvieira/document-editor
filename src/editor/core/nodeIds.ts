@@ -1,7 +1,3 @@
-// uuid stays pinned at 10.0.0 to match @tiptap/extension-unique-id's own
-// `uuid: ^10.0.0` and keep a single copy in the tree. v10 is deprecated
-// upstream — revisit (and retire @types/uuid) when TipTap bumps its range.
-import { v4 as uuidv4 } from 'uuid'
 import type { JSONContent } from '@tiptap/core'
 import type { DocumentJSON } from './document'
 
@@ -20,9 +16,13 @@ import type { DocumentJSON } from './document'
 export const NODE_ID_ATTRIBUTE = 'uid'
 
 /** The one place node ids are minted — the kernel's UniqueID `generateID`
- *  and {@link injectNodeIds} both draw from here. */
+ *  and {@link injectNodeIds} both draw from here. Platform crypto, no uuid
+ *  dependency (the extension's own uuid stays transitive and unused, since
+ *  we override its `generateID`): `crypto.randomUUID` needs Node ≥ 16.7 and,
+ *  in browsers, a secure context (HTTPS/localhost) — already this SDK's
+ *  baseline. Still uuid v4, so existing documents are indistinguishable. */
 export function generateNodeId(): string {
-  return uuidv4()
+  return crypto.randomUUID()
 }
 
 /** The id-scope rule, single-sourced: `doc` is the envelope itself and text
