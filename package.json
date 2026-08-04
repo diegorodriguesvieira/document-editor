@@ -37,12 +37,14 @@
     "@tiptap/extension-table": "3.17.0",
     "@tiptap/extension-text": "3.17.0",
     "@tiptap/extension-text-style": "3.17.0",
+    "@tiptap/extension-unique-id": "3.17.0",
     "@tiptap/extensions": "3.17.0",
     "@tiptap/pm": "3.17.0",
     "@tiptap/react": "3.17.0",
     "@tiptap/suggestion": "3.17.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "uuid": "10.0.0"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.4.6",
@@ -55,6 +57,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.9",
     "jsdom": "^29.1.1",

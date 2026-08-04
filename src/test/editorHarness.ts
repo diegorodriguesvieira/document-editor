@@ -8,6 +8,9 @@ import {
   type CreatedEditor,
   type FeatureDefinition,
 } from '../editor'
+// Deliberate deep import: these stay SDK-internal (off the curated
+// src/editor/index.ts barrel), and hardcoding 'uid' here would be worse.
+import { NODE_ID_ATTRIBUTE, carriesNodeId } from '../editor/core/nodeIds'
 
 /**
  * Shared real-editor test harness — the supported way to test a feature.
@@ -53,6 +56,15 @@ export function editorFromDOM(): Editor {
 export const docWith = (text: string) => ({
   doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
+
+/** The `uid` attribute value of every node expected to carry one (all except
+ *  the doc root and text leaves), in document order. Non-string entries mean
+ *  the invariant broke: `null` = in scope but left unstamped by the editor,
+ *  `undefined` = raw JSON never stamped at all. */
+export function collectNodeIds(node: JSONContent): unknown[] {
+  const own = carriesNodeId(node.type) ? [node.attrs?.[NODE_ID_ATTRIBUTE]] : []
+  return [...own, ...(node.content ?? []).flatMap((child) => collectNodeIds(child))]
+}
 
 /** Whether a node of `type` exists anywhere in a JSON document tree. */
 export function jsonHasNode(node: JSONContent, type: string): boolean {

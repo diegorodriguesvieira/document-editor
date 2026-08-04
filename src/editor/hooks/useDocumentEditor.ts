@@ -65,15 +65,23 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
   onContentErrorRef.current = options.onContentError
 
   // Same construction policy as createEditor (content fallback + content check),
-  // plus the React-only `/` menu mirroring the insert dock.
-  const base = baseEditorOptions(resolved, {
-    content: options.content,
-    onContentError: (error) => {
-      const handler = onContentErrorRef.current
-      if (handler) handler(error)
-      else throw error
-    },
-  })
+  // plus the React-only `/` menu mirroring the insert dock. Memoized: building
+  // the options runs injectNodeIds over the whole document + resolveExtensions,
+  // and useEditor only consumes them at (re)creation — recomputing per render
+  // would walk and re-mint the content for nothing. The error handler closure
+  // is ref-routed, so memoizing never freezes a stale prop.
+  const base = useMemo(
+    () =>
+      baseEditorOptions(resolved, {
+        content: options.content,
+        onContentError: (error) => {
+          const handler = onContentErrorRef.current
+          if (handler) handler(error)
+          else throw error
+        },
+      }),
+    [resolved, options.content],
+  )
   const editable = options.editable ?? true
   const editor = useEditor(
     {

@@ -18,7 +18,7 @@ import {
   QuoteFeature,
   TableFeature,
 } from './index'
-import { renderEditor } from '../test/editorHarness'
+import { collectNodeIds, jsonFindNode, renderEditor } from '../test/editorHarness'
 
 const ALL_FEATURES = [
   HistoryFeature,
@@ -137,6 +137,28 @@ describe('cross-feature composition (kitchen sink)', () => {
     expect(api.getJSON()).toEqual(once) // normalization is a fixpoint, not churn
   })
 
+  it('stamps a unique uid on every content node — all features covered at once', () => {
+    const { api } = renderEditor(ALL_FEATURES)
+    api.setJSON(KITCHEN_SINK)
+    const doc = api.getJSON().doc
+
+    // collectNodeIds yields one entry per node expected to carry a uid —
+    // `undefined` means a type escaped the id-scope enumeration, `null` means
+    // it is in scope but never got stamped. `typeof string` rejects both.
+    const ids = collectNodeIds(doc)
+    expect(ids.length).toBeGreaterThan(20)
+    for (const id of ids) expect(typeof id).toBe('string')
+    expect(new Set(ids).size).toBe(ids.length)
+    // The one node type that only exists through TableKit's addExtensions().
+    expect(jsonFindNode(doc, 'tableRow')?.attrs?.uid).toBeTruthy()
+
+    // And every one of them SERIALIZES its id — the backend consumes HTML, so
+    // a feature whose renderHTML stops merging HTMLAttributes would otherwise
+    // ship id-less nodes with a green suite. Count, not substring: exact.
+    const html = api.getHTML()
+    expect((html.match(/data-uid="/g) ?? []).length).toBe(ids.length)
+  })
+
   it('serializes every backend contract marker into the HTML', () => {
     const { api } = renderEditor(ALL_FEATURES)
     api.setJSON(KITCHEN_SINK)
@@ -150,6 +172,7 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-variable="client.name"',
       'data-comment-id="c-ks"',
       'data-type="callout"',
+      'data-uid',
       '<strong', '<em', 'href="https://example.com"',
       '<table', '<img', '<pre', '<blockquote', '<hr', '<ul',
     ]) {

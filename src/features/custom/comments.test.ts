@@ -248,10 +248,14 @@ describe('comments reconciliation + paste hygiene', () => {
     )
     expect(JSON.stringify(slice.toJSON())).toContain('c-alien')
 
-    const transformed = created.editor.view.someProp('transformPasted', (fn) =>
-      fn(slice, created.editor.view, false),
-    )
+    // PM CHAINS every plugin's transformPasted (the someProp callback's return
+    // is discarded) — mirror that: with UniqueID in the kernel, comments' is
+    // no longer the only transform in the chain.
+    let transformed = slice
+    created.editor.view.someProp('transformPasted', (fn) => {
+      transformed = fn(transformed, created.editor.view, false)
+    })
 
-    expect(JSON.stringify(transformed?.toJSON())).not.toContain('comment')
+    expect(JSON.stringify(transformed.toJSON())).not.toContain('comment')
   })
 })

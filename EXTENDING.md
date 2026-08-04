@@ -353,6 +353,41 @@ Feature commands holding a raw ProseMirror doc can share `api.hasNode`'s
 definition via the exported `hasTopLevelNode(doc, name)` — one meaning of
 "the document has a header", not two.
 
+### Node identity (uid)
+
+Every content node — everything except the `doc` root and `text` leaves —
+carries a `uid` attribute: a unique id minted by the SDK. You get this for
+free: raw documents are stamped on the way
+in (initial `content` and `api.setJSON` fill missing ids and re-mint
+duplicates, keeping the first occurrence in document order), and nodes born
+while editing (typing, splits, paste) are stamped by the kernel's UniqueID
+extension. Your feature's nodes are covered with zero configuration — even
+nodes hidden inside a kit extension's `addExtensions()`.
+
+Rules and caveats:
+
+- **Never mint or copy a `uid` yourself** (e.g. `insertContent` with a
+  hand-rolled `uid`) — programmatic inserts aren't policed, and a copied id
+  silently breaks the uniqueness invariant.
+- **`uid` is not your feature's `id`.** Business identity (the variable
+  chip's `attrs.id` → `data-variable`) stays yours; `uid` is the SDK's.
+- **Ids are unique, not eternal.** An id survives typing around the node and
+  save/reload, but copy-like operations re-mint: paste always does, and
+  dragging a block to a new position counts as one (ProseMirror flags every
+  drag as a potential copy). Key long-lived external data on business ids,
+  not on `uid`.
+- `api.getHTML()` serializes `uid` as `data-uid` on every node whose
+  `renderHTML` merges `HTMLAttributes` (today: all of them — pinned by the
+  composition suite). The LIVE editor DOM is different: node views build
+  their own elements without it, so identify nodes by the JSON, never by
+  querying the page.
+
+For pipelines that want id-free JSON (fixtures, diffing, content dedup), the
+inverse pair is exported: `injectNodeIds(doc)` / `stripNodeIds(doc)` — pure
+functions over `{ doc }`. For an id-free `x`, `stripNodeIds(injectNodeIds(x))`
+deep-equals `x`; an already-stamped document is NOT round-tripped identically —
+strip-then-inject mints fresh ids.
+
 ### Autosave and race conditions — who does what
 
 **The SDK guarantees:** `onChange` fires with a consistent snapshot of the

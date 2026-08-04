@@ -67,6 +67,7 @@ export { EditorContent } from '@tiptap/react'
 // Content / persistence
 export type { DocumentJSON } from './core/document'
 export { hasTopLevelNode } from './core/document'
+export { injectNodeIds, stripNodeIds } from './core/nodeIds'
 
 // Authoring surface for custom features
 export * from './authoring'

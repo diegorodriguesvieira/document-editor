@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
@@ -988,13 +988,20 @@ describe('conditional block — read-only', () => {
     })
     expect(screen.getByLabelText('Remove conditional block')).toBeInTheDocument()
 
-    await userEvent.click(deleteBtn) // stale 🗑 — must not delete
+    // fireEvent, not userEvent: the stale premise only lasts while NO
+    // transaction fires — any one (even meta-only) re-runs useEditorState,
+    // re-reads isEditable and legitimately drops the chrome. userEvent's
+    // pointer/focus dance can blur view.dom, and core's focusEvents plugin
+    // turns that into exactly such a transaction — closing the stale window
+    // mid-test (flaky under load). A bare click still runs the onClick
+    // call-time guard, which is the contract under test.
+    fireEvent.click(deleteBtn) // stale 🗑 — must not delete
     expect(jsonHasNode(editor.getJSON(), 'conditionalBlock')).toBe(true)
 
-    await userEvent.click(screen.getByLabelText('Add nested condition')) // stale ＋
+    fireEvent.click(screen.getByLabelText('Add nested condition')) // stale ＋
     expect(editor.getJSON().content?.[0]?.content?.map((k) => k.type)).toEqual(['paragraph'])
 
-    await userEvent.click(screen.getByText('Show if')) // stale summary — no panel
+    fireEvent.click(screen.getByText('Show if')) // stale summary — no panel
     expect(document.querySelector('.cond-editor')).toBeNull()
   })
 

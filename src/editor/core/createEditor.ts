@@ -3,6 +3,7 @@ import type { Transaction } from '@tiptap/pm/state'
 import { buildExtensions } from './buildExtensions'
 import { createEditorApi, type EditorApi } from './EditorApi'
 import { createEmptyDocument, type DocumentJSON } from './document'
+import { injectNodeIds } from './nodeIds'
 import { resolveFeatures, type ResolvedFeatures } from './registry'
 import type { FeatureDefinition } from './types'
 
@@ -28,6 +29,9 @@ export interface CreatedEditor {
  * fallback and the content-check policy (surface invalid content instead of
  * silently wiping the doc). ONE owner: `createEditor` and `useDocumentEditor`
  * both spread this, so the policy can never drift between them.
+ * Content is uid-stamped on the way in (injectNodeIds), so mounting never
+ * mutates the document — UniqueID's create-scan finds nothing missing, and
+ * read-only mounts stay free of phantom updates.
  */
 export function baseEditorOptions(
   resolved: ResolvedFeatures,
@@ -35,7 +39,7 @@ export function baseEditorOptions(
 ) {
   return {
     extensions: buildExtensions(resolved),
-    content: (options.content ?? createEmptyDocument()).doc,
+    content: injectNodeIds(options.content ?? createEmptyDocument()).doc,
     enableContentCheck: true as const,
     onContentError: ({ error }: { error: Error }) => {
       if (options.onContentError) options.onContentError(error)

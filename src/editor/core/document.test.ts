@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyDocument, isBlankDocument, type DocumentJSON } from './document'
+import { stripNodeIds } from './nodeIds'
 import { TableFeature } from '../../features'
 import { docWith, renderEditor } from '../../test/editorHarness'
 
@@ -13,7 +14,8 @@ describe('DocumentJSON round-trip', () => {
   it('setJSON then getJSON preserves the document', () => {
     const { api } = renderEditor([])
     api.setJSON(sample)
-    expect(api.getJSON().doc).toEqual(sample.doc)
+    // getJSON carries the minted uids — preservation means CONTENT fidelity.
+    expect(stripNodeIds(api.getJSON()).doc).toEqual(sample.doc)
   })
 
   it('exports HTML for read-only display', () => {

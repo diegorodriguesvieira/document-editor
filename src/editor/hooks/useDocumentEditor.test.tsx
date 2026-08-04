@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useDocumentEditor } from './useDocumentEditor'
 import { BoldFeature, ItalicFeature, createColorFeature } from '../../features'
+import { collectNodeIds, docWith } from '../../test/editorHarness'
 
 describe('useDocumentEditor', () => {
   it('does NOT recreate the editor when given a fresh-but-equivalent features array', () => {
@@ -77,6 +78,29 @@ describe('useDocumentEditor', () => {
 
     // Unmount flushes any pending debounce SYNCHRONOUSLY — if the toggle had
     // scheduled one, this surfaces it without waiting out the debounce window.
+    unmount()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a read-only mount of a raw document gets its uids without firing onChange', async () => {
+    const onChange = vi.fn()
+    const { result, unmount } = renderHook(() =>
+      useDocumentEditor({ features: [BoldFeature], editable: false, content: docWith('raw'), onChange }),
+    )
+    await waitFor(() => expect(result.current.editor).not.toBeNull())
+    expect(result.current.editor!.isEditable).toBe(false)
+
+    // Ids are stamped at ENTRY (injectNodeIds), not by an editor transaction.
+    // Alone this doesn't prove it — the async create-scan could have stamped
+    // them during the waitFor above…
+    const ids = collectNodeIds(result.current.editor!.getJSON())
+    expect(ids).toHaveLength(1)
+    expect(typeof ids[0]).toBe('string')
+
+    // …so the other half of the proof: a create-scan fill would be a
+    // doc-changing transaction after subscription, and the unmount flush
+    // would surface it as onChange. Ids present AND onChange silent can
+    // only mean entry-stamping.
     unmount()
     expect(onChange).not.toHaveBeenCalled()
   })

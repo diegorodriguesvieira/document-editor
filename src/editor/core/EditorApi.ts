@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core'
 import { hasTopLevelNode, isBlankDocument, toDocumentJSON, type DocumentJSON } from './document'
+import { injectNodeIds } from './nodeIds'
 import type { ResolvedFeatures } from './registry'
 
 /**
@@ -37,8 +38,9 @@ export interface FoundNode {
 export interface EditorApi extends EditorStateView {
   getJSON(): DocumentJSON
   /** Replace the whole document — a heavy O(n) load (full reparse), not an
-   *  update channel. Throws if `doc` contains content invalid for the active
-   *  schema (e.g. a node whose feature is disabled). */
+   *  update channel. Content is uid-stamped on the way in (missing node ids
+   *  minted, duplicates re-minted). Throws if `doc` contains content invalid
+   *  for the active schema (e.g. a node whose feature is disabled). */
   setJSON(doc: DocumentJSON): void
   getHTML(): string
   /** Whether a top-level node of this type exists in the document. */
@@ -86,7 +88,7 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
     },
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
-      editor.commands.setContent(doc.doc)
+      editor.commands.setContent(injectNodeIds(doc).doc)
     },
     getHTML: () => editor.getHTML(),
     focus: () => {
