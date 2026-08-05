@@ -324,7 +324,11 @@ time and overlapping cycles coalesce into a single follow-up. `versionId` is
 the consumer's optimistic-concurrency token — it lives in the `save` closure,
 because the SDK carries it without ever reading it; a stale one is rejected
 without writing, and the consumer's `shouldStop` tells the save layer to stop
-for good (settling every queued create instead of leaving it hanging). Per-comment states
+for good (settling every queued create instead of leaving it hanging). The cycle's own state (`saved` → `pending` → `saving` → …) is what the
+consumer's banner reads, and `saved` is the ONLY value meaning the server has
+everything — the opt-in `warnBeforeUnload` turns anything else into the
+browser's leave-page confirmation (its text is the platform's, and it warns
+without saving: `beforeunload` cannot await). Per-comment states
 (`pendingSave` → `saving`) render on the cards; there is no per-anchor
 failure — a failed envelope persisted NOTHING and retries wholesale. Creates
 in REVIEW mode still POST immediately (the doc is frozen, so the saved doc IS

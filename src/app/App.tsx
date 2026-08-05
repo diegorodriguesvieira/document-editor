@@ -178,7 +178,15 @@ export default function App() {
     // The save layer wraps everything: the envelope is the DOCUMENT's save
     // (comments only contributes its anchors and queued creates to it), and
     // the banner below reads its state from here.
-    <DocumentSaveProvider save={save} debounceMs={AUTOSAVE_MS} shouldStop={isVersionConflict}>
+    <DocumentSaveProvider
+      save={save}
+      debounceMs={AUTOSAVE_MS}
+      shouldStop={isVersionConflict}
+      // Closing the tab mid-save asks for confirmation (the browser's own
+      // wording — the platform dropped custom messages). It only warns: the
+      // user dismisses it, waits for the save to land, and leaves then.
+      warnBeforeUnload
+    >
     <div className="app">
       <SaveBanner />
       <main className="app__canvas">

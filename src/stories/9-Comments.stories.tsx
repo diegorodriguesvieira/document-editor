@@ -42,7 +42,22 @@ const meta = {
           'demonstrable for real. Use the left-rail dashboard: latency slider, per-endpoint ' +
           'failure toggles, the autosave state (with an "another session saves" button that ' +
           'provokes a real version conflict), the request log (one envelope PUT carries doc + ' +
-          'anchors + creates) and a live `nodes[]` inspector.',
+          'anchors + creates) and a live `nodes[]` inspector.' +
+          '\n\n' +
+          'The cycle itself belongs to `DocumentSaveProvider` — the consumer brings a `save` ' +
+          'function, a cadence and an optional `shouldStop`; the debounce, the one-envelope-in-' +
+          'flight rule, the flush on teardown and on leaving edit mode are the SDK\'s, and the ' +
+          'editor registers itself, so there is no `onChange` to remember to wire. Its state ' +
+          'is on the dashboard: `saved` is the ONLY value meaning the server has everything — ' +
+          'watch it sit on `unsaved — waiting out the save window` (`pending`) between a ' +
+          'keystroke and the PUT. One prop is deliberately NOT enabled here: ' +
+          '`warnBeforeUnload` asks the browser to confirm before a dirty tab is closed or ' +
+          'reloaded (anything other than `saved`). It would fire on every Storybook refresh ' +
+          'and demonstrate nothing — Storybook navigation is client-side. Turn it on in your ' +
+          'own app; note that it WARNS without saving (`beforeunload` cannot await a promise) ' +
+          'and that the dialog\'s text is the browser\'s: custom messages left the platform ' +
+          'years ago. For wording of your own, guard your in-app navigation with ' +
+          '`useDocumentSave().state`.',
       },
     },
   },
@@ -163,6 +178,7 @@ const dashStyles: Record<string, React.CSSProperties> = {
  *  way. */
 const SAVE_LABEL: Record<DocumentSaveState, string> = {
   saved: 'up to date',
+  pending: 'unsaved — waiting out the save window',
   saving: 'saving…',
   failed: 'NOT SAVED — the next edit retries the whole envelope',
   stopped: 'VERSION CONFLICT — reload to continue from the latest version',
@@ -177,15 +193,28 @@ function MockDashboard({
   api,
   onOtherSessionSaves,
   showNodes = false,
+  showUnloadProbe = false,
 }: {
   api: MockCommentsApi
   onOtherSessionSaves: () => void
   showNodes?: boolean
+  showUnloadProbe?: boolean
 }) {
   const [, force] = useReducer((tick: number) => tick + 1, 0)
   useEffect(() => api.subscribe(force), [api])
   // The save state comes from the SDK — the rig keeps no copy of it.
   const save = useDocumentSave()?.state ?? 'saved'
+  /* Asks the PAGE whether it would stop someone leaving right now: dispatching
+   * a cancelable `beforeunload` runs the listeners without opening the real
+   * dialog (only an actual reload/close does that). It is the same probe a
+   * test would use — and the only way to watch the guard arm and release
+   * without fighting a browser modal. */
+  const [leaving, setLeaving] = useState<'blocked' | 'free' | null>(null)
+  const probeUnload = () => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    setLeaving(event.defaultPrevented ? 'blocked' : 'free')
+  }
   const [latency, setLatency] = useState(api.latencyMs)
   const toggle = (kind: MockFailureKind) => {
     if (api.failNext.has(kind)) api.failNext.delete(kind)
@@ -233,6 +262,21 @@ function MockDashboard({
           another session saves
         </button>
       </div>
+      {showUnloadProbe ? (
+        <div style={dashStyles.block}>
+          <strong>leave-page guard</strong>
+          <button type="button" onClick={probeUnload}>
+            would leaving be blocked?
+          </button>
+          {leaving ? (
+            <span style={leaving === 'blocked' ? dashStyles.alarm : undefined}>
+              {leaving === 'blocked'
+                ? 'BLOCKED — the browser would ask to confirm'
+                : 'free — everything is on the server'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {showNodes ? (
         <div style={dashStyles.block}>
           <strong>nodes[] (server rows)</strong>
@@ -269,10 +313,13 @@ function CommentsRig({
   api,
   editable,
   showNodes = false,
+  warnBeforeUnload = false,
 }: {
   api: MockCommentsApi
   editable: boolean
   showNodes?: boolean
+  /** Opt-in per story: it would otherwise prompt on every Storybook refresh. */
+  warnBeforeUnload?: boolean
 }) {
   /** THE SAVE CADENCE is the consumer's policy — a network write should not
    *  fire on every typing pause. Everything else about the cycle (one envelope
@@ -335,7 +382,12 @@ function CommentsRig({
       {/* The save layer sits ABOVE: the envelope is the DOCUMENT's save, and
           comments merely contributes its anchors and queued creates to it.
           A stale version stops saving — every retry would be rejected alike. */}
-      <DocumentSaveProvider save={save} debounceMs={AUTOSAVE_MS} shouldStop={isVersionConflict}>
+      <DocumentSaveProvider
+        save={save}
+        debounceMs={AUTOSAVE_MS}
+        shouldStop={isVersionConflict}
+        warnBeforeUnload={warnBeforeUnload}
+      >
         <CommentsProvider user={YOU} adapter={api.adapter}>
           <DocumentEditor
             features={ALL_FEATURES}
@@ -358,6 +410,7 @@ function CommentsRig({
                 api={api}
                 onOtherSessionSaves={otherSessionSaves}
                 showNodes={showNodes}
+                showUnloadProbe={warnBeforeUnload}
               />
             )}
             renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}
@@ -506,6 +559,33 @@ export const DeleteTextOrphan: Story = {
           'ORPHAN: original quote + "Original text was removed", still replyable and ' +
           'deletable. Orphan-forever is the intended semantics; only undo (or the text\'s uid ' +
           'reappearing via paste) revives the anchor.',
+      },
+    },
+  },
+}
+
+export const LeavePageGuard: Story = {
+  name: '9. warnBeforeUnload → leaving a dirty tab',
+  render: () => (
+    <CommentsRig api={storyApi([DEADLINE_ROW])} editable warnBeforeUnload showNodes={false} />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The ONE story with `warnBeforeUnload` on — it is off everywhere else because it ' +
+          'would prompt on every Storybook refresh. Type in the document and press **"would ' +
+          'leaving be blocked?"** in the dashboard: it answers BLOCKED. Wait for the autosave ' +
+          'line to go back to "up to date" and press it again: free. That button dispatches a ' +
+          'cancelable `beforeunload` and reports whether anything cancelled it — the same ' +
+          'probe a test uses — so you can watch the guard arm and release without fighting a ' +
+          'browser modal. (A real ⌘R while dirty shows the actual dialog.) Three things worth ' +
+          'knowing: the guard covers `pending` too, so it is armed from the KEYSTROKE, not ' +
+          'from when the envelope leaves — try the probe immediately after typing, well ' +
+          'inside the save window. It stays armed after a rejected save (toggle "fail save": ' +
+          'nothing was persisted, so leaving still loses work). And it only WARNS — ' +
+          '`beforeunload` cannot await a promise, so nothing is saved from inside it, and the ' +
+          "dialog's text is the browser's: custom messages left the platform years ago.",
       },
     },
   },

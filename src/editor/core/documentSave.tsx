@@ -13,7 +13,10 @@ import { useFeatureState } from '../hooks/useFeatureState'
 
 /**
  * Where the save cycle stands:
- * - `saved` — nothing outstanding (the initial state).
+ * - `saved` — nothing outstanding (the initial state). The ONLY state in which
+ *   the server has everything: treat every other one as unsaved work.
+ * - `pending` — edits are waiting out the save window (or a cycle in flight is
+ *   already superseded by newer ones). Nothing has been sent yet.
  * - `saving` — an envelope is in flight.
  * - `failed` — the last envelope was rejected and NOTHING was persisted.
  *   Everything stays queued; the next edit resends fresher state, so there is
@@ -22,7 +25,7 @@ import { useFeatureState } from '../hooks/useFeatureState'
  *   (typically: another session owns the document now). Saving stops for good
  *   and queued work is settled rather than left hanging.
  */
-export type DocumentSaveState = 'saved' | 'saving' | 'failed' | 'stopped'
+export type DocumentSaveState = 'saved' | 'pending' | 'saving' | 'failed' | 'stopped'
 
 /** The document half of the envelope — the raw ProseMirror JSON, exactly as
  *  `editor.getJSON()` returns it. Contributed slices are merged in beside it. */
@@ -74,6 +77,22 @@ export interface DocumentSaveOptions<E extends DocumentSaveEnvelope> {
    * conflict is your backend's convention, not the editor's.
    */
   shouldStop?: (failure: unknown) => boolean
+  /**
+   * Ask the browser to confirm before the tab is closed or reloaded while
+   * anything is unsaved (any {@link DocumentSaveState} other than `saved`,
+   * including edits still inside the save window). Off by default — an editor
+   * embedded in a larger page should not hijack the tab without being asked.
+   *
+   * It WARNS, it does not save: `beforeunload` cannot await a promise, so a
+   * request started there dies with the tab. The user dismisses the dialog,
+   * waits for the save to land, and then leaves.
+   *
+   * The text is the BROWSER's and cannot be changed — every engine dropped
+   * custom messages years ago (Chrome 51, Firefox 44, Safari 9.1). For a
+   * message of your own, guard your in-app navigation with
+   * `useDocumentSave().state` instead.
+   */
+  warnBeforeUnload?: boolean
 }
 
 /** What the consumer's UI reads (a banner, a status line). */
@@ -123,6 +142,7 @@ export function DocumentSaveProvider<E extends DocumentSaveEnvelope = DocumentSa
   save,
   debounceMs = 1500,
   shouldStop,
+  warnBeforeUnload = false,
   children,
 }: DocumentSaveOptions<E> & { children: ReactNode }) {
   const [state, setState] = useState<DocumentSaveState>('saved')
@@ -172,7 +192,10 @@ export function DocumentSaveProvider<E extends DocumentSaveEnvelope = DocumentSa
     const cycle = saveRef.current(envelope as E)
       .then((result) => {
         for (const { contributor, token } of collected) contributor.confirm(token, result)
-        setState('saved')
+        // Only `saved` if nothing arrived meanwhile: edits that landed during
+        // the flight are unsaved work, and saying otherwise would let the
+        // unload guard wave the user through.
+        setState(timerRef.current !== undefined || againRef.current ? 'pending' : 'saved')
       })
       .catch((failure: unknown) => {
         const stop = shouldStopRef.current?.(failure) === true
@@ -200,6 +223,9 @@ export function DocumentSaveProvider<E extends DocumentSaveEnvelope = DocumentSa
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const schedule = useCallback(() => {
     if (stoppedRef.current) return
+    // Dirty from THIS instant, not from when the window closes — an edit and a
+    // tab close half a second apart must not look saved.
+    setState((current) => (current === 'saving' || current === 'failed' ? current : 'pending'))
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       timerRef.current = undefined
@@ -254,6 +280,23 @@ export function DocumentSaveProvider<E extends DocumentSaveEnvelope = DocumentSa
   useEffect(() => {
     if (editable === false) void flush()
   }, [editable, flush])
+
+  // Closing the tab with unsaved work asks for confirmation (opt-in). The
+  // dialog's text is the browser's — custom messages were dropped from the
+  // platform years ago — and it only WARNS: `beforeunload` cannot await, so
+  // there is nothing to save from in here. The user dismisses it, waits for
+  // the save to land, and leaves then.
+  useEffect(() => {
+    if (!warnBeforeUnload || state === 'saved') return
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = true // legacy signal; older engines require it
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => {
+      window.removeEventListener('beforeunload', handler)
+    }
+  }, [warnBeforeUnload, state])
 
   // Nothing typed is lost on teardown: a pending window fires NOW. This runs
   // BEFORE the editor and the contributors below tear down (React unmounts

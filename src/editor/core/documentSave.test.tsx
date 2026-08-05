@@ -52,6 +52,7 @@ function Rig({
   contributor,
   editable = true,
   withEditor = true,
+  warnBeforeUnload = false,
   into = { current: null },
 }: {
   save: (envelope: Envelope) => Promise<unknown>
@@ -59,10 +60,16 @@ function Rig({
   contributor?: DocumentSaveContributor
   editable?: boolean
   withEditor?: boolean
+  warnBeforeUnload?: boolean
   into?: { current: DocumentSaveHandle | null }
 }) {
   return (
-    <DocumentSaveProvider save={save} debounceMs={WINDOW} shouldStop={shouldStop}>
+    <DocumentSaveProvider
+      save={save}
+      debounceMs={WINDOW}
+      shouldStop={shouldStop}
+      warnBeforeUnload={warnBeforeUnload}
+    >
       {contributor ? <Contribute contributor={contributor} /> : null}
       <Probe into={into} />
       {withEditor ? (
@@ -73,6 +80,12 @@ function Rig({
 }
 
 const mounted = () => waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+/** Whether the page would ask the user to confirm leaving right now. */
+const unloadBlocked = () => {
+  const event = new Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(event)
+  return event.defaultPrevented
+}
 const type = (text: string) =>
   act(() => {
     editor().commands.insertContent(text)
@@ -252,6 +265,75 @@ describe('DocumentSaveProvider', () => {
 
     view.rerender(<Probe into={into} />)
     expect(view.getByTestId('save-state').textContent).toBe('no-provider')
+  })
+
+  it('goes pending the moment an edit lands — long before the window closes', async () => {
+    const into = { current: null as DocumentSaveHandle | null }
+    render(<Rig save={vi.fn(async () => ({}))} into={into} />)
+    await mounted()
+    expect(into.current?.state).toBe('saved')
+
+    type('typed')
+    // No waiting: the window is still open and nothing has been sent, but the
+    // work is already unsaved — `saved` here would be a lie the unload guard
+    // would repeat.
+    expect(into.current?.state).toBe('pending')
+
+    await waitFor(() => expect(into.current?.state).toBe('saved'))
+  })
+
+  it('a save that lands while newer edits wait stays pending, never saved', async () => {
+    const into = { current: null as DocumentSaveHandle | null }
+    const save = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, WINDOW * 2))
+      return {}
+    })
+    render(<Rig save={save} into={into} />)
+    await mounted()
+
+    type('first')
+    await waitFor(() => expect(into.current?.state).toBe('saving'))
+    type('during the flight')
+
+    // The in-flight envelope confirms — but it does NOT carry what was typed
+    // after it left.
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 2000 })
+    await waitFor(() => expect(into.current?.state).toBe('saved'))
+  })
+
+  it('warnBeforeUnload guards the tab while anything is unsaved — and only then', async () => {
+    const into = { current: null as DocumentSaveHandle | null }
+    render(<Rig save={vi.fn(async () => ({}))} into={into} warnBeforeUnload />)
+    await mounted()
+    // Nothing outstanding: leaving is free.
+    expect(unloadBlocked()).toBe(false)
+
+    type('unsaved work')
+    expect(unloadBlocked()).toBe(true)
+
+    await waitFor(() => expect(into.current?.state).toBe('saved'))
+    expect(unloadBlocked()).toBe(false)
+  })
+
+  it('a rejected save keeps the tab guarded — nothing was persisted', async () => {
+    const into = { current: null as DocumentSaveHandle | null }
+    const save = vi.fn().mockRejectedValue(new Error('network'))
+    render(<Rig save={save} into={into} warnBeforeUnload />)
+    await mounted()
+
+    type('doomed')
+    await waitFor(() => expect(into.current?.state).toBe('failed'))
+    expect(unloadBlocked()).toBe(true)
+  })
+
+  it('is OFF by default — an embedded editor must not hijack the tab', async () => {
+    const into = { current: null as DocumentSaveHandle | null }
+    render(<Rig save={vi.fn(async () => ({}))} into={into} />)
+    await mounted()
+
+    type('unsaved work')
+    expect(into.current?.state).toBe('pending')
+    expect(unloadBlocked()).toBe(false)
   })
 
   it('an unregistered contributor stops riding the envelope', async () => {

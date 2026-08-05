@@ -302,6 +302,7 @@ const save = async (envelope) => {                 // { doc, anchors, creates }
   save={save}
   debounceMs={1500}                                // YOUR cadence
   shouldStop={isVersionConflict}                   // stop saving for good — optional
+  warnBeforeUnload                                 // confirm before closing a dirty tab
 >
   <SaveBanner />                                   {/* useDocumentSave().state */}
   <CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
@@ -340,6 +341,14 @@ Things the first integration must know:
   persisted NOTHING, and the next cycle carries fresher state. In edit mode
   new comments ride the envelope; in review mode (frozen document) they POST
   immediately. Replies/status/delete are doc-independent and go straight out.
+- **Unsaved work is `state !== 'saved'`** — `pending` (edits waiting out the
+  window), `saving`, `failed` and `stopped` all mean the server does not have
+  everything. `warnBeforeUnload` turns that into the browser's leave-the-page
+  confirmation; the dialog's TEXT is the browser's and cannot be customized
+  (every engine dropped custom messages years ago), and it only WARNS —
+  `beforeunload` cannot await, so nothing can be saved from inside it. For a
+  message of your own, guard your in-app navigation with
+  `useDocumentSave().state`.
 - **`onChange` is NOT the autosave** — the save layer watches the editor
   itself, so there is no prop to forget to wire (and no full-document
   serialization per typing pause: the doc is read once per envelope). Use
