@@ -354,7 +354,9 @@ Things the first integration must know:
 - **Orphans are forever**: delete the commented text and the card persists —
   quote + "Original text was removed", still replyable/deletable. Nothing
   auto-reattaches; only undo (or the anchored node's uid reappearing, e.g.
-  cut+paste) revives the highlight. A PARTIALLY surviving anchor gets a badge.
+  cut+paste) revives the highlight. An anchor that survives only in PART
+  keeps a normal card — `getCommentAnchorState` reports `partial` if your own
+  panel wants to show it.
 - **Legacy documents**: the old model serialized anchors as `comment` marks;
   that mark is GONE from the schema, so a stored doc still carrying them
   THROWS on load. Run it through `stripCommentMarks(doc)` once on the way in

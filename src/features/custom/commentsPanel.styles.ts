@@ -236,17 +236,6 @@ export const commentsPanelStyles = css`
     color: var(--editor-text-muted);
   }
 
-  /* Badge on a card whose anchor is only PARTIALLY live (some segments'
-     text was deleted) — quiet, informational. */
-  .comments-panel__partial-badge {
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--editor-comment-accent) 20%, transparent);
-    font-size: 10px;
-    color: var(--editor-text-muted);
-    white-space: nowrap;
-  }
-
   /* The per-card anchor sync strip (pendingSave/saving) — sits
      under the card body, outside its ButtonBase. */
   .comments-panel__sync {

@@ -206,8 +206,6 @@ export interface CommentsLabels {
   confirmDelete: string
   resolve: string
   originalTextRemoved: string
-  /** Badge on a card whose anchor is PARTIALLY live (some segments deleted). */
-  partiallyDetached: string
   /** Tooltip of the pendingSave sync indicator (riding the next envelope). */
   anchorPendingSave: string
   /** Tooltip of the saving sync indicator (envelope in flight). */
@@ -262,7 +260,6 @@ export const DEFAULT_COMMENTS_LABELS: CommentsLabels = {
   confirmDelete: 'Confirm delete?',
   resolve: 'Resolve',
   originalTextRemoved: 'Original text was removed',
-  partiallyDetached: 'Partially detached',
   anchorPendingSave: 'Waiting for the next save',
   anchorSaving: 'Saving…',
   replyParentDeleted: 'This comment was deleted.',

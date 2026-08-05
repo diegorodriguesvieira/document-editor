@@ -540,10 +540,12 @@ function ReplyRow({
  * discussion outlives the anchored text). Clicking the body scrolls the
  * document to the anchor's first live segment and lights every segment up
  * (`comment--active`, via `activeId`). Anchor health comes from the segments
- * PLUGIN (`getCommentAnchorState`, re-derived per transaction): `partial`
- * (some segments dormant) adds a small badge; `orphaned` (nothing live —
- * orphan-forever) keeps the content but loses the jump: the body shows the
- * original quote with a hint instead. Actions render from the comment's
+ * PLUGIN (`getCommentAnchorState`, re-derived per transaction): `orphaned`
+ * (nothing live — orphan-forever) keeps the content but loses the jump: the
+ * body shows the original quote with a hint instead. A PARTIAL anchor (some
+ * segments dormant) renders like a healthy one on purpose: the state exists
+ * for custom surfaces, but the stock card had nothing actionable to say
+ * about it. Actions render from the comment's
  * flags: the ✓ Resolve corner button (`canResolve`, spinner while its
  * mutation is in flight), and the 3-dots with Edit/Archive/Delete (Delete
  * confirms in place). While EDITING the body goes inert (the orphan trick)
@@ -585,7 +587,6 @@ function CommentCard({
     getCommentAnchorState(current, comment.id),
   )
   const orphan = !frozen && anchorState === 'orphaned'
-  const partial = !frozen && anchorState === 'partial'
   const active = !orphan && !frozen && context?.activeId === comment.id
   // Clicking the HIGHLIGHT in the document activates this card — bring it
   // into the panel's scrolled viewport. (Optional chaining: jsdom has no
@@ -661,9 +662,6 @@ function CommentCard({
       <UserAvatar user={comment.author} labels={labels} />
       <span className="comments-panel__author">{comment.author.name}</span>
       <TimeStamp iso={comment.createdAt} />
-      {partial ? (
-        <span className="comments-panel__partial-badge">{labels.partiallyDetached}</span>
-      ) : null}
     </span>
   )
 

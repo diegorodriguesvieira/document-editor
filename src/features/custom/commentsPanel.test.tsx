@@ -1150,7 +1150,7 @@ describe('<CommentsPanel /> edit-in-place', () => {
 })
 
 describe('<CommentsPanel /> anchor health (plugin-derived)', () => {
-  it('a PARTIALLY detached anchor gets a badge; fully live and orphaned do not', async () => {
+  it('a PARTIAL anchor renders like a healthy one; only ORPHANED changes the card', async () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'alpha'), paragraph('p2', 'beta')),
     })
@@ -1166,26 +1166,30 @@ describe('<CommentsPanel /> anchor health (plugin-derived)', () => {
     renderPanel({ adapter, editor: created.editor })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     const card = (await within(panel).findByText('two segments')).closest('li') as HTMLElement
-    // Fully anchored (wait for the bridge to land both segments): no badge.
+    // Fully anchored: wait for the bridge to land both segments.
     await waitFor(() =>
       expect(created.editor.view.dom.querySelectorAll('[data-comment-id]')).toHaveLength(2),
     )
-    expect(within(card).queryByText('Partially detached')).toBeNull()
+    expect(within(card).queryByText('Original text was removed')).toBeNull()
 
     // Delete the whole second commented paragraph (p2 spans [7,13)) — one
-    // segment goes dormant, the other stays live: PARTIAL.
+    // segment goes dormant, the other stays live: PARTIAL. The card is
+    // deliberately unchanged: the reviewer can still jump to what survived,
+    // and there is nothing actionable to say about the piece that went.
     act(() => {
       created.editor.view.dispatch(created.editor.state.tr.delete(7, 13))
     })
-    expect(await within(card).findByText('Partially detached')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id]')).toHaveLength(1),
+    )
+    expect(within(card).queryByText('Original text was removed')).toBeNull()
 
-    // Kill the surviving text too → ORPHANED: hint replaces the badge, the
-    // card persists (orphan-forever).
+    // Kill the surviving text too → ORPHANED: the hint replaces the quote's
+    // jump and the card persists (orphan-forever).
     act(() => {
       created.editor.view.dispatch(created.editor.state.tr.delete(1, 6))
     })
     await within(card).findByText('Original text was removed')
-    expect(within(card).queryByText('Partially detached')).toBeNull()
   })
 })
 

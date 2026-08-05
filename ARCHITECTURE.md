@@ -332,7 +332,9 @@ Threads and permissions are backend-shaped: `canEdit`/`canReply`/`canDelete`/
 `canResolve`/`canArchive` per comment (reply: `canEdit`/`canDelete`) — the
 panel renders from flags ALONE, never authorship. Replies are ONE level, have
 no anchor of their own, and stay available on ORPHANED comments (the card
-persists forever — quote + hint, no jump; PARTIAL anchors get a badge).
+persists forever — quote + hint, no jump). A PARTIAL anchor (some segments
+dormant) renders like a healthy card: `getCommentAnchorState` still reports
+it for custom surfaces, but the stock panel had nothing actionable to say.
 `status` tabs filter the single `list()`; only OPEN, undeleted rows reach the
 plugin, so resolving/archiving/soft-deleting sheds the highlight by exclusion.
 Soft-deleted rows may stay in `list()` as `isDeleted` tombstones — the UI
