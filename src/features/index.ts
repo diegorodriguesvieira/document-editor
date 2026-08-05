@@ -31,7 +31,7 @@ export type { Condition, ConditionId, ConditionLeaf, ConditionOperand } from './
 // `nodes[]` rows — nothing about a comment is ever written to the document.
 export { CommentsFeature, getCommentAnchorState, getCommentPosition } from './custom/comments'
 export {
-  AnchorFlushBinder,
+  AnchorSyncBinder,
   CommentsProvider,
   PARENT_DELETED,
   STALE_CONTENT,
@@ -40,7 +40,10 @@ export {
   useComments,
 } from './custom/commentsProvider'
 export type {
+  CommentAnchorBridge,
   CommentAnchorSync,
+  CommentSaveCreate,
+  CommentSavePayload,
   CommentDraft,
   CommentReply,
   CommentsAdapter,
@@ -49,10 +52,10 @@ export type {
   DocumentComment,
 } from './custom/commentsProvider'
 // The anchor write contract an adapter implements against: the
-// segment/payload shapes `add`/`updateAnchor` carry, and the per-comment sync
+// segment/payload shapes `add` and the save envelope carry, and the sync
 // state the panel renders.
 export type { CommentAnchorPayload, CommentNodeSegment } from './custom/commentAnchor'
-export type { CommentSyncState } from './custom/commentSync'
+export type { CommentSyncState } from './custom/commentsProvider'
 // The migration valve for documents saved by the RETIRED mark model: sheds
 // legacy `comment` marks from raw JSON before load (the mark is gone from the
 // schema, so an unstripped legacy doc throws instead of loading).

@@ -47,7 +47,7 @@ export interface CommentAnchorPayload {
 }
 
 /** A payload bound to its comment — what the reporter emits into its sink
- *  and the sync queue transports to `updateAnchor`. */
+ *  and the save envelope carries to the backend. */
 export interface CommentAnchorReport extends CommentAnchorPayload {
   id: string
 }

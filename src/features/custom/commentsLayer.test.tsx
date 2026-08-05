@@ -1,22 +1,15 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-// Two tests below switch to fake timers INLINE mid-test; a failure between
-// the switch and its inline restore would leak fake timers into every test
-// after it — this backstop keeps the suite hermetic.
-afterEach(() => {
-  vi.useRealTimers()
-})
+import { describe, expect, it, vi } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
 import { docWith, renderEditor } from '../../test/editorHarness'
-import { ANCHOR_REPORT_DEBOUNCE_MS, CommentsFeature, getCommentsStorage } from './comments'
-import type { CommentAnchorPayload } from './commentAnchor'
-import { ANCHOR_RETRY_BACKOFF_MS } from './commentSync'
+import { CommentsFeature, getCommentsStorage } from './comments'
 import { CommentsLayer, commentBalloonShouldShow } from './commentsLayer'
+import { createMockCommentsApi } from '../../app/commentsMock'
 import {
   CommentsProvider,
   useComments,
+  type CommentSavePayload,
   type CommentsContextValue,
   type DocumentComment,
 } from './commentsProvider'
@@ -68,8 +61,6 @@ const quietAdapter = () => ({
   setStatus: vi.fn(async () => {}),
   remove: vi.fn(async () => {}),
 })
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /* Fixtures with EXPLICIT uids, so `nodes[]` anchors are deterministic —
  * injectNodeIds keeps unique explicit ids verbatim on the way in. */
@@ -335,18 +326,14 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     ).toBe('hello')
   })
 
-  it('DOC-FIRST pin: reports only queue; every updateAnchor lands after the doc save resolved', async () => {
+  it('ENVELOPE pin: the drifted anchor rides ONE payload with the doc — pendingSave → saving → gone', async () => {
     // EDIT mode (editable default): the mode where the doc changes underneath.
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world')),
     })
-    const log: string[] = []
     const adapter = {
       ...quietAdapter(),
       list: vi.fn(async () => [{ ...SAVED, nodes: [{ id: 'p1', from: 0, to: 5 }] }]),
-      updateAnchor: vi.fn(async (id: string) => {
-        log.push(`updateAnchor:${id}`)
-      }),
     }
     const context = { current: null as CommentsContextValue | null }
     function Probe() {
@@ -361,41 +348,40 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     )
     const storage = getCommentsStorage(created.editor)!
     await waitFor(() => expect(storage.comments.map((record) => record.id)).toEqual(['c-1']))
-    await waitFor(() => expect(storage.onAnchorReport).not.toBeNull())
+    // The plugin's envelope seams, routed through the provider by the bridge.
+    expect(storage.collectDirtyAnchors).not.toBeNull()
+    expect(storage.confirmAnchorsSaved).not.toBeNull()
+    expect(storage.dirtyAnchorIds).not.toBeNull()
+    await waitFor(() => expect(storage.onAnchorLedgerChanged).not.toBeNull())
 
-    // Type before the commented word — the reporter derives + debounces…
-    vi.useFakeTimers()
+    // Type before the commented word: the ledger dirties and NOTIFIES — the
+    // badge state follows the edit with no timer in between.
     act(() => {
       created.editor.view.dispatch(created.editor.state.tr.insertText('XX', 1))
     })
+    await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('pendingSave'))
+
+    // The consumer's pump snapshots the envelope: doc and anchors read from
+    // the SAME editor state, in one synchronous frame (the coherence law).
+    let payload: CommentSavePayload | null = null
     act(() => {
-      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+      payload = context.current!.anchorSync!.collectSavePayload()
     })
-    vi.useRealTimers()
+    expect(payload!.anchors).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+    ])
+    expect(payload!.doc).toEqual(created.editor.getJSON())
+    // Collected = in flight.
+    await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('saving'))
 
-    // …and the report went into the QUEUE. Zero network so far.
-    expect(adapter.updateAnchor).not.toHaveBeenCalled()
-    expect(context.current!.anchorSync!.states.get('c-1')).toBe('pendingSave')
-
-    // The consumer's save pump: the doc save FIRST, the flush only after it
-    // RESOLVED — this call order is the whole doc-first contract.
-    const saveDoc = async () => {
-      log.push('saveDoc:start')
-      await sleep(5)
-      log.push('saveDoc:resolved')
-    }
-    await act(async () => {
-      await saveDoc()
-      await context.current!.anchorSync!.flushAnchors()
+    // Confirmed: those payloads ARE the row now — no badge, nothing left for
+    // the next envelope to carry.
+    act(() => context.current!.anchorSync!.confirmSaved(payload!.token))
+    await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBeUndefined())
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
     })
-
-    expect(adapter.updateAnchor).toHaveBeenCalledTimes(1)
-    expect(adapter.updateAnchor).toHaveBeenCalledWith('c-1', {
-      nodes: [{ id: 'p1', from: 2, to: 7 }],
-      quote: 'hello',
-    })
-    expect(log.indexOf('updateAnchor:c-1')).toBeGreaterThan(log.indexOf('saveDoc:resolved'))
-    expect(context.current!.anchorSync!.states.get('c-1')).toBe('synced')
+    expect(payload!.anchors).toEqual([])
   })
 
   it('mirrors editor.isEditable into queueCreates — live across setEditable', async () => {
@@ -424,18 +410,13 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     await waitFor(() => expect(context.current!.queueCreates).toBe(true))
   })
 
-  it('retryAnchor resends the CURRENT plugin derivation — not the payload that failed', async () => {
+  it('a DISCARDED envelope stays queued — the next collect carries the CURRENT derivation', async () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world')),
     })
     const adapter = {
       ...quietAdapter(),
       list: vi.fn(async () => [{ ...SAVED, nodes: [{ id: 'p1', from: 0, to: 5 }] }]),
-      updateAnchor: vi
-        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockResolvedValue({}),
     }
     const context = { current: null as CommentsContextValue | null }
     function Probe() {
@@ -450,49 +431,163 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     )
     const storage = getCommentsStorage(created.editor)!
     await waitFor(() => expect(storage.comments.map((record) => record.id)).toEqual(['c-1']))
-    await waitFor(() => expect(storage.onAnchorReport).not.toBeNull())
 
-    vi.useFakeTimers()
     act(() => {
       created.editor.view.dispatch(created.editor.state.tr.insertText('XX', 1))
     })
+    let first: CommentSavePayload | null = null
     act(() => {
-      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+      first = context.current!.anchorSync!.collectSavePayload()
     })
-    // Both in-flush attempts fail (the backoff between them is a timer).
-    await act(async () => {
-      const flushed = context.current!.anchorSync!.flushAnchors()
-      await vi.advanceTimersByTimeAsync(ANCHOR_RETRY_BACKOFF_MS)
-      await flushed
-    })
-    expect(context.current!.anchorSync!.states.get('c-1')).toBe('saveFailed')
-    expect(adapter.updateAnchor).toHaveBeenCalledTimes(2)
-    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
-      nodes: [{ id: 'p1', from: 2, to: 7 }],
-      quote: 'hello',
-    })
+    expect(first!.anchors).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+    ])
 
-    // The doc moves on BEFORE the user clicks Retry — the retry must carry
-    // the freshly recomputed offsets, never replay the failed ones.
+    // The envelope failed: NOTHING was persisted, so the anchor drops back to
+    // pendingSave and keeps riding the next one.
+    act(() => context.current!.anchorSync!.discardSave(first!.token))
+    await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('pendingSave'))
+
+    // The doc moves on before the pump retries — the retry snapshots the
+    // FRESH derivation (doc and anchors together), never replays the failure.
     act(() => {
       created.editor.view.dispatch(created.editor.state.tr.insertText('YY', 1))
     })
+    let second: CommentSavePayload | null = null
     act(() => {
-      context.current!.anchorSync!.retryAnchor('c-1')
+      second = context.current!.anchorSync!.collectSavePayload()
     })
-    await act(async () => {
-      await context.current!.anchorSync!.flushAnchors()
-    })
-    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
-      nodes: [{ id: 'p1', from: 4, to: 9 }],
-      quote: 'hello',
-    })
-    expect(context.current!.anchorSync!.states.get('c-1')).toBe('synced')
+    expect(second!.anchors).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
+    ])
+    expect(second!.doc).toEqual(created.editor.getJSON())
+  })
 
-    // Drain the reporter's own pending window before real timers return.
-    act(() => {
-      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+  it('unmounting the layer unregisters the bridge — no editor, no envelope', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
     })
-    vi.useRealTimers()
+    const adapter = quietAdapter()
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    const { rerender } = render(
+      <CommentsProvider adapter={adapter}>
+        <Probe />
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+    await waitFor(() => expect(context.current).not.toBeNull())
+
+    let payload: CommentSavePayload | null = null
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.doc).toEqual(created.editor.getJSON())
+
+    // The layer goes: its cleanup hands the provider a null bridge, and an
+    // envelope without a live editor is no envelope at all.
+    rerender(
+      <CommentsProvider adapter={adapter}>
+        <Probe />
+      </CommentsProvider>,
+    )
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload).toBeNull()
+    // The plugin's own seams unregister with the editor, not with the layer.
+    expect(getCommentsStorage(created.editor)!.onAnchorLedgerChanged).toBeNull()
+  })
+})
+
+/* The one test where BOTH halves are real: plugin-derived payloads meet the
+ * mock backend's validator (the same quote norm the real backend implements),
+ * instead of hand-built fakes agreeing with each other by construction. */
+describe('<CommentsLayer /> — a REAL envelope round-trip', () => {
+  it('a plugin-derived anchor and a queued create pass the validator; confirm cleans the ledger', async () => {
+    const api = createMockCommentsApi({
+      sessionUser: ANA,
+      latencyMs: 0,
+      template: docOf(paragraph('p1', 'hello world')),
+      seed: [
+        {
+          id: 'c-1',
+          quote: 'hello',
+          text: 'seeded',
+          author: ANA,
+          createdAt: '2026-07-15T12:00:00Z',
+          status: 'OPEN',
+          nodes: [{ id: 'p1', from: 0, to: 5 }],
+          replies: [],
+        },
+      ],
+    })
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider user={ANA} adapter={api.adapter} onFlushNeeded={() => {}}>
+        <Probe />
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+    await waitFor(() => expect(context.current!.loading).toBe(false))
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id]').length).toBe(1),
+    )
+
+    // Edit mode: an edit moves the seeded anchor, and a comment is submitted
+    // on 'world' — both must ride ONE envelope.
+    act(() => context.current!.setQueueCreates(true))
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.insertText('say ', 1))
+    })
+    act(() => context.current!.setDraft({ from: 10, to: 15, quote: 'world' }))
+    let submitted!: Promise<boolean>
+    act(() => {
+      submitted = context.current!.addComment('about world', {
+        nodes: [{ id: 'p1', from: 10, to: 15 }],
+        quote: 'world',
+      })
+    })
+
+    let payload!: CommentSavePayload | null
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.anchors).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
+    ])
+    expect(payload!.creates).toHaveLength(1)
+
+    // THE REAL BACKEND: quotes are validated against the doc in this very
+    // request — a mismatch here would mean the two halves disagree.
+    const result = await api.saveEnvelope({
+      versionId: api.versionId,
+      doc: payload!.doc,
+      anchors: payload!.anchors,
+      creates: payload!.creates,
+    })
+    act(() => context.current!.anchorSync!.confirmSaved(payload!.token, result))
+
+    expect(await submitted).toBe(true)
+    expect(api.peekComments().find((row) => row.id === 'c-1')!.nodes).toEqual([
+      { id: 'p1', from: 4, to: 9 },
+    ])
+    expect(api.peekComments()).toHaveLength(2)
+    // Confirmed → the ledger is clean and the next envelope carries nothing.
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.anchors).toEqual([])
+    expect(payload!.creates).toEqual([])
   })
 })

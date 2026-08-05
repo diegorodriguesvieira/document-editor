@@ -301,24 +301,32 @@ Legacy documents that still carry the RETIRED `comment` mark THROW on load
 (the mark left the schema; `enableContentCheck` refuses unknown marks) — the
 exported `stripCommentMarks(doc)` sheds them, everything else verbatim.
 
-WRITES are doc-first (the reporter → queue → pump chain): each transaction the
-segments plugin detects geometry changes and marks comments dirty; a trailing
-debounce derives the canonical payload — live ranges re-derived from the doc
-(`segmentsFromRange`), dormant segments passed through VERBATIM (never
-recomputed, never clamped, never `[]`) — and drops it into the sync queue
-(`commentSync.ts`: latest-wins per comment, sequential flush, one automatic
-in-flush retry then `saveFailed`). NOTHING travels until the consumer's save
-pump calls `anchorSync.flushAnchors()` AFTER its document save resolves — the
-call order IS the guarantee that the backend always validates quotes against
-the doc it just stored. Per-comment states (`pendingSave/saving/saveFailed` +
-Retry, which re-derives a FRESH payload) render on the panel cards. Creates
-recompute `nodes` + `quote` from the REMAPPED draft at submit; in edit mode
-the POST itself joins the flush queue, in review it goes straight out.
-Replies/status/delete are doc-independent and immediate. Coded rejections:
-`STALE_CONTENT` (a CREATE's quote mismatch → inline "reload" notice, never
-auto-retried; an ANCHOR patch does not special-case the code — it rides the
-flush's single automatic retry and then surfaces as `saveFailed` + Retry) and
-`PARENT_DELETED` (reply raced a soft-delete → typed text kept + notice).
+WRITES ride ONE ATOMIC ENVELOPE. The segments plugin keeps a timer-free DIRTY
+LEDGER: every transaction marks the comments whose geometry moved, and a
+per-dispatch sweep un-marks whatever landed back on its confirmed baseline
+(so a move, or an undo within the cycle, costs zero traffic). Nothing is
+pushed anywhere. When the consumer's save pump runs it calls
+`anchorSync.collectSavePayload()`, which reads the document AND the dirty
+anchors AND the queued creates from the SAME editor state in one synchronous
+frame — the coherence law: a doc paired with anchors derived at another
+instant is exactly the bug this model exists to kill. The consumer PUTs that
+envelope `{ versionId, doc, anchors, creates }` transactionally and calls
+`confirmSaved(token, result)` (payloads become baselines; created rows settle
+their composer promises) or `discardSave(token)` — nothing persisted, nothing
+cleared, and the next collect supersedes with fresher state. Live-only:
+dormant segments never travel (the row self-cleans to what is highlighted),
+and queued creates are RE-DERIVED at collect (tracked in the plugin under
+their `tempId`), never replayed from submit time. `versionId` is the
+optimistic-concurrency token: a stale one is rejected without writing, and
+the consumer stops the pump and asks for a refresh (a `terminal` discard
+settles every queued create instead of hanging). Per-comment states
+(`pendingSave` → `saving`) render on the cards; there is no per-anchor
+failure — a failed envelope persisted NOTHING and retries wholesale. Creates
+in REVIEW mode still POST immediately (the doc is frozen, so the saved doc IS
+the screen). Replies/status/delete are doc-independent and immediate. Coded
+rejections: `STALE_CONTENT` (a review-mode create's quote mismatch → inline
+"reload" notice, never auto-retried) and `PARENT_DELETED` (reply raced a
+soft-delete → typed text kept + notice).
 
 Threads and permissions are backend-shaped: `canEdit`/`canReply`/`canDelete`/
 `canResolve`/`canArchive` per comment (reply: `canEdit`/`canDelete`) — the

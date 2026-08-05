@@ -12,7 +12,6 @@ import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Check from '@mui/icons-material/Check'
-import ErrorOutline from '@mui/icons-material/ErrorOutline'
 import MoreVert from '@mui/icons-material/MoreVert'
 import Schedule from '@mui/icons-material/Schedule'
 import type { Editor } from '@tiptap/core'
@@ -26,7 +25,7 @@ import {
   type CommentAnchorPayload,
 } from './commentAnchor'
 import { getCommentAnchorState, getCommentPosition } from './comments'
-import type { CommentSyncState } from './commentSync'
+import type { CommentSyncState } from './commentsProvider'
 import { useCommentsBridge } from './commentsLayer'
 import {
   useComments,
@@ -287,37 +286,20 @@ function Composer({ editor, draft }: { editor: Editor | null; draft: CommentDraf
 }
 
 /**
- * The visible tail of the doc-first anchor pipeline, per card: `pendingSave`
- * (queued behind the next confirmed doc save), `saving` (write in flight) and
- * `saveFailed` (both in-flush attempts failed — manual **Retry** only, which
- * re-enqueues a payload recomputed from live state). `synced` — and comments
- * with nothing in flight — render nothing. Sits OUTSIDE the card's jump
- * ButtonBase: Retry is a real button and must not nest inside another.
+ * The visible tail of the ENVELOPE pipeline, per card: `pendingSave` (anchor
+ * drifted, riding the next save) and `saving` (collected into an envelope in
+ * flight). Comments with nothing in flight render nothing — and there is no
+ * per-card failure state: a failed envelope persists NOTHING and retries
+ * wholesale through the consumer's autosave.
  */
 function SyncIndicator({
   state,
   labels,
-  onRetry,
 }: {
   state: CommentSyncState | undefined
   labels: CommentsLabels
-  onRetry: () => void
 }) {
-  if (!state || state === 'synced') return null
-  if (state === 'saveFailed') {
-    return (
-      <div className="comments-panel__sync comments-panel__sync--failed">
-        <Tooltip title={labels.anchorSaveFailed}>
-          <span role="img" aria-label={labels.anchorSaveFailed}>
-            <ErrorOutline fontSize="inherit" />
-          </span>
-        </Tooltip>
-        <Button size="small" className="comments-panel__retry" onClick={onRetry}>
-          {labels.retry}
-        </Button>
-      </div>
-    )
-  }
+  if (!state) return null
   const pending = state === 'pendingSave'
   return (
     <div className={`comments-panel__sync comments-panel__sync--${pending ? 'pending' : 'saving'}`}>
@@ -734,14 +716,8 @@ function CommentCard({
           <span className="comments-panel__text">{comment.text}</span>
         </ButtonBase>
       )}
-      {/* Anchor sync state — outside the ButtonBase (Retry is a button). */}
-      {!frozen ? (
-        <SyncIndicator
-          state={syncState}
-          labels={labels}
-          onRetry={() => context.anchorSync?.retryAnchor(comment.id)}
-        />
-      ) : null}
+      {/* Anchor sync badge — outside the jump ButtonBase. */}
+      {!frozen ? <SyncIndicator state={syncState} labels={labels} /> : null}
       {/* Corner BEFORE the replies: keyboard order matches the visual order
           (the container is absolutely positioned, so DOM order is free). */}
       {!editing ? (

@@ -247,7 +247,7 @@ export const commentsPanelStyles = css`
     white-space: nowrap;
   }
 
-  /* The per-card anchor sync strip (pendingSave/saving/saveFailed) — sits
+  /* The per-card anchor sync strip (pendingSave/saving) — sits
      under the card body, outside its ButtonBase. */
   .comments-panel__sync {
     display: flex;

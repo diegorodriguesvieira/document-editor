@@ -13,10 +13,11 @@
 //   └──────────────────────────────────────────────────────────────────┘
 //
 // Demo knobs (plan §8): `latencyMs` delays every endpoint, `failNext` injects
-// failures per endpoint kind (a kind stays failing while toggled on — the
-// sync queue's automatic in-flush retry would otherwise eat a single-shot
-// failure before anyone saw `saveFailed`), and `log` records every call so
-// the stories can PROVE ordering (the doc PUT lands before any anchor PATCH).
+// failures per endpoint kind (a kind stays failing while toggled on, so the
+// stories can show the retry banner across several pump cycles instead of a
+// single-shot blip), and `log` records every call so the stories can PROVE
+// the atomicity: ONE `saveEnvelope` entry carries the document, the moved
+// anchors and the new comments together.
 import type { DocumentJSON } from '../editor'
 import {
   PARENT_DELETED,
@@ -60,7 +61,56 @@ export interface StoredComment {
 }
 
 /** An endpoint kind whose calls fail while toggled into {@link MockCommentsApi.failNext}. */
-export type MockFailureKind = 'save' | 'add' | 'anchor'
+export type MockFailureKind = 'save' | 'add'
+
+/* ── The atomic save envelope ────────────────────────────────────────
+ *
+ * ONE transactional request replacing PUT-doc-then-PATCH-anchors: the new
+ * document travels together with every anchor it moved and every comment it
+ * created, and the server writes ALL of it or NONE of it. Two consequences
+ * worth naming, because they are the whole point of the shape:
+ *
+ *   • quotes are validated against the doc IN THE REQUEST, not the stored one
+ *     — the frontend derives both from the same snapshot, so a mismatch can
+ *     only be a frontend bug, never a concurrent edit;
+ *   • `versionId` is the optimistic-concurrency token — only the holder of the
+ *     current version may save, so a save can never silently clobber one that
+ *     landed in between.
+ */
+
+/** Optimistic-concurrency rejection: the envelope carried a stale `versionId`. */
+export const VERSION_CONFLICT = 'VERSION_CONFLICT'
+
+/** An existing comment whose anchor moved in this save. */
+export interface SaveEnvelopeAnchor {
+  id: string
+  nodes: CommentNodeSegment[]
+  quote: string
+}
+
+/** A comment created in this save. `tempId` is the frontend's placeholder id,
+ *  mapped back to the minted row in {@link SaveEnvelopeResult.created}. */
+export interface SaveEnvelopeCreate {
+  tempId: string
+  text: string
+  nodes: CommentNodeSegment[]
+  quote: string
+}
+
+export interface SaveEnvelope {
+  /** The version this save is based on — must be the server's current one. */
+  versionId: number
+  doc: JsonNode
+  anchors: SaveEnvelopeAnchor[]
+  creates: SaveEnvelopeCreate[]
+}
+
+export interface SaveEnvelopeResult {
+  /** The version the accepted save produced — the client's new token. */
+  versionId: number
+  savedAt: string
+  created: Array<{ tempId: string; row: DocumentComment }>
+}
 
 export interface MockCommentsApi {
   /** Simulated network latency per endpoint call. Mutable — the story knob. */
@@ -69,23 +119,23 @@ export interface MockCommentsApi {
   readonly failNext: Set<MockFailureKind>
   /** Every endpoint call, in arrival order — the stories' ordering proof. */
   readonly log: string[]
+  /** The document's current version — starts at 1, bumped by every accepted
+   *  {@link MockCommentsApi.saveEnvelope}. Only its holder may save. */
+  readonly versionId: number
   /** Notified after every log entry / row change (story inspectors). */
   subscribe(listener: () => void): () => void
   /** Snapshot of the raw rows — the stories' `nodes[]` inspector. */
   peekComments(): StoredComment[]
 
-  /** PUT /template — the document save the doc-first pipeline waits on. */
-  saveTemplate(json: DocumentJSON): Promise<{ savedAt: string }>
+  /** PUT /template (envelope) — doc + moved anchors + new comments, written
+   *  as ONE transaction. See {@link SaveEnvelope}. */
+  saveEnvelope(envelope: SaveEnvelope): Promise<SaveEnvelopeResult>
   listComments(): Promise<DocumentComment[]>
   addComment(input: {
     content: string
     quote: string
     nodes: CommentNodeSegment[]
   }): Promise<DocumentComment>
-  updateAnchor(
-    id: string,
-    payload: { nodes: CommentNodeSegment[]; quote: string },
-  ): Promise<DocumentComment>
   reply(commentId: string, input: { text: string }): Promise<void>
   update(id: string, input: { text: string }): Promise<void>
   setStatus(id: string, input: { status: CommentStatus }): Promise<void>
@@ -177,6 +227,7 @@ export function createMockCommentsApi({
   // The "database": comment rows + the last-saved document JSON.
   let db: StoredComment[] = seed.map((row) => ({ ...row, replies: [...row.replies] }))
   let savedDoc: JsonNode | null = template?.doc ?? null
+  let versionId = 1
 
   const log: string[] = []
   const listeners = new Set<() => void>()
@@ -186,14 +237,92 @@ export function createMockCommentsApi({
 
   const failNext = new Set<MockFailureKind>()
 
-  /** Latency + logging + failure injection — every endpoint enters here. */
-  const call = async (kind: MockFailureKind | null, entry: string) => {
+  /** One line in the call log (the dashboard's request list) plus the
+   *  inspector ping. Rejections that never reach an endpoint body log here too. */
+  const logCall = (entry: string) => {
     log.push(entry)
-    console.log(`[comments api] ${entry}`)
     notify()
+  }
+
+  /* ── The console trace ──────────────────────────────────────────────
+   *
+   * A demo backend is only useful if you can SEE what crossed the wire, so
+   * every call opens a collapsed group carrying the actual payload: what the
+   * editor sent, and what came back. Anchors and comment rows print as tables
+   * (one line per segment/row) because that is the shape people actually
+   * compare; the document goes in as an object you can expand.
+   */
+  /** Silent under Vitest: the trace is a DEMO affordance (Storybook / the app
+   *  in a browser), and tables in the test reporter are just noise. */
+  const TRACING =
+    typeof process === 'undefined' || (process as { env?: Record<string, unknown> }).env?.VITEST == null
+
+  const BADGE = 'padding:1px 5px;border-radius:3px;font-weight:600;'
+  const TONE: Record<'in' | 'ok' | 'fail', string> = {
+    in: `${BADGE}background:#1a73e8;color:#fff`,
+    ok: `${BADGE}background:#188038;color:#fff`,
+    fail: `${BADGE}background:#c5221f;color:#fff`,
+  }
+
+  const traceRequest = (entry: string, payload?: Record<string, unknown>) => {
+    if (!TRACING) return
+    console.groupCollapsed(`%c→ ${entry}%c`, TONE.in, 'color:inherit')
+    if (payload) {
+      for (const [key, value] of Object.entries(payload)) {
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+          console.log(`${key}: ${value.length}`)
+          console.table(value as Record<string, unknown>[])
+        } else if (Array.isArray(value) && value.length === 0) {
+          console.log(`${key}: (none)`)
+        } else {
+          console.log(`${key}:`, value)
+        }
+      }
+    }
+    console.groupEnd()
+  }
+
+  const traceResult = (entry: string, result: unknown) => {
+    if (!TRACING) return
+    console.groupCollapsed(`%c← ${entry}%c`, TONE.ok, 'color:inherit')
+    if (Array.isArray(result) && result.length > 0) console.table(result)
+    else console.log(result)
+    console.groupEnd()
+  }
+
+  const traceFailure = (entry: string, failure: unknown) => {
+    if (!TRACING) return
+    const code = (failure as { code?: string } | null)?.code ?? 'ERROR'
+    console.groupCollapsed(`%c✕ ${entry} — ${code}%c`, TONE.fail, 'color:inherit')
+    console.log(failure)
+    console.groupEnd()
+  }
+
+  /** Latency + logging + failure injection — every endpoint enters here. */
+  const call = async (
+    kind: MockFailureKind | null,
+    entry: string,
+    payload?: Record<string, unknown>,
+  ) => {
+    logCall(entry)
+    traceRequest(entry, payload)
     await new Promise((resolve) => setTimeout(resolve, api.latencyMs))
     if (kind && failNext.has(kind)) {
-      throw new Error(`Injected ${kind} failure (story toggle)`)
+      const failure = new Error(`Injected ${kind} failure (story toggle)`)
+      traceFailure(entry, failure)
+      throw failure
+    }
+  }
+
+  /** Run an endpoint body so its RESULT (or rejection) is traced too. */
+  const traced = <T>(entry: string, body: () => T): T => {
+    try {
+      const result = body()
+      traceResult(entry, result)
+      return result
+    } catch (failure) {
+      traceFailure(entry, failure)
+      throw failure
     }
   }
 
@@ -282,6 +411,9 @@ export function createMockCommentsApi({
     latencyMs,
     failNext,
     log,
+    get versionId() {
+      return versionId
+    },
     subscribe: (listener) => {
       listeners.add(listener)
       return () => {
@@ -290,20 +422,129 @@ export function createMockCommentsApi({
     },
     peekComments: () => db.map((row) => ({ ...row, replies: [...row.replies] })),
 
-    saveTemplate: async (json) => {
-      await call('save', 'PUT /template')
-      savedDoc = json.doc
-      notify()
-      return { savedAt: new Date().toISOString() }
+    saveEnvelope: async (envelope) => {
+      // The injected 'save' failure and the latency apply to the envelope as a
+      // whole — there is no half of it to fail on its own.
+      await call('save', 'PUT /template (envelope)', {
+        versionId: envelope.versionId,
+        anchors: envelope.anchors.flatMap((anchor) =>
+          anchor.nodes.map((node) => ({
+            comment: anchor.id,
+            uid: node.id,
+            from: node.from,
+            to: node.to,
+            quote: anchor.quote,
+          })),
+        ),
+        creates: envelope.creates.map((create) => ({
+          tempId: create.tempId,
+          text: create.text,
+          quote: create.quote,
+          segments: create.nodes.length,
+        })),
+        doc: envelope.doc,
+      })
+
+      // Optimistic concurrency FIRST: a stale token means someone else already
+      // saved, so this whole request is built on a document that no longer
+      // exists. Reject it and write nothing — the frontend refreshes and redoes
+      // the work against the version it gets back.
+      if (envelope.versionId !== versionId) {
+        logCall('409 PUT /template (stale versionId)')
+        traceFailure('PUT /template (envelope)', {
+          code: VERSION_CONFLICT,
+          sent: envelope.versionId,
+          current: versionId,
+        })
+        throw codedError(
+          VERSION_CONFLICT,
+          'The document changed elsewhere — refresh to get the latest version.',
+        )
+      }
+
+      // An anchor whose row was deleted through the immediate channel while
+      // this envelope flew is a SKIPPABLE no-op, not an error: the deletion
+      // already won, and there is nothing left to update. Rejecting would
+      // hold the document save hostage to a race the editor cannot see.
+      const liveAnchors = envelope.anchors.filter((anchor) => {
+        const row = db.find((candidate) => candidate.id === anchor.id)
+        return row != null && !row.isDeleted
+      })
+
+      // Everything is validated before anything is written. Anchors and creates
+      // are held to the same two checks, so the loops take them together.
+      const anchored: readonly { nodes: CommentNodeSegment[]; quote: string }[] = [
+        ...liveAnchors,
+        ...envelope.creates,
+      ]
+      for (const entry of anchored) validateNodes(entry.nodes)
+      // Against the doc IN THIS REQUEST, not the stored one: both come from the
+      // same frontend snapshot, so a mismatch is a bug on that side, not a
+      // concurrent edit (that case is the versionId guard above).
+      for (const entry of anchored) {
+        if (quoteOf(envelope.doc, entry.nodes) !== entry.quote) {
+          throw codedError(
+            STALE_CONTENT,
+            'The quoted text does not match the document in this request.',
+          )
+        }
+      }
+
+      // APPLY — plain synchronous mutations with no await between them, so no
+      // caller can ever observe half a save.
+      savedDoc = envelope.doc
+      versionId += 1
+      const moved = new Map(liveAnchors.map((anchor) => [anchor.id, anchor]))
+      const created: { tempId: string; row: StoredComment }[] = envelope.creates.map((create) => ({
+        tempId: create.tempId,
+        row: {
+          id: newId('c'),
+          quote: create.quote,
+          text: create.text,
+          author: sessionUser,
+          createdAt: new Date().toISOString(),
+          status: 'OPEN',
+          nodes: create.nodes.map((segment) => ({ ...segment })),
+          replies: [],
+        },
+      }))
+      db = [
+        ...db.map((row) => {
+          const anchor = moved.get(row.id)
+          return anchor
+            ? { ...row, nodes: anchor.nodes.map((s) => ({ ...s })), quote: anchor.quote }
+            : row
+        }),
+        ...created.map((entry) => entry.row),
+      ]
+      notify() // once for the whole transaction, not once per row
+      const result: SaveEnvelopeResult = {
+        versionId,
+        savedAt: new Date().toISOString(),
+        created: created.map((entry) => ({ tempId: entry.tempId, row: serialize(entry.row) })),
+      }
+      traceResult('PUT /template (envelope)', {
+        versionId: result.versionId,
+        savedAt: result.savedAt,
+        anchorsWritten: moved.size,
+        created: result.created.map((entry) => ({ tempId: entry.tempId, id: entry.row.id })),
+      })
+      return result
     },
 
     listComments: async () => {
       await call(null, 'GET /comments')
-      return db.map(serialize)
+      return traced('GET /comments', () =>
+        db.map(serialize).map((row) => ({ ...row })),
+      )
     },
 
     addComment: async (input) => {
-      await call('add', 'POST /comments')
+      await call('add', 'POST /comments', {
+        text: input.content,
+        quote: input.quote,
+        nodes: input.nodes.map((node) => ({ uid: node.id, from: node.from, to: node.to })),
+      })
       validateNodes(input.nodes)
       validateQuote(input.nodes, input.quote)
       const created: StoredComment = {
@@ -321,22 +562,9 @@ export function createMockCommentsApi({
       return serialize(created) // full row — the optimistic card
     },
 
-    updateAnchor: async (id, payload) => {
-      await call('anchor', `PATCH /comments/${id}/anchor`)
-      validateNodes(payload.nodes)
-      validateQuote(payload.nodes, payload.quote)
-      const row = rowOf(id)
-      db = db.map((candidate) =>
-        candidate.id === id
-          ? { ...candidate, nodes: payload.nodes.map((s) => ({ ...s })), quote: payload.quote }
-          : candidate,
-      )
-      notify()
-      return serialize({ ...row, nodes: payload.nodes.map((s) => ({ ...s })), quote: payload.quote })
-    },
 
     reply: async (commentId, input) => {
-      await call(null, `POST /comments/${commentId}/replies`)
+      await call(null, `POST /comments/${commentId}/replies`, { text: input.text })
       const row = rowOf(commentId)
       // Replying to a soft-deleted parent is REJECTED (410) — the panel keeps
       // the typed text and says so.
@@ -356,7 +584,7 @@ export function createMockCommentsApi({
     },
 
     update: async (id, input) => {
-      await call(null, `PATCH /comments/${id}`)
+      await call(null, `PATCH /comments/${id}`, { text: input.text })
       db = db.map((row) =>
         row.id === id
           ? { ...row, text: input.text }
@@ -371,7 +599,7 @@ export function createMockCommentsApi({
     },
 
     setStatus: async (id, input) => {
-      await call(null, `PATCH /comments/${id}/status`)
+      await call(null, `PATCH /comments/${id}/status`, { status: input.status })
       db = db.map((row) => (row.id === id ? { ...row, status: input.status } : row))
       notify()
     },
@@ -400,7 +628,6 @@ export function createMockCommentsApi({
       update: (id, input) => api.update(id, input),
       setStatus: (id, input) => api.setStatus(id, input),
       remove: (id) => api.remove(id),
-      updateAnchor: (id, payload) => api.updateAnchor(id, payload),
     },
   }
 

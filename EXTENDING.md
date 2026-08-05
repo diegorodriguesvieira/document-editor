@@ -276,9 +276,10 @@ import {
 // The endpoint seam, over your HTTP client. IDs are minted by YOUR backend
 // and must be globally unique (update/remove/setStatus take a comment id OR
 // a reply id). Throw localized Errors: a thrown message is shown VERBATIM in
-// the panel. Coded rejections the SDK reacts to: STALE_CONTENT (add /
-// updateAnchor whose quote no longer matches the SAVED doc) and
-// PARENT_DELETED (reply to a soft-deleted comment).
+// the panel. Coded rejections the SDK reacts to: STALE_CONTENT (a review-mode
+// `add` whose quote no longer matches the SAVED doc) and PARENT_DELETED
+// (reply to a soft-deleted comment). Anchor writes have NO adapter method —
+// they ride your save envelope (below).
 const adapter: CommentsAdapter = {
   list: () => api.get('/documents/42/comments'),             // EVERY status; panel filters
   add: (input) => api.post('/documents/42/comments', input), // {text, quote, nodes} → full row
@@ -286,17 +287,13 @@ const adapter: CommentsAdapter = {
   update: (id, input) => api.patch(`/comments/${id}`, input),
   setStatus: (id, input) => api.patch(`/comments/${id}/status`, input),
   remove: (id) => api.delete(`/comments/${id}`),
-  // The anchor write channel — implementing it turns the sync pipeline on.
-  // NOT gated by canEdit: whoever edits the document reshapes anchors of any
-  // author. Same quote validation as `add`.
-  updateAnchor: (id, payload) => api.patch(`/comments/${id}/anchor`, payload),
 }
 
 <CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
   <DocumentEditor
     features={[…, CommentsFeature]}   // the segments/decoration kernel
     editable={!preview}
-    onChange={(doc) => savePump(doc)} // the DOC-FIRST pump — see below
+    onChange={() => savePump()}       // the ENVELOPE pump — see below
     renderBubble={(ctx) => (
       <>
         <BubbleToolbar {...ctx} />            {/* edit mode only */}
@@ -310,26 +307,45 @@ const adapter: CommentsAdapter = {
 
 Things the first integration must know:
 
-- **The DOC-FIRST pipeline** (the one wiring you MUST add for edit mode):
-  edits move anchors, the SDK re-derives each touched comment's `nodes[]` +
-  `quote` (debounced) and QUEUES the write — nothing travels on its own. Your
-  save pump releases the queue only after the document save confirmed:
+- **The SAVE ENVELOPE** (the one wiring you MUST add for edit mode): edits
+  move anchors, and the SDK keeps them in a dirty ledger — nothing travels on
+  its own. Your pump snapshots document + anchors + queued comments TOGETHER
+  and saves them as ONE transaction:
 
   ```ts
-  const savePump = async (doc: DocumentJSON) => {
-    await api.put('/template', doc)                 // the document FIRST
-    await commentsContext.anchorSync?.flushAnchors() // then the anchors, one by one
+  const savePump = () => {
+    const sync = commentsContext.anchorSync
+    const payload = sync?.collectSavePayload()   // doc + anchors + creates, ONE frame
+    if (!payload) return
+    api.put('/template', {
+      versionId: myVersionId,                    // your document's version token
+      doc: payload.doc,
+      anchors: payload.anchors,
+      creates: payload.creates,
+    })
+      .then((result) => {
+        myVersionId = result.versionId
+        sync.confirmSaved(payload.token, result) // { created: [{ tempId, row }] }
+      })
+      .catch((failure) => {
+        // Nothing persisted. Stale version = someone else saved: STOP and ask
+        // for a refresh (a terminal discard settles queued comments).
+        const stale = isVersionConflict(failure)
+        sync.discardSave(payload.token, stale ? { terminal: true } : undefined)
+      })
   }
   ```
 
-  (`useComments().anchorSync` — null while your adapter has no
-  `updateAnchor`.) A failed doc save leaves the queue untouched. Per-comment
-  states surface on the cards: `pendingSave` (clock) → `saving` (spinner) →
-  `synced`, or `saveFailed` (warning + **Retry** — the retry re-derives a
-  FRESH payload from the live document, never replays the failed one, and
-  rides the next flush). In edit mode new-comment POSTs join the same queue
-  (never validate a quote against an unsaved doc); in review mode they post
-  immediately. Replies/status/delete are doc-independent and go straight out.
+  Your backend writes it in a TRANSACTION and validates every quote against
+  the doc IN THE REQUEST — the whole point: the pair is coherent by
+  construction, so a create can never be "stale" against a document you just
+  sent. Allow ONE envelope in flight (coalesce overlapping cycles into one
+  follow-up), or two saves race on the same version token. Per-comment states
+  surface on the cards: `pendingSave` (clock) → `saving` (spinner) → nothing.
+  There is no per-anchor retry: a failed envelope persisted NOTHING, and your
+  next save cycle carries fresher state. In edit mode new comments ride the
+  envelope; in review mode (frozen document) they POST immediately.
+  Replies/status/delete are doc-independent and go straight out.
 - **Supported topology**: ONE editor + N reviewers commenting. The list is a
   SNAPSHOT (fetch on mount + refetch after own mutations) — propagating other
   people's comments is the consumer's job via `refresh()` or polling. Two
@@ -455,9 +471,8 @@ async function pump() {
   dirty = null
   try {
     await save(doc)
-    // Using review comments? This is the doc-first moment: the document save
-    // just CONFIRMED, so release the queued anchor writes (§6).
-    await commentsContext.anchorSync?.flushAnchors()
+    // Using review comments? Save the ENVELOPE instead of the bare doc —
+    // document, anchors and queued comments in one transaction (§6).
   } finally {
     inFlight = false
     pump() // anything that arrived meanwhile goes out now

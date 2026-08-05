@@ -13,7 +13,7 @@ import type {
   CommentAnchorReport,
   CommentNodeSegment,
 } from './commentAnchor'
-import { createCommentSyncQueue, type CommentSyncState } from './commentSync'
+import type { JSONContent } from '@tiptap/core'
 
 /** Who is reviewing. Provided by the consumer; omit for anonymous commenting.
  *  The SDK reads only `name`/`avatarUrl` (composer avatar); `id` exists for
@@ -99,8 +99,9 @@ export interface DocumentComment {
  *   future reopen needs no contract change).
  * - ERROR CONTRACT: signal failure by THROWING. A thrown `Error`'s message is
  *   shown VERBATIM in the panel — throw localized, user-facing messages.
- *   Coded rejections the SDK reacts to: {@link STALE_CONTENT} on `add`/
- *   `updateAnchor`, {@link PARENT_DELETED} on `reply`.
+ *   Coded rejections the SDK reacts to: {@link STALE_CONTENT} on `add`
+ *   (review-mode creates), {@link PARENT_DELETED} on `reply`. Anchor writes
+ *   have no adapter channel — they ride the consumer's save envelope.
  * - The adapter object does NOT need a stable identity — the provider reads
  *   it through a ref, so inline objects are fine.
  */
@@ -119,11 +120,6 @@ export interface CommentsAdapter {
   update(id: string, input: { text: string }): Promise<unknown>
   setStatus(id: string, input: { status: CommentStatus }): Promise<unknown>
   remove(id: string): Promise<unknown>
-  /** Anchor writes: PATCH a comment's `nodes[]` + `quote` — a channel
-   *  separate from the text, NOT gated by `canEdit` (whoever edits the
-   *  document reshapes anchors of any author). Same quote validation as
-   *  `add`. Implementing this is what turns the anchor sync queue on. */
-  updateAnchor?(id: string, payload: CommentAnchorPayload): Promise<unknown>
 }
 
 /**
@@ -212,14 +208,10 @@ export interface CommentsLabels {
   originalTextRemoved: string
   /** Badge on a card whose anchor is PARTIALLY live (some segments deleted). */
   partiallyDetached: string
-  /** Tooltip of the pendingSave sync indicator (queued behind the doc save). */
+  /** Tooltip of the pendingSave sync indicator (riding the next envelope). */
   anchorPendingSave: string
-  /** Tooltip of the saving sync indicator (anchor write in flight). */
+  /** Tooltip of the saving sync indicator (envelope in flight). */
   anchorSaving: string
-  /** Tooltip of the saveFailed sync indicator. */
-  anchorSaveFailed: string
-  /** The saveFailed indicator's manual-recovery button. */
-  retry: string
   /** Inline notice when a reply was rejected with {@link PARENT_DELETED}. */
   replyParentDeleted: string
   /** Inline notice when a create was rejected with {@link STALE_CONTENT}. */
@@ -271,10 +263,8 @@ export const DEFAULT_COMMENTS_LABELS: CommentsLabels = {
   resolve: 'Resolve',
   originalTextRemoved: 'Original text was removed',
   partiallyDetached: 'Partially detached',
-  anchorPendingSave: 'Waiting for document save',
-  anchorSaving: 'Saving anchor…',
-  anchorSaveFailed: 'Anchor save failed',
-  retry: 'Retry',
+  anchorPendingSave: 'Waiting for the next save',
+  anchorSaving: 'Saving…',
   replyParentDeleted: 'This comment was deleted.',
   staleCreate: 'The document changed — reload to comment.',
   tabOpen: 'Comments',
@@ -298,30 +288,76 @@ export const DEFAULT_COMMENTS_LABELS: CommentsLabels = {
   announceReplyAdded: 'Reply added',
 }
 
+/** Where a comment's anchor stands relative to the backend under the
+ *  envelope model: `pendingSave` = drifted from the last confirmed save,
+ *  riding the next envelope; `saving` = collected into an envelope currently
+ *  in flight. Absence = synced. (`saveFailed` died with the per-anchor
+ *  channel — a failed envelope persists NOTHING and retries wholesale.) */
+export type CommentSyncState = 'pendingSave' | 'saving'
+
+/** A comment created inside the save envelope (edit mode): `tempId` is the
+ *  provider's placeholder, mapped back to the minted row by the backend's
+ *  response. */
+export interface CommentSaveCreate {
+  tempId: string
+  text: string
+  nodes: CommentNodeSegment[]
+  quote: string
+}
+
 /**
- * The anchor write pipeline, as the UI and the consumer's save pump see it.
- * Exists only while the adapter implements `updateAnchor`.
+ * One atomic save envelope (rodada 6): the document plus every anchor that
+ * drifted and every comment created since the last confirmed save — ALL read
+ * from the same editor state in one synchronous frame (the coherence law).
+ * The consumer PUTs it transactionally; on success it calls
+ * {@link CommentAnchorSync.confirmSaved} with the token (and the backend's
+ * created-row mapping), on failure {@link CommentAnchorSync.discardSave} —
+ * nothing was persisted, everything stays queued, and the next collect
+ * supersedes this one with fresher state.
+ */
+export interface CommentSavePayload {
+  token: number
+  doc: JSONContent
+  anchors: CommentAnchorReport[]
+  creates: CommentSaveCreate[]
+}
+
+/** The bridge {@link CommentsLayer} registers: the editor-side reads/writes
+ *  the envelope needs, all against the LIVE editor state. */
+export interface CommentAnchorBridge {
+  getDoc(): JSONContent
+  collect(): CommentAnchorReport[]
+  confirm(reports: CommentAnchorReport[]): void
+  dirtyIds(): string[]
+  /** ONE tracked anchor's CURRENT payload (queued creates ride the plugin
+   *  under their `tempId`) — null when nothing of it is live any more. */
+  payloadFor(id: string): CommentAnchorPayload | null
+}
+
+/**
+ * The anchor side of the atomic save envelope, as the UI and the consumer's
+ * save pump see it.
  */
 export interface CommentAnchorSync {
-  /** Per-comment sync state — `pendingSave`/`saving`/`saveFailed` drive the
-   *  card indicator; an id absent from the map has nothing in flight. */
+  /** Per-comment sync state — drives the card badge; absence = synced. */
   states: ReadonlyMap<string, CommentSyncState>
-  /** The consumer's save pump calls this AFTER its document save resolves —
-   *  that call order IS the doc-first guarantee (see commentSync.ts). Runs
-   *  queued creates first (a comment must exist before its anchor could be
-   *  patched), then the anchor queue, sequentially. */
-  flushAnchors(): Promise<void>
-  /** Manual recovery from `saveFailed`: re-enqueues a FRESH payload read from
-   *  the live plugin state (never the payload that failed). The write itself
-   *  waits for the next flush. No-op while the comment has nothing live. */
-  retryAnchor(id: string): void
-  /** Bridge-internal: the sink {@link CommentsLayer} injects into the editor
-   *  storage — the reporter's debounced reports land here. */
-  enqueue(report: CommentAnchorReport): void
-  /** Bridge-internal: drops the whole queue — wired to the plugin's
-   *  `documentReplaced` reset (every queued write describes the replaced
-   *  document). */
-  clear(): void
+  /** Snapshot the envelope: doc + dirty anchors + queued creates, coherent
+   *  (one synchronous frame). Null while no editor bridge is mounted. Marks
+   *  the collected anchors `saving` until confirmed/discarded; a newer
+   *  collect supersedes an unconfirmed older one. */
+  collectSavePayload(): CommentSavePayload | null
+  /** The envelope was persisted: anchors become baselines, created rows land
+   *  (their composer promises resolve `true`) and the list refetches. */
+  confirmSaved(
+    token: number,
+    result?: { created?: Array<{ tempId: string; row: DocumentComment }> },
+  ): void
+  /** The envelope failed — nothing persisted. Everything stays queued; the
+   *  anchors drop back to `pendingSave` and the next collect resends fresher
+   *  state. `terminal` (the pump is giving up — a version conflict) also
+   *  settles every queued create with `false`, so no composer promise hangs
+   *  forever. */
+  discardSave(token: number, options?: { terminal?: boolean }): void
 }
 
 export interface CommentsContextValue {
@@ -339,7 +375,7 @@ export interface CommentsContextValue {
   /** The comment highlighted in the document (clicked in the panel). */
   activeId: string | null
   refresh(): Promise<void>
-  /** Anchor write pipeline — null when the adapter has no `updateAnchor`. */
+  /** The anchor side of the save envelope (collect/confirm/discard). */
   anchorSync: CommentAnchorSync | null
   /** While true (EDIT mode — the bridge mirrors `editor.isEditable` here),
    *  anchor-model creates are deferred into the flush cycle instead of
@@ -357,15 +393,21 @@ export interface CommentsContextValue {
    *  keeping the typed text. Cleared by that comment's next successful
    *  reply. */
   parentDeletedId: string | null
-  /** Bridge-internal: {@link CommentsLayer} registers the live-editor source
-   *  `retryAnchor` reads fresh payloads from (null to unregister). */
-  registerAnchorPayloadSource(
-    source: ((id: string) => CommentAnchorPayload | null) | null,
+  /** Bridge-internal: {@link CommentsLayer} registers the live-editor bridge
+   *  the envelope reads through. Unregistering passes the bridge being
+   *  retired as `previous`: a cleanup whose registration was already replaced
+   *  (both the layer and the panel run the hook) is then ignored. */
+  registerAnchorBridge(
+    bridge: CommentAnchorBridge | null,
+    previous?: CommentAnchorBridge | null,
   ): void
-  /** Bridge-internal: {@link CommentsLayer} registers "deliver the reporter's
-   *  debounced pending reports NOW" — `flushAnchors` runs it before draining
-   *  the queue (null to unregister). */
-  registerPendingReportsFlush(flush: (() => void) | null): void
+  /** Bridge-internal: the segments plugin's dirty ledger changed — badge
+   *  states re-derive. */
+  notifyAnchorLedgerChanged(): void
+  /** Comments submitted in EDIT mode and waiting for an envelope. The bridge
+   *  hands them to the segments plugin under their `tempId` so their range
+   *  maps with every edit — the envelope then carries live geometry. */
+  pendingCreates: readonly CommentSaveCreate[]
   /**
    * Sends the draft. Resolves `true` when saved (draft cleared, list
    * refetched). `anchor` is the create payload (`nodes` + `quote`, recomputed
@@ -411,11 +453,15 @@ export function CommentsProvider({
   user?: CommentUser
   adapter: CommentsAdapter
   labels?: Partial<CommentsLabels>
-  /** Called when a write got QUEUED behind the next doc save (a deferred
-   *  create, a manual anchor retry): the consumer's save pump should run a
-   *  save-then-flushAnchors cycle now — otherwise the queued write waits for
-   *  the next organic edit, which in review mode never comes. */
-  onFlushNeeded?: () => void
+  /** Asks the consumer's save pump for a cycle NOW. Two callers:
+   *  - a create QUEUED for the next envelope (edit mode) — otherwise it
+   *    would wait for the next organic edit, which never comes without
+   *    typing;
+   *  - a REVIEW-mode create, which the backend validates against the SAVED
+   *    document — the provider AWAITS the returned promise, so anything the
+   *    consumer still has pending lands before the quote is checked.
+   *  Return a promise to make that wait meaningful. */
+  onFlushNeeded?: () => void | Promise<void>
   children: ReactNode
 }) {
   const [comments, setComments] = useState<DocumentComment[]>([])
@@ -427,6 +473,7 @@ export function CommentsProvider({
   const [createError, setCreateError] = useState<'stale' | null>(null)
   const [parentDeletedId, setParentDeletedId] = useState<string | null>(null)
   const [queueCreates, setQueueCreates] = useState(false)
+  const [pendingCreates, setPendingCreates] = useState<readonly CommentSaveCreate[]>([])
   const [anchorStates, setAnchorStates] = useState<ReadonlyMap<string, CommentSyncState>>(
     () => new Map(),
   )
@@ -434,36 +481,40 @@ export function CommentsProvider({
   // not recreate refresh (that useEffect would refetch-loop).
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
-  // retryAnchor's fresh-payload source — the bridge registers the live-editor
-  // derivation here — and the creates parked for the next flush (edit mode).
-  const payloadSourceRef = useRef<((id: string) => CommentAnchorPayload | null) | null>(null)
-  const pendingCreatesRef = useRef<Array<() => Promise<void>>>([])
-  // The reporter's pre-drain hook (bridge-registered) and the consumer's pump
-  // trigger — behind refs so the callbacks below stay identity-stable.
-  const pendingReportsFlushRef = useRef<(() => void) | null>(null)
-  const onFlushNeededRef = useRef<(() => void) | undefined>(onFlushNeeded)
+  // The editor-side envelope bridge (registered by CommentsLayer), the
+  // creates parked for the next envelope (edit mode), the latest UNCONFIRMED
+  // collect, and the consumer's pump trigger — refs so the callbacks below
+  // stay identity-stable.
+  const bridgeRef = useRef<CommentAnchorBridge | null>(null)
+  const pendingCreatesRef = useRef<
+    Array<CommentSaveCreate & { resolve: (ok: boolean) => void }>
+  >([])
+  /** Mirror the queue into state so the bridge can hand the tempIds to the
+   *  plugin (refs do not re-render). */
+  const publishPendingCreates = useCallback(() => {
+    setPendingCreates(
+      pendingCreatesRef.current.map(({ tempId, text, nodes, quote }) => ({
+        tempId,
+        text,
+        nodes,
+        quote,
+      })),
+    )
+  }, [])
+  const outstandingRef = useRef<{ token: number; anchors: CommentAnchorReport[] } | null>(null)
+  const tokenSeqRef = useRef(0)
+  const tempSeqRef = useRef(0)
+  const onFlushNeededRef = useRef<(() => void | Promise<void>) | undefined>(onFlushNeeded)
   onFlushNeededRef.current = onFlushNeeded
 
-  // One anchor sync queue per adapter CAPABILITY (updateAnchor implemented),
-  // never per adapter identity — inline adapter objects must not recreate it.
-  // The network call reads the latest adapter through the ref.
-  const hasUpdateAnchor = typeof adapter.updateAnchor === 'function'
-  const queue = useMemo(
-    () =>
-      hasUpdateAnchor
-        ? createCommentSyncQueue({
-            updateAnchor: (id, payload) =>
-              adapterRef.current.updateAnchor?.(id, payload) ??
-              Promise.reject(new Error('adapter.updateAnchor removed')),
-          })
-        : null,
-    [hasUpdateAnchor],
-  )
-
-  useEffect(() => {
-    if (!queue) return
-    return queue.subscribe(() => setAnchorStates(queue.states()))
-  }, [queue])
+  // Badge derivation: ledger-dirty → pendingSave; collected-in-flight →
+  // saving. Re-runs on ledger notifications and around collect/confirm.
+  const recomputeAnchorStates = useCallback(() => {
+    const next = new Map<string, CommentSyncState>()
+    for (const id of bridgeRef.current?.dirtyIds() ?? []) next.set(id, 'pendingSave')
+    for (const report of outstandingRef.current?.anchors ?? []) next.set(report.id, 'saving')
+    setAnchorStates(next)
+  }, [])
   // Race guard: only the LATEST fetch may land — a slow older list() must not
   // overwrite the refetch that followed a mutation.
   const fetchSeq = useRef(0)
@@ -527,6 +578,16 @@ export function CommentsProvider({
       const body = text.trim()
       if (!draft || !body) return false
       const runCreate = async (): Promise<boolean> => {
+        // REVIEW mode: the backend validates this quote against the SAVED
+        // document, so give the consumer's pump the chance to land whatever
+        // it still holds (its autosave window is its own policy, and may be
+        // seconds long) BEFORE the check.
+        try {
+          await onFlushNeededRef.current?.()
+        } catch {
+          // A failed save is the consumer's business — the create still
+          // tries, and the backend decides.
+        }
         let created: { id: string }
         try {
           created = await adapterRef.current.add({
@@ -558,83 +619,142 @@ export function CommentsProvider({
         await refresh()
         return true
       }
-      if (queueCreates && queue) {
-        // EDIT mode: the POST rides the flush cycle — after the doc save —
-        // so the backend never validates a quote against an unsaved document
-        // (the needless STALE_CONTENT round-trip the queue exists to avoid).
+      if (queueCreates && onFlushNeededRef.current) {
+        // EDIT mode: the create RIDES THE ENVELOPE — its quote and nodes are
+        // validated against the very doc the same save carries, so a stale
+        // rejection is impossible by construction. The draft clears now
+        // (optimistic); the promise settles when an envelope containing this
+        // create is confirmed.
+        const tempId = `t-${++tempSeqRef.current}`
+        setDraftState(null)
         return new Promise<boolean>((resolve) => {
-          pendingCreatesRef.current.push(async () => {
-            resolve(await runCreate())
+          pendingCreatesRef.current.push({
+            tempId,
+            text: body,
+            nodes: anchor?.nodes ?? [],
+            quote: anchor ? anchor.quote : draft.quote,
+            resolve,
           })
-          // Without a pump cycle this promise settles only after the next
-          // ORGANIC edit — ask the consumer to run save-then-flush now.
+          publishPendingCreates()
+          // Ask the consumer to run a save cycle NOW — a queued create must
+          // not wait for the next organic edit.
           onFlushNeededRef.current?.()
         })
       }
       return runCreate()
     },
-    [draft, refresh, queueCreates, queue],
+    [draft, refresh, queueCreates, publishPendingCreates],
   )
 
-  const flushAnchors = useCallback(async () => {
-    // Doc-first, enforced by the CALLER: the consumer's save pump invokes
-    // this only after its document save resolved. FIRST deliver everything
-    // still inside the reporter's debounce window (plan §7 — payloads are
-    // recomputed from live state at flush time; without this the trailing
-    // edits of every burst miss their own save cycle, since the report
-    // debounce is longer than the save debounce). Queued creates go next —
-    // a comment must exist backend-side before any anchor patch for it.
-    pendingReportsFlushRef.current?.()
-    const creates = pendingCreatesRef.current.splice(0)
-    for (const create of creates) await create()
-    await queue?.flush()
-  }, [queue])
+  const collectSavePayload = useCallback((): CommentSavePayload | null => {
+    const bridge = bridgeRef.current
+    if (!bridge) return null
+    // THE COHERENCE LAW (rodada 6): doc and anchors read back-to-back in one
+    // synchronous frame from the same editor state — never pair a debounced
+    // doc snapshot with anchors derived later.
+    const doc = bridge.getDoc()
+    const anchors = bridge.collect()
+    // Creates are RE-DERIVED, never replayed: the plugin tracks each queued
+    // create under its tempId, so its range moved with every edit since
+    // submit. A create whose text is gone (the user deleted what they were
+    // commenting on) can never validate — settle it false and drop it
+    // instead of poisoning every future envelope.
+    const creates: CommentSaveCreate[] = []
+    const doomed: string[] = []
+    for (const create of pendingCreatesRef.current) {
+      const live = create.nodes.length > 0 ? bridge.payloadFor(create.tempId) : null
+      if (create.nodes.length > 0 && !live) {
+        doomed.push(create.tempId)
+        continue
+      }
+      creates.push({
+        tempId: create.tempId,
+        text: create.text,
+        nodes: live ? live.nodes : create.nodes,
+        quote: live ? live.quote : create.quote,
+      })
+    }
+    if (doomed.length > 0) {
+      for (const tempId of doomed) {
+        const index = pendingCreatesRef.current.findIndex((create) => create.tempId === tempId)
+        if (index === -1) continue
+        const [create] = pendingCreatesRef.current.splice(index, 1)
+        create.resolve(false)
+      }
+      setError('The commented text was removed before the comment could be saved.')
+      publishPendingCreates()
+    }
+    const token = ++tokenSeqRef.current
+    // A newer collect supersedes an unconfirmed older one — after a failed
+    // save, the retry simply snapshots fresher state.
+    outstandingRef.current = { token, anchors }
+    recomputeAnchorStates()
+    return { token, doc, anchors, creates }
+  }, [recomputeAnchorStates, publishPendingCreates])
 
-  const retryAnchor = useCallback(
-    (id: string) => {
-      // FRESH payload only, recomputed from the live plugin state through the
-      // source the bridge registered — never the payload that failed. Unknown
-      // or all-dormant ids have nothing valid to write: no-op.
-      const fresh = payloadSourceRef.current?.(id)
-      if (!fresh || !queue) return
-      queue.retry(id, fresh)
-      // The write itself waits for a flush, and in review mode no organic
-      // save ever comes — ask the consumer to run its pump now.
-      onFlushNeededRef.current?.()
+  const confirmSaved = useCallback(
+    (token: number, result?: { created?: Array<{ tempId: string; row: DocumentComment }> }) => {
+      const outstanding = outstandingRef.current
+      if (outstanding?.token === token) {
+        outstandingRef.current = null
+        bridgeRef.current?.confirm(outstanding.anchors)
+      }
+      // Settle the creates the backend minted: resolve composer promises and
+      // land the rows optimistically (the refetch replaces wholesale).
+      for (const { tempId, row } of result?.created ?? []) {
+        const index = pendingCreatesRef.current.findIndex((create) => create.tempId === tempId)
+        if (index === -1) continue
+        const [create] = pendingCreatesRef.current.splice(index, 1)
+        create.resolve(true)
+        setComments((current) =>
+          current.some((comment) => comment.id === row.id) ? current : [...current, row],
+        )
+      }
+      if (result?.created?.length) {
+        publishPendingCreates()
+        void refresh()
+      }
+      recomputeAnchorStates()
     },
-    [queue],
+    [refresh, recomputeAnchorStates, publishPendingCreates],
   )
 
-  const registerAnchorPayloadSource = useCallback(
-    (source: ((id: string) => CommentAnchorPayload | null) | null) => {
-      payloadSourceRef.current = source
+  const discardSave = useCallback(
+    (token: number, options?: { terminal?: boolean }) => {
+      if (outstandingRef.current?.token === token) outstandingRef.current = null
+      if (options?.terminal) {
+        // The pump gave up (a version conflict: every retry would be
+        // rejected identically). Settle every queued create instead of
+        // leaving composer promises hanging forever.
+        for (const create of pendingCreatesRef.current.splice(0)) create.resolve(false)
+        publishPendingCreates()
+      }
+      recomputeAnchorStates()
     },
-    [],
+    [recomputeAnchorStates, publishPendingCreates],
   )
 
-  const registerPendingReportsFlush = useCallback((flush: (() => void) | null) => {
-    pendingReportsFlushRef.current = flush
-  }, [])
-
-  const enqueueReport = useCallback(
-    (report: CommentAnchorReport) => {
-      queue?.enqueue(report)
+  const registerAnchorBridge = useCallback(
+    (bridge: CommentAnchorBridge | null, previous?: CommentAnchorBridge | null) => {
+      // OWNER-CHECKED unregistration: CommentsLayer and CommentsPanel both run
+      // the bridge hook, so a cleanup must only clear ITS OWN registration —
+      // last-writer-wins plus blind nulling would leave the provider
+      // bridge-less while a live editor is still mounted (silently disabling
+      // every envelope: collectSavePayload would return null).
+      if (bridge === null && previous != null && bridgeRef.current !== previous) return
+      bridgeRef.current = bridge
+      recomputeAnchorStates()
     },
-    [queue],
+    [recomputeAnchorStates],
   )
 
-  const anchorSync = useMemo<CommentAnchorSync | null>(
-    () =>
-      queue
-        ? {
-            states: anchorStates,
-            flushAnchors,
-            retryAnchor,
-            enqueue: enqueueReport,
-            clear: () => queue.clear(),
-          }
-        : null,
-    [queue, anchorStates, flushAnchors, retryAnchor, enqueueReport],
+  const notifyAnchorLedgerChanged = useCallback(() => {
+    recomputeAnchorStates()
+  }, [recomputeAnchorStates])
+
+  const anchorSync = useMemo<CommentAnchorSync>(
+    () => ({ states: anchorStates, collectSavePayload, confirmSaved, discardSave }),
+    [anchorStates, collectSavePayload, confirmSaved, discardSave],
   )
 
   const clearCreateError = useCallback(() => setCreateError(null), [])
@@ -737,8 +857,9 @@ export function CommentsProvider({
       createError,
       clearCreateError,
       parentDeletedId,
-      registerAnchorPayloadSource,
-      registerPendingReportsFlush,
+      registerAnchorBridge,
+      notifyAnchorLedgerChanged,
+      pendingCreates,
       refresh,
       addComment,
       replyToComment,
@@ -749,7 +870,7 @@ export function CommentsProvider({
       clearDraft,
       setActiveId,
     }),
-    [user, comments, loading, error, busyIds, mergedLabels, draft, activeId, anchorSync, queueCreates, createError, clearCreateError, parentDeletedId, registerAnchorPayloadSource, registerPendingReportsFlush, refresh, addComment, replyToComment, updateComment, setCommentStatus, removeComment, setDraft, clearDraft],
+    [user, comments, loading, error, busyIds, mergedLabels, draft, activeId, anchorSync, queueCreates, createError, clearCreateError, parentDeletedId, registerAnchorBridge, notifyAnchorLedgerChanged, pendingCreates, refresh, addComment, replyToComment, updateComment, setCommentStatus, removeComment, setDraft, clearDraft],
   )
 
   return <CommentsContext.Provider value={value}>{children}</CommentsContext.Provider>
@@ -761,20 +882,20 @@ export function useComments(): CommentsContextValue | null {
 }
 
 /**
- * Reaches `flushAnchors` from OUTSIDE the provider subtree — the consumer's
- * save pump usually lives beside the provider, not inside it, so it cannot
- * call {@link useComments} itself. Render this inside the provider and read
- * the bound function from wherever the pump keeps its ref.
+ * Reaches the anchor sync (collect/confirm/discard) from OUTSIDE the provider
+ * subtree — the consumer's save pump usually lives beside the provider, not
+ * inside it, so it cannot call {@link useComments} itself. Render this inside
+ * the provider and read the bound object from wherever the pump keeps it.
  */
-export function AnchorFlushBinder({
+export function AnchorSyncBinder({
   bind,
 }: {
-  bind: (flush: (() => Promise<void>) | null) => void
+  bind: (sync: CommentAnchorSync | null) => void
 }) {
-  const flush = useComments()?.anchorSync?.flushAnchors ?? null
+  const sync = useComments()?.anchorSync ?? null
   useEffect(() => {
-    bind(flush)
+    bind(sync)
     return () => bind(null)
-  }, [bind, flush])
+  }, [bind, sync])
   return null
 }

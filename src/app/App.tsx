@@ -7,20 +7,19 @@ import {
   useFeatureState,
   useZoom,
   type DocumentEditorRenderContext,
-  type DocumentJSON,
-  type EditorApi,
 } from '../editor'
 import {
-  AnchorFlushBinder,
+  AnchorSyncBinder,
   CommentsLayer,
   CommentsPanel,
   CommentsProvider,
   DocumentVariablesProvider,
+  type CommentAnchorSync,
   type ConditionFlag,
   type DocumentVariable,
 } from '../features'
 import { contractTemplate } from './contractTemplate'
-import { createFakeCommentsApi, MOCK_USER } from './commentsMock'
+import { createFakeCommentsApi, MOCK_USER, VERSION_CONFLICT } from './commentsMock'
 import { normalizeConditionals, RAW_CONDITIONALS } from './decisionConditionals'
 import { ZoomControls } from './ZoomControls'
 import { fullFeatures } from './presets'
@@ -57,8 +56,32 @@ function ModeToggle({
 }
 
 // Fake comments backend (module-scope: one "database" per app load) — a real
-// consumer builds a CommentsAdapter over its HTTP client instead.
-const commentsApi = createFakeCommentsApi()
+// consumer builds a CommentsAdapter over its HTTP client instead. Exported so
+// the demo (and its tests) can drive the backend from outside: inject a
+// failure, or save from "another session" to provoke a version conflict.
+export const commentsApi = createFakeCommentsApi()
+
+/**
+ * Where the autosave stands, as the app shows it:
+ * - `failed` — the envelope was rejected and NOTHING was persisted. Everything
+ *   stays queued, so the next edit simply resends fresher state; the banner is
+ *   dismissible because there is nothing for the user to DO about it.
+ * - `conflict` — the envelope carried a stale `versionId`: someone else saved
+ *   over this document. TERMINAL, because every retry would be rejected the
+ *   same way; the app stops pumping and asks for a reload.
+ */
+type SaveStatus = 'saved' | 'failed' | 'conflict'
+
+/** The backend's optimistic-concurrency rejection, in any of the shapes an
+ *  adapter may hand it over in — the same duck-typing the SDK applies to its
+ *  own coded rejections (`isStaleContentError`). */
+const isVersionConflict = (failure: unknown): boolean => {
+  if (typeof failure === 'string') return failure.includes(VERSION_CONFLICT)
+  if (typeof failure !== 'object' || failure === null) return false
+  const { code, message } = failure as { code?: unknown; message?: unknown }
+  if (code === VERSION_CONFLICT) return true
+  return typeof message === 'string' && message.includes(VERSION_CONFLICT)
+}
 
 export default function App() {
   // Zoom state + policy (clamp/step/rounding) come ready from the SDK hook;
@@ -70,29 +93,134 @@ export default function App() {
   // hides its OWN mutating chrome (the insert actions); the SDK hides the rest.
   const [preview, setPreview] = useState(false)
 
-  // The comments doc-first pump reads flushAnchors through this ref (bound by
-  // AnchorFlushBinder inside the provider).
-  const flushAnchorsRef = useRef<(() => Promise<void>) | null>(null)
-  const bindFlushAnchors = useCallback((flush: (() => Promise<void>) | null) => {
-    flushAnchorsRef.current = flush
+  // The envelope pump reads the anchor sync through this ref (bound by
+  // AnchorSyncBinder inside the provider).
+  const anchorSyncRef = useRef<CommentAnchorSync | null>(null)
+  const bindAnchorSync = useCallback((sync: CommentAnchorSync | null) => {
+    anchorSyncRef.current = sync
   }, [])
 
-  // ONE save pump for both entry points: organic edits (onChange hands the
-  // serialized doc) and provider-requested cycles (a queued create, an anchor
-  // Retry — no doc change happened, so the doc is read off the live api).
-  const editorApiRef = useRef<EditorApi | null>(null)
-  const pumpSave = useCallback((doc?: DocumentJSON) => {
-    const json = doc ?? editorApiRef.current?.getJSON()
-    if (!json) return
-    void commentsApi
-      .saveTemplate(json)
-      .then(() => flushAnchorsRef.current?.())
-      .catch((failure) => {
-        // Doc save failed → anchors are NOT touched; the queue waits for the
-        // next successful save.
-        console.warn('[autosave] document save failed', failure)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
+  // The retry banner is dismissible; a LATER failure raises it again.
+  const [failureDismissed, setFailureDismissed] = useState(false)
+
+  // The version this session is editing on top of — the optimistic-concurrency
+  // token. A real consumer gets it with the document it loaded; here the mock
+  // hands out its current one at mount. Every ACCEPTED save returns the version
+  // it produced, and that becomes the token for the next one. Reading
+  // `commentsApi.versionId` at send time instead would defeat the whole
+  // mechanism: the client would always look up to date and could silently
+  // overwrite a save that landed in between.
+  const versionRef = useRef(commentsApi.versionId)
+  // A conflict is terminal for this session (see SaveStatus) — the pump stops.
+  const conflictRef = useRef(false)
+  // One envelope in flight at a time, plus "an edit arrived while it flew".
+  const savingRef = useRef(false)
+  const againRef = useRef(false)
+
+  // THE ENVELOPE PUMP (plan rodada 6): collect doc + dirty anchors + queued
+  // creates from ONE editor state, PUT them as a single transaction, confirm
+  // on success. On failure NOTHING persisted — discard and let the next
+  // cycle resend fresher state.
+  //
+  // SERIALIZED on purpose: while one envelope flies, a second would carry the
+  // SAME version token and be rejected as a conflict that never happened —
+  // and its snapshot would be stale by the time it landed anyway. Overlapping
+  // cycles coalesce into one follow-up, which collects fresher state than
+  // either would have carried.
+  const inFlightRef = useRef<Promise<void>>(Promise.resolve())
+  const pumpSave = useCallback(function run(): Promise<void> {
+    // Terminal, for BOTH entry points: the debounced onChange and the
+    // provider's onFlushNeeded (a queued create asking for a cycle) come
+    // through here, so after a conflict nothing can restart the loop.
+    if (conflictRef.current) return inFlightRef.current
+    if (savingRef.current) {
+      againRef.current = true
+      return inFlightRef.current
+    }
+    const sync = anchorSyncRef.current
+    const payload = sync?.collectSavePayload()
+    if (!sync || !payload) return Promise.resolve()
+    savingRef.current = true
+    const cycle = commentsApi
+      .saveEnvelope({
+        versionId: versionRef.current,
+        doc: payload.doc,
+        anchors: payload.anchors,
+        creates: payload.creates,
       })
+      .then((result) => {
+        versionRef.current = result.versionId
+        sync.confirmSaved(payload.token, result)
+        setSaveStatus('saved')
+      })
+      .catch((failure) => {
+        const conflict = isVersionConflict(failure)
+        // A conflict is TERMINAL: the pump stops, so queued comments would
+        // wait forever — settle them with the discard instead.
+        sync.discardSave(payload.token, conflict ? { terminal: true } : undefined)
+        if (conflict) {
+          conflictRef.current = true
+          setSaveStatus('conflict')
+        } else {
+          setSaveStatus('failed')
+          setFailureDismissed(false)
+        }
+        console.warn('[autosave] envelope save failed', failure)
+      })
+      .finally(() => {
+        savingRef.current = false
+      })
+      .then(() => {
+        if (!againRef.current) return
+        againRef.current = false
+        return run()
+      })
+    inFlightRef.current = cycle
+    return cycle
   }, [])
+
+
+  // THE SAVE CADENCE is the consumer's policy, NOT the SDK's: `onChange` is
+  // debounced for SERIALIZATION (250ms — getJSON is O(n)), which is far too
+  // eager for a network write. Every edit burst funnels through this second,
+  // longer window, so a paragraph of typing costs ONE envelope instead of one
+  // per typing pause. Writes the user explicitly asked for (submitting a
+  // comment, which arrives through the provider's onFlushNeeded) skip the
+  // wait and pump immediately.
+  const AUTOSAVE_MS = 1500
+  const pumpTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const scheduleSave = useCallback(() => {
+    clearTimeout(pumpTimerRef.current)
+    pumpTimerRef.current = setTimeout(() => {
+      pumpTimerRef.current = undefined
+      pumpSave()
+    }, AUTOSAVE_MS)
+  }, [pumpSave])
+  /** Land whatever is pending NOW and resolve when it has: the provider
+   *  awaits this before a review-mode create (its quote is validated against
+   *  the SAVED document). */
+  const flushSave = useCallback(() => {
+    if (pumpTimerRef.current !== undefined) {
+      clearTimeout(pumpTimerRef.current)
+      pumpTimerRef.current = undefined
+      return pumpSave()
+    }
+    return inFlightRef.current
+  }, [pumpSave])
+  // Nothing typed is lost on teardown: a pending window fires NOW.
+  useEffect(
+    () => () => {
+      void flushSave()
+    },
+    [flushSave],
+  )
+  // Leaving EDIT mode is a natural save point — and a load-bearing one: a
+  // review-mode comment is validated against the SAVED document, so the text
+  // the reviewer is about to quote must already be on the server.
+  useEffect(() => {
+    if (preview) void flushSave()
+  }, [preview, flushSave])
 
   // Fake API: @-variables and the EOR decision catalog arrive ~1.5s after
   // mount. Because they flow through context (not the `features` list), the
@@ -119,6 +247,30 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Two save banners, one slot. A stale version is not something the user
+          can retry into submission — another session owns the document now, so
+          the only way forward is to reload onto that version; it therefore
+          wins over (and outlives) the retry notice. */}
+      {saveStatus === 'conflict' ? (
+        <div className="app__banner app__banner--conflict" role="alert">
+          <span>
+            This document was saved in another session. Reload to continue from the latest
+            version — changes made here since then are not saved.
+          </span>
+          <Button size="small" variant="outlined" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        </div>
+      ) : saveStatus === 'failed' && !failureDismissed ? (
+        // Dismissible on purpose: the autosave keeps no timer of its own, the
+        // next edit IS the retry — there is nothing here for the user to do.
+        <div className="app__banner app__banner--failed" role="status">
+          <span>Changes are not saved — your next edit retries the whole save.</span>
+          <Button size="small" variant="outlined" onClick={() => setFailureDismissed(true)}>
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
       <main className="app__canvas">
         {/* Document variables come from here (consumer), via context — shared by
             variables and conditional blocks. `conditions` = the backend decision
@@ -127,8 +279,12 @@ export default function App() {
           {/* Review comments: identity + endpoints come from the consumer.
               Context reaches every surface, including the body-portaled
               balloon and the right-rail panel. */}
-          <CommentsProvider user={MOCK_USER} adapter={commentsApi.adapter} onFlushNeeded={pumpSave}>
-          <AnchorFlushBinder bind={bindFlushAnchors} />
+          <CommentsProvider
+            user={MOCK_USER}
+            adapter={commentsApi.adapter}
+            onFlushNeeded={flushSave}
+          >
+          <AnchorSyncBinder bind={bindAnchorSync} />
           {/* The full feature set, presented through the bubble + footer dock. */}
           <DocumentEditor
             features={fullFeatures}
@@ -149,15 +305,11 @@ export default function App() {
                 />
               </>
             )}
-            // `onChange` is debounced (~250ms after edits stop) — the autosave
-            // moment, and the DOC-FIRST pump (plan §7): PUT the document, and
-            // only after that save RESOLVES flush the queued comment-anchor
-            // writes. That call order is the whole doc-first guarantee — no
-            // anchor write ever describes an unsaved document.
-            onChange={(doc) => pumpSave(doc)}
-            onReady={(api) => {
-              editorApiRef.current = api
-            }}
+            // `onChange` (debounced ~250ms for serialization) only ARMS the
+            // autosave window; the pump then snapshots doc + anchors +
+            // creates from one editor state (rodada 6's coherence law) and
+            // PUTs them as a single transaction.
+            onChange={() => scheduleSave()}
             // Shown centered on screen while the doc is empty; the CTA inserts
             // a starter template (and the overlay vanishes — no longer empty).
             renderEmptyState={(ctx) => (

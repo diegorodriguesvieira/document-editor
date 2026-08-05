@@ -1,9 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import type { CommentAnchorPayload } from './commentAnchor'
+import type { CommentAnchorPayload, CommentAnchorReport } from './commentAnchor'
 import {
   CommentsProvider,
+  type CommentAnchorBridge,
+  type CommentAnchorSync,
   PARENT_DELETED,
   STALE_CONTENT,
   isParentDeletedError,
@@ -429,17 +431,31 @@ describe('CommentsProvider', () => {
   })
 })
 
-describe('CommentsProvider anchor pipeline', () => {
+describe('CommentsProvider anchor sync (the save envelope)', () => {
   const HELLO_NODES = [{ id: 'p1', from: 0, to: 5 }]
+  const REPORT: CommentAnchorReport = { id: 'c-9', nodes: HELLO_NODES, quote: 'hello' }
 
-  it('without adapter.updateAnchor there is no anchorSync — and creates never queue', async () => {
+  function fakeBridge(overrides: Partial<CommentAnchorBridge> = {}): CommentAnchorBridge {
+    return {
+      getDoc: () => ({ type: 'doc', content: [] }),
+      collect: () => [],
+      confirm: vi.fn(),
+      dirtyIds: () => [],
+      // Queued creates re-derive through this: the fake keeps the submit-time
+      // payload alive (a create whose text vanished returns null instead).
+      payloadFor: () => ({ nodes: HELLO_NODES, quote: 'hello' }),
+      ...overrides,
+    }
+  }
+
+  it('collectSavePayload is null without a bridge — and creates never park without a pump', async () => {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter)
+    const { result } = mount(adapter) // no onFlushNeeded → no envelope pump
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
-    expect(result.current!.anchorSync).toBeNull()
+    expect(result.current!.anchorSync!.collectSavePayload()).toBeNull()
 
-    // queueCreates without a queue must not park the POST forever.
+    // queueCreates without a pump must not park the POST forever.
     act(() => result.current!.setQueueCreates(true))
     act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
     await act(async () => {
@@ -448,107 +464,40 @@ describe('CommentsProvider anchor pipeline', () => {
     expect(adapter.add).toHaveBeenCalledTimes(1)
   })
 
-  it('report → enqueue → pendingSave → saving → synced through flushAnchors', async () => {
-    const gate = deferred<unknown>()
-    const adapter = { ...fakeAdapter(), updateAnchor: vi.fn(() => gate.promise) }
-    const { result } = mount(adapter)
+  it('the envelope snapshots doc + anchors coherently; badges go pendingSave → saving', async () => {
+    const adapter = fakeAdapter()
+    const { result } = mount(adapter, ANA, () => {})
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
-    act(() =>
-      result.current!.anchorSync!.enqueue({ id: 'c-9', nodes: HELLO_NODES, quote: 'hello' }),
-    )
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] }
+    const bridge = fakeBridge({
+      getDoc: () => doc,
+      collect: () => [REPORT],
+      dirtyIds: () => ['c-9'],
+    })
+    act(() => result.current!.registerAnchorBridge(bridge))
+    act(() => result.current!.notifyAnchorLedgerChanged())
     expect(result.current!.anchorSync!.states.get('c-9')).toBe('pendingSave')
-    // Nothing travels on enqueue — only the flush writes.
-    expect(adapter.updateAnchor).not.toHaveBeenCalled()
 
-    let flushed!: Promise<void>
+    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
     act(() => {
-      flushed = result.current!.anchorSync!.flushAnchors()
+      payload = result.current!.anchorSync!.collectSavePayload()
     })
-    await waitFor(() => expect(result.current!.anchorSync!.states.get('c-9')).toBe('saving'))
-    expect(adapter.updateAnchor).toHaveBeenCalledWith('c-9', {
-      nodes: HELLO_NODES,
-      quote: 'hello',
-    })
-
-    await act(async () => {
-      gate.resolve({})
-      await flushed
-    })
-    expect(result.current!.anchorSync!.states.get('c-9')).toBe('synced')
+    expect(payload).toMatchObject({ doc, anchors: [REPORT], creates: [] })
+    expect(result.current!.anchorSync!.states.get('c-9')).toBe('saving')
   })
 
-  it('failure → saveFailed; retryAnchor re-enqueues the FRESH payload from the registered source', async () => {
-    const adapter = {
-      ...fakeAdapter(),
-      updateAnchor: vi
-        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockResolvedValue({}),
-    }
-    const { result } = mount(adapter)
+  it('a queued create asks the pump for a cycle, rides the envelope and settles on confirm', async () => {
+    const adapter = fakeAdapter()
+    const onFlushNeeded = vi.fn()
+    const { result } = mount(adapter, ANA, onFlushNeeded)
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
-    const stale: CommentAnchorPayload = { nodes: [{ id: 'p1', from: 0, to: 5 }], quote: 'old' }
-    const fresh: CommentAnchorPayload = { nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'new' }
-    act(() => result.current!.anchorSync!.enqueue({ id: 'c-1', ...stale }))
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
-    })
-    // Both in-flush attempts failed (auto-retry once) → saveFailed.
-    expect(adapter.updateAnchor).toHaveBeenCalledTimes(2)
-    expect(result.current!.anchorSync!.states.get('c-1')).toBe('saveFailed')
-
-    // The bridge registers the live derivation; the retry must send THAT —
-    // the recomputed nodes — never the payload that failed.
-    act(() => result.current!.registerAnchorPayloadSource(() => fresh))
-    act(() => result.current!.anchorSync!.retryAnchor('c-1'))
-    expect(result.current!.anchorSync!.states.get('c-1')).toBe('pendingSave')
-
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
-    })
-    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', fresh)
-    expect(result.current!.anchorSync!.states.get('c-1')).toBe('synced')
-  })
-
-  it('retryAnchor is a no-op while the source has nothing live to write', async () => {
-    const adapter = { ...fakeAdapter(), updateAnchor: vi.fn(async () => ({})) }
-    const { result } = mount(adapter)
-    await waitFor(() => expect(result.current!.loading).toBe(false))
-
-    act(() => result.current!.registerAnchorPayloadSource(() => null))
-    act(() => result.current!.anchorSync!.retryAnchor('c-orphan'))
-
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
-    })
-    expect(adapter.updateAnchor).not.toHaveBeenCalled()
-  })
-
-  it('EDIT mode queues the create: POST only on flush, BEFORE anchor updates; review posts now', async () => {
-    const order: string[] = []
-    const adapter = {
-      ...fakeAdapter(),
-      updateAnchor: vi.fn(async () => {
-        order.push('updateAnchor')
-      }),
-    }
-    adapter.add.mockImplementation(async (input: { text: string; quote: string }) => {
-      order.push('add')
-      return { ...saved('c-created', input.text), quote: input.quote }
-    })
-    const { result } = mount(adapter)
-    await waitFor(() => expect(result.current!.loading).toBe(false))
-
+    const bridge = fakeBridge({ collect: () => [REPORT] })
+    act(() => result.current!.registerAnchorBridge(bridge))
     act(() => result.current!.setQueueCreates(true))
     act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'draft-time quote' }))
-    // An anchor update already sits in the queue — the flush must still run
-    // the create FIRST (a comment must exist before any anchor patch).
-    act(() =>
-      result.current!.anchorSync!.enqueue({ id: 'c-old', nodes: HELLO_NODES, quote: 'hello' }),
-    )
+
     let queued!: Promise<boolean>
     act(() => {
       queued = result.current!.addComment('queued in edit mode', {
@@ -556,20 +505,36 @@ describe('CommentsProvider anchor pipeline', () => {
         quote: 'submit-time quote',
       })
     })
+    // Parked for the envelope — the adapter's POST is NOT used in edit mode —
+    // and the pump was asked to run NOW (no waiting for an organic edit).
     expect(adapter.add).not.toHaveBeenCalled()
+    expect(onFlushNeeded).toHaveBeenCalledTimes(1)
+    expect(result.current!.draft).toBeNull() // optimistic clear
 
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
+    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
     })
-    // The anchor payload's quote (recomputed at submit) travels — not the
-    // draft's capture-time one.
-    expect(adapter.add).toHaveBeenCalledWith({
-      text: 'queued in edit mode',
-      quote: 'submit-time quote',
-      nodes: HELLO_NODES,
-    })
-    expect(order).toEqual(['add', 'updateAnchor'])
+    // RE-DERIVED, never replayed: the plugin tracks the queued create under
+    // its tempId, so the envelope carries the range as it stands NOW (the
+    // bridge's payloadFor) instead of the submit-time freeze.
+    expect(payload!.creates).toEqual([
+      {
+        tempId: payload!.creates[0].tempId,
+        text: 'queued in edit mode',
+        nodes: HELLO_NODES,
+        quote: 'hello',
+      },
+    ])
+
+    act(() =>
+      result.current!.anchorSync!.confirmSaved(payload!.token, {
+        created: [{ tempId: payload!.creates[0].tempId, row: saved('c-created', 'queued in edit mode') }],
+      }),
+    )
     expect(await queued).toBe(true)
+    expect(bridge.confirm).toHaveBeenCalledWith([REPORT])
+    expect(adapter.add).not.toHaveBeenCalled()
 
     // Review mode: the POST goes out immediately again.
     act(() => result.current!.setQueueCreates(false))
@@ -577,7 +542,56 @@ describe('CommentsProvider anchor pipeline', () => {
     await act(async () => {
       expect(await result.current!.addComment('review mode direct')).toBe(true)
     })
-    expect(adapter.add).toHaveBeenCalledTimes(2)
+    expect(adapter.add).toHaveBeenCalledTimes(1)
+  })
+
+  it('discardSave keeps everything queued — the next collect resends the create', async () => {
+    const adapter = fakeAdapter()
+    const { result } = mount(adapter, ANA, () => {})
+    await waitFor(() => expect(result.current!.loading).toBe(false))
+
+    act(() => result.current!.registerAnchorBridge(fakeBridge({ dirtyIds: () => ['c-9'] })))
+    act(() => result.current!.setQueueCreates(true))
+    act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
+    act(() => {
+      void result.current!.addComment('parked', { nodes: HELLO_NODES, quote: 'hello' })
+    })
+
+    let first!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      first = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(first!.creates).toHaveLength(1)
+
+    act(() => result.current!.anchorSync!.discardSave(first!.token))
+    expect(result.current!.anchorSync!.states.get('c-9')).toBe('pendingSave')
+
+    let second!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      second = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(second!.creates).toEqual(first!.creates) // same tempId, still queued
+  })
+
+  it('a stale token cannot confirm — only the LATEST collect counts', async () => {
+    const adapter = fakeAdapter()
+    const { result } = mount(adapter, ANA, () => {})
+    await waitFor(() => expect(result.current!.loading).toBe(false))
+
+    const bridge = fakeBridge({ collect: () => [REPORT] })
+    act(() => result.current!.registerAnchorBridge(bridge))
+
+    let first!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    let second!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      first = result.current!.anchorSync!.collectSavePayload()
+      second = result.current!.anchorSync!.collectSavePayload() // supersedes
+    })
+    act(() => result.current!.anchorSync!.confirmSaved(first!.token))
+    expect(bridge.confirm).not.toHaveBeenCalled()
+
+    act(() => result.current!.anchorSync!.confirmSaved(second!.token))
+    expect(bridge.confirm).toHaveBeenCalledWith([REPORT])
   })
 
   it('STALE_CONTENT on create surfaces createError, keeps the draft, never auto-retries', async () => {
@@ -686,58 +700,116 @@ describe('CommentsProvider anchor pipeline', () => {
   })
 })
 
-describe('onFlushNeeded — queued writes ask the consumer pump for a cycle', () => {
-  const NODES = [{ id: 'p1', from: 0, to: 5 }]
 
-  it('a QUEUED create requests a pump cycle immediately — the promise settles on that flush', async () => {
-    // Creates only queue when the anchor queue exists (adapter with
-    // updateAnchor) — without one they POST immediately by design.
-    const adapter = { ...fakeAdapter(), updateAnchor: vi.fn(async () => ({})) }
-    const onFlushNeeded = vi.fn()
+describe('queued creates are live, not frozen', () => {
+  const HELLO_NODES = [{ id: 'p1', from: 0, to: 5 }]
+
+  function bridgeWith(payloadFor: (id: string) => CommentAnchorPayload | null): CommentAnchorBridge {
+    return {
+      getDoc: () => ({ type: 'doc', content: [] }),
+      collect: () => [],
+      confirm: vi.fn(),
+      dirtyIds: () => [],
+      payloadFor,
+    }
+  }
+
+  async function queueOne(onFlushNeeded = () => {}, bridge?: CommentAnchorBridge) {
+    const adapter = fakeAdapter()
     const { result } = mount(adapter, ANA, onFlushNeeded)
     await waitFor(() => expect(result.current!.loading).toBe(false))
-
+    if (bridge) act(() => result.current!.registerAnchorBridge(bridge))
     act(() => result.current!.setQueueCreates(true))
     act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
-    let queued!: Promise<boolean>
+    let settled!: Promise<boolean>
     act(() => {
-      queued = result.current!.addComment('parked note', { nodes: NODES, quote: 'hello' })
+      settled = result.current!.addComment('note', { nodes: HELLO_NODES, quote: 'hello' })
     })
-    // Parked — and the pump was asked to run NOW. Without this call the
-    // promise would wait for the next ORGANIC edit (in review mode: forever).
-    expect(adapter.add).not.toHaveBeenCalled()
-    expect(onFlushNeeded).toHaveBeenCalledTimes(1)
+    return { result, settled, adapter }
+  }
 
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
+  it('the envelope carries the CURRENT geometry — an edit after submit travels, the freeze does not', async () => {
+    const moved = { nodes: [{ id: 'p1', from: 3, to: 8 }], quote: 'moved' }
+    const { result } = await queueOne(() => {}, bridgeWith(() => moved))
+
+    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
     })
-    expect(await queued).toBe(true)
-    expect(adapter.add).toHaveBeenCalledTimes(1)
+    expect(payload!.creates[0]).toMatchObject(moved)
   })
 
-  it('retryAnchor requests a pump cycle — Retry can complete in review mode', async () => {
-    const adapter = {
-      ...fakeAdapter(),
-      updateAnchor: vi
-        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
-        .mockRejectedValueOnce(new Error('down'))
-        .mockRejectedValueOnce(new Error('down'))
-        .mockResolvedValue({}),
-    }
-    const onFlushNeeded = vi.fn()
-    const { result } = mount(adapter, ANA, onFlushNeeded)
-    await waitFor(() => expect(result.current!.loading).toBe(false))
+  it('a create whose commented text was deleted is EVICTED — it can never validate', async () => {
+    // Without eviction one dead create would reject every future envelope
+    // (the backend validates its quote against the doc), wedging the autosave
+    // for the rest of the session.
+    const { result, settled } = await queueOne(() => {}, bridgeWith(() => null))
 
-    act(() => result.current!.anchorSync!.enqueue({ id: 'c-1', nodes: NODES, quote: 'x' }))
-    await act(async () => {
-      await result.current!.anchorSync!.flushAnchors()
+    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
     })
-    expect(result.current!.anchorSync!.states.get('c-1')).toBe('saveFailed')
-    expect(onFlushNeeded).not.toHaveBeenCalled()
+    expect(payload!.creates).toEqual([])
+    expect(await settled).toBe(false)
+    expect(result.current!.error).toMatch(/removed/i)
 
-    act(() => result.current!.registerAnchorPayloadSource(() => ({ nodes: NODES, quote: 'x' })))
-    act(() => result.current!.anchorSync!.retryAnchor('c-1'))
-    expect(result.current!.anchorSync!.states.get('c-1')).toBe('pendingSave')
-    expect(onFlushNeeded).toHaveBeenCalledTimes(1)
+    // And it never comes back.
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.creates).toEqual([])
+  })
+
+  it('a TERMINAL discard settles every queued create — no composer promise hangs', async () => {
+    const { result, settled } = await queueOne(
+      () => {},
+      bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })),
+    )
+
+    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.creates).toHaveLength(1)
+
+    // The pump gave up (version conflict): retrying would be rejected
+    // identically, so the queue must not wait forever.
+    act(() => result.current!.anchorSync!.discardSave(payload!.token, { terminal: true }))
+    expect(await settled).toBe(false)
+
+    act(() => {
+      payload = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(payload!.creates).toEqual([])
+  })
+
+  it('a create queued AFTER the collect survives that envelope confirm and rides the next one', async () => {
+    const { result } = await queueOne(
+      () => {},
+      bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })),
+    )
+
+    let first!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      first = result.current!.anchorSync!.collectSavePayload()
+    })
+    // A second comment is submitted while the envelope is in flight.
+    act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
+    act(() => {
+      void result.current!.addComment('second', { nodes: HELLO_NODES, quote: 'hello' })
+    })
+
+    act(() =>
+      result.current!.anchorSync!.confirmSaved(first!.token, {
+        created: [{ tempId: first!.creates[0].tempId, row: saved('c-1', 'note') }],
+      }),
+    )
+
+    let second!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      second = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(second!.creates).toHaveLength(1)
+    expect(second!.creates[0].text).toBe('second')
   })
 })

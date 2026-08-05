@@ -1,8 +1,20 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { editorFromDOM as editor } from '../test/editorHarness'
-import App from './App'
+import App, { commentsApi } from './App'
+
+/* The demo backend is module-scope, so every test here is a new SESSION
+ * against the SAME server — including its version counter. Zero latency keeps
+ * a session's LAST save (the SDK flushes a pending onChange on unmount) from
+ * landing after the next session already read the version it holds, which
+ * would 409 that session before it ever typed. */
+commentsApi.latencyMs = 0
+
+/** Let the previous session's unmount flush land before the next one mounts. */
+beforeEach(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+})
 
 /** Select real text so the bubble (the only toolbar) has a reason to show. */
 async function selectSomeText() {
@@ -162,10 +174,10 @@ describe('<App /> review comments (preview mode)', () => {
     expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull()
     await userEvent.type(field, 'change this word{Enter}')
 
-    // Saved on the fake backend (300ms) → refetched (300ms more) → the
-    // composer closes and the card lands: avatar initials + author + text,
-    // no quote. Waiting on the composer first keeps the text query from
-    // matching the textarea's own content mid-save.
+    // Saved on the fake backend → refetched → the composer closes and the
+    // card lands: avatar initials + author + text, no quote. Waiting on the
+    // composer first keeps the text query from matching the textarea's own
+    // content mid-save.
     await waitFor(
       () => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull(),
       { timeout: 3000 },
@@ -209,8 +221,8 @@ describe('<App /> review comments (preview mode)', () => {
       'direct reply{Enter}',
     )
 
-    // Saved (300ms) + refetched (300ms): the composer closes FIRST (else a
-    // text query could match the textarea still holding the typed reply)…
+    // Saved + refetched: the composer closes FIRST (else a text query could
+    // match the textarea still holding the typed reply)…
     await waitFor(
       () => expect(screen.queryByRole('textbox', { name: 'Reply text' })).toBeNull(),
       { timeout: 3000 },
@@ -242,7 +254,7 @@ describe('<App /> review comments (preview mode)', () => {
 
     await userEvent.click(within(card).getByRole('button', { name: 'Resolve' }))
 
-    // PATCH (300ms) + refetch (300ms) → the resolved row sheds its highlight…
+    // PATCH + refetch → the resolved row sheds its highlight…
     await waitFor(() => expect(highlight()).toBeNull(), { timeout: 3000 })
     // …the card leaves the open tab and lives on, frozen, under Resolved.
     expect(within(panel).queryByText('resolvable')).toBeNull()
@@ -285,4 +297,114 @@ describe('<App /> review comments (preview mode)', () => {
     await screen.findByRole('toolbar', { name: 'Formatting' })
     expect(screen.queryByRole('button', { name: 'Add comment' })).toBeNull()
   })
+})
+
+/* Last in the file on purpose: the conflict test saves from "another session",
+ * which replaces the mock's saved document — and the quote validator of every
+ * comment test above reads that document. */
+describe('<App /> autosave envelope', () => {
+  const RETRYING = 'Changes are not saved — your next edit retries the whole save.'
+  /** One save cycle = the serialize debounce (250ms) + the app's autosave
+   *  window (1500ms) + the mock's latency, with room to spare under load. */
+  const CYCLE = 6000
+  /** Only the envelope PUTs — the log also carries the panel's GET /comments. */
+  const envelopePuts = () => commentsApi.log.filter((line) => line.includes('(envelope)')).length
+  const edit = (text: string) =>
+    act(() => {
+      editor().commands.insertContent(text)
+    })
+
+  beforeEach(async () => {
+    commentsApi.failNext.clear()
+    render(<App />)
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+  }, 20000)
+
+  it('edits during a slow save coalesce into ONE follow-up envelope — never a self-conflict', async () => {
+    // The pump allows one envelope in flight. Without that rule the second
+    // debounced onChange would send a SECOND envelope carrying the same
+    // version token, and the server — having just bumped on the first —
+    // would reject it as a conflict that never happened.
+    commentsApi.latencyMs = 150
+    try {
+      const before = envelopePuts()
+      edit('aaa')
+      // Three more bursts while the first envelope is in flight.
+      edit('bbb')
+      edit('ccc')
+      edit('ddd')
+
+      // Drain to idle instead of sleeping a fixed amount: the count must go
+      // UP at least once and then hold still across two settle windows (this
+      // suite also runs under whole-suite load, where fixed sleeps flake).
+      await waitFor(() => expect(envelopePuts()).toBeGreaterThan(before), { timeout: CYCLE })
+      let settled = envelopePuts()
+      await waitFor(
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 250))
+          const now = envelopePuts()
+          const stable = now === settled
+          settled = now
+          expect(stable).toBe(true)
+        },
+        { timeout: CYCLE },
+      )
+
+      // At most two: the in-flight one plus the single coalesced follow-up.
+      expect(settled - before).toBeLessThanOrEqual(2)
+      // And no conflict was ever raised — the terminal notice never appeared.
+      expect(screen.queryByText(/refresh/i)).toBeNull()
+    } finally {
+      commentsApi.latencyMs = 0
+    }
+  }, 20000)
+
+  it('a rejected envelope raises the retry banner — dismissible, and cleared by the next confirmed save', async () => {
+    commentsApi.failNext.add('save')
+
+    edit('first edit')
+
+    expect(await screen.findByText(RETRYING, {}, { timeout: CYCLE })).toBeInTheDocument()
+    // Dismissible: there is nothing for the user to DO, so they may silence it.
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.queryByText(RETRYING)).toBeNull())
+    // A LATER failure raises it again — dismissing silences one, not the state.
+    edit(' still failing')
+    expect(await screen.findByText(RETRYING, {}, { timeout: CYCLE })).toBeInTheDocument()
+
+    // Nothing was persisted and nothing was dropped: the next cycle resends,
+    // carrying the state as it is by then, and the banner clears itself.
+    commentsApi.failNext.delete('save')
+    edit(' and more')
+    await waitFor(() => expect(screen.queryByText(RETRYING)).toBeNull(), { timeout: CYCLE })
+  }, 20000)
+
+  it('a stale versionId is TERMINAL: the reload notice replaces the retry, and saving stops', async () => {
+    // Another session saves — the server version moves past the one this app
+    // has been holding since it mounted.
+    await act(async () => {
+      await commentsApi.saveEnvelope({
+        versionId: commentsApi.versionId,
+        doc: { type: 'doc', content: [{ type: 'paragraph' }] },
+        anchors: [],
+        creates: [],
+      })
+    })
+
+    edit('my edit')
+
+    const notice = await screen.findByText(/saved in another session/, {}, { timeout: CYCLE })
+    const banner = notice.closest('.app__banner--conflict') as HTMLElement
+    expect(within(banner).getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    // The retry banner stays away — this is not something an edit can fix, and
+    // there is no Dismiss either: the notice outlives the session.
+    expect(screen.queryByText(RETRYING)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
+
+    // Terminal — further edits do not even attempt an envelope.
+    const attempted = envelopePuts()
+    edit(' and another')
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    expect(envelopePuts()).toBe(attempted)
+  }, 20000)
 })

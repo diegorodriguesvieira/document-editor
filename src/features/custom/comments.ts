@@ -1,5 +1,6 @@
 import { defineFeature, Extension } from '../../editor'
 import type { Editor } from '../../editor'
+import { combineTransactionSteps, findChildrenInRange, getChangedRanges } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorState, Transaction } from '@tiptap/pm/state'
 import { ReplaceStep } from '@tiptap/pm/transform'
@@ -54,22 +55,28 @@ export interface CommentsStorage {
    *  nudges (the storage+nudge idiom — storage mutates outside the
    *  transaction stream, the no-op dispatch is what makes the plugin see it). */
   comments: CommentAnchorRecord[]
-  /** The reporter's SINK ({@link CommentsLayer} injects the sync queue's
-   *  enqueue): every debounced anchor report lands here — a queue boundary,
-   *  never the network (the consumer's save pump flushes the queue only after
-   *  the document save confirms). Null drops reports silently (no provider,
-   *  or an adapter without `updateAnchor`). */
-  onAnchorReport: ((report: CommentAnchorReport) => void) | null
-  /** Set by the segments plugin's view: delivers every report still inside
-   *  the debounce window into the sink NOW. The save pump calls it (through
-   *  the bridge) right before draining the queue — without it the trailing
-   *  edits of a burst miss their own save cycle (report debounce > save
-   *  debounce) and strand in `pendingSave` until the NEXT save. */
-  flushPendingReports: (() => void) | null
-  /** Notified when the reporter RESETS on `documentReplaced`: every queued
-   *  anchor write describes the document that just left — the bridge clears
-   *  the sync queue here. */
-  onAnchorsReset: (() => void) | null
+  /** Set by the segments plugin's view: the CURRENT canonical payload of
+   *  every comment whose anchors drifted from the last confirmed save.
+   *  Read-only — nothing clears until {@link CommentsStorage.confirmAnchorsSaved}.
+   *  Reads the live editor state, so calling it in the same synchronous frame
+   *  as `getJSON()` yields the envelope's coherent doc+anchors pair (the
+   *  rodada-6 coherence law). */
+  collectDirtyAnchors: (() => CommentAnchorReport[]) | null
+  /** Set by the segments plugin's view: the envelope carrying these payloads
+   *  was confirmed saved — they become the persisted-truth baselines. Dirt
+   *  that arrived AFTER the collect stays dirty for the next envelope. */
+  confirmAnchorsSaved: ((reports: CommentAnchorReport[]) => void) | null
+  /** Set by the segments plugin's view: ids whose anchors currently differ
+   *  from the confirmed baselines — the panel's `pendingSave` badges. */
+  dirtyAnchorIds: (() => string[]) | null
+  /** Set by the segments plugin's view: the CURRENT canonical payload of ONE
+   *  tracked anchor, or null when nothing of it is live. Queued creates ride
+   *  this (registered under their `tempId`) so an envelope never carries a
+   *  submit-time payload the document has moved past. */
+  anchorPayloadFor: ((id: string) => CommentAnchorPayload | null) | null
+  /** Notified whenever the dirty picture may have changed (sweep, reset,
+   *  confirm) — the provider re-derives badge states here. */
+  onAnchorLedgerChanged: (() => void) | null
 }
 
 /**
@@ -98,6 +105,12 @@ interface SegmentEntry {
   /** Set while dormant from an IN-SESSION collapse: the text `stored` covered
    *  at collapse time. Absent on seeded dormants. */
   dormantText?: string
+  /** Marks BOTH ends of a cut+paste MOVE: the range the cut took (kept as the
+   *  undo seed) and the one the paste created. Whichever end is dormant is
+   *  not a detached piece of the comment — the text is not missing, it moved
+   *  — so the card never reads "partially detached" for a move, in either
+   *  direction (paste, or the undo that reverts it). */
+  moved?: boolean
 }
 
 interface LiveEntry extends SegmentEntry {
@@ -151,7 +164,7 @@ function normalizeEntries(entries: SegmentEntry[]): SegmentEntry[] {
       if (entry.live.to > last.live.to) last.live = { from: last.live.from, to: entry.live.to }
       // absorbed — the FIRST segment's stored stays
     } else {
-      merged.push({ stored: entry.stored, live: { ...entry.live } })
+      merged.push({ ...entry, live: { ...entry.live } })
     }
   }
   return [...merged, ...entries.filter((entry) => entry.live === null)]
@@ -299,29 +312,44 @@ function extendEntriesForRemaps(
   return extended
 }
 
-/**
- * The merge half's SOURCE detector, run on the PRE-FIT clipboard slice inside
- * `transformPasted`: the fitter strips a merged fragment down to bare inline
- * content before the step is built (pinned in commentCopyExtend.test.ts), so
- * the source node's uid is visible ONLY here. Descends single-child open
- * wrappers (a copy out of a list arrives wrapped in its context) to the one
- * open textblock; anything else — multi-block copies, closed slices — is the
- * remap half's territory and latches nothing.
- */
-function pastedSourceUidOf(slice: Slice): string | null {
-  if (slice.openStart === 0 || slice.content.childCount !== 1) return null
-  let node = slice.content.firstChild
-  while (node && !node.isTextblock && node.childCount === 1) node = node.firstChild
-  if (!node?.isTextblock) return null
-  const uid = node.attrs[NODE_ID_ATTRIBUTE] as unknown
+/** The uid of a slice edge's textblock, descending single-child wrappers (a
+ *  copy out of a list arrives wrapped in its context). */
+function edgeUid(node: PMNode | null | undefined): string | null {
+  let candidate = node
+  while (candidate && !candidate.isTextblock && candidate.childCount === 1) {
+    candidate = candidate.firstChild
+  }
+  if (!candidate?.isTextblock) return null
+  const uid = candidate.attrs[NODE_ID_ATTRIBUTE] as unknown
   return typeof uid === 'string' && uid !== '' ? uid : null
+}
+
+/** The source uids of a pasted slice's OPEN edges — the halves that will
+ *  MERGE into existing blocks instead of materializing as nodes of their own
+ *  (a materialized node collides on its uid and goes through the remap half).
+ *  Read on the PRE-FIT clipboard slice inside `transformPasted`, because the
+ *  fitter strips those wrappers before the step is built. A single-child open
+ *  slice has ONE edge: `start` covers it, `end` stays null so nothing extends
+ *  twice. */
+interface PastedEdgeUids {
+  start: string | null
+  end: string | null
+}
+
+function pastedEdgeUids(slice: Slice): PastedEdgeUids {
+  const { content, openStart, openEnd } = slice
+  if (content.childCount === 0) return { start: null, end: null }
+  return {
+    start: openStart > 0 ? edgeUid(content.firstChild) : null,
+    end: openEnd > 0 && content.childCount > 1 ? edgeUid(content.lastChild) : null,
+  }
 }
 
 /**
  * COPY-EXTEND, merge half (plan §6, the partial-copy rule): a text selection
  * copied and pasted at a caret travels as an OPEN slice that MERGES into the
  * target textblock — no node is born, no uid collides, the remap half never
- * fires. Identity comes from the {@link pastedSourceUidOf} latch; geometry
+ * fires. Identity comes from the {@link pastedEdgeUids} latch; geometry
  * comes from the paste transaction's own replace step (inline-only slice =
  * the merged shape). The landed text is located in the source by content
  * alignment — the remap half's discriminators apply unchanged — and every
@@ -339,63 +367,261 @@ function pastedSourceUidOf(slice: Slice): string | null {
  * - The open EDGE blocks of a multi-block copy stay uncovered (they never
  *   latch) — accepted; their closed middles still extend via the remap half.
  */
-function extendEntriesForMergedPaste(
-  tr: Transaction,
-  doc: PMNode,
-  comments: Map<string, SegmentEntry[]>,
-  sourceUid: string,
-): Set<string> {
-  const extended = new Set<string>()
-  const index = nodeIdIndex(doc)
-  const source = index.byId.get(sourceUid)
-  if (!source) return extended // the source is gone — that paste was a move
+/** Where merged content LANDED: the target textblock's uid, the text that
+ *  merged into it and the offset it starts at. */
+interface PasteLanding {
+  targetUid: string
+  text: string
+  offset: number
+}
 
+/** A landing whose block exists but has NO uid yet — the NodeIds kernel
+ *  stamps blocks born in this dispatch through an APPENDED transaction, so a
+ *  paste that merged into a brand-new block (the tail edge of a multi-block
+ *  paste, which splits the target) has nothing to anchor to until that
+ *  transaction lands. Retried once, on the very next apply: the kernel's
+ *  transaction is attribute-only, so `pos` still means what it meant. */
+interface PasteSpot {
+  pos: number
+  text: string
+  atEnd: boolean
+}
+
+interface PendingLanding extends PasteSpot {
+  sourceUid: string
+  /** Applies spent waiting for the kernel to stamp the landing block. The
+   *  appendTransaction FIXPOINT can run several rounds (a trailing paragraph,
+   *  then the uid pass), so one retry is not enough — but the window must
+   *  stay short, or a later edit would be mistaken for the paste settling. */
+  tries: number
+}
+
+function landingAt(doc: PMNode, spot: PasteSpot): PasteLanding | null {
+  if (spot.text.length === 0 || spot.pos < 0 || spot.pos > doc.content.size) return null
+  const $pos = doc.resolve(spot.pos)
+  if (!$pos.parent.isTextblock) return null
+  const targetUid = $pos.parent.attrs[NODE_ID_ATTRIBUTE] as unknown
+  if (typeof targetUid !== 'string' || targetUid === '') return null
+  // An END edge's text ENDS at `pos`; a START edge's begins there.
+  const offset = spot.atEnd ? $pos.parentOffset - spot.text.length : $pos.parentOffset
+  return offset < 0 ? null : { targetUid, text: spot.text, offset }
+}
+
+/**
+ * Where a paste's MERGED halves landed — one per open edge of the slice.
+ * Two shapes reach here: the fitter reduced a single-block copy to bare
+ * inline content (the whole step slice is the merged text), or a multi-block
+ * copy kept its blocks and only its OPEN edges merge — the first child into
+ * the block holding the caret, the last into the block the tail ended up in.
+ * The closed blocks between them materialize and are the remap half's
+ * business.
+ */
+function mergedPasteSpots(tr: Transaction): { start: PasteSpot | null; end: PasteSpot | null } {
+  const none = { start: null, end: null }
   for (let stepIndex = 0; stepIndex < tr.steps.length; stepIndex++) {
     const step = tr.steps[stepIndex]
     if (!(step instanceof ReplaceStep)) continue
-    const { content } = step.slice
-    let inlineOnly = content.childCount > 0
+    const { content, openStart, openEnd } = step.slice
+    if (content.childCount === 0) continue
+    const mapping = tr.mapping.slice(stepIndex + 1)
+
+    let inlineOnly = true
     content.forEach((node) => {
       if (!node.isInline) inlineOnly = false
     })
-    if (!inlineOnly) continue
-    const copyText = content.textBetween(0, content.size, undefined, LEAF_PLACEHOLDER)
-    if (copyText.length === 0) continue
+    if (inlineOnly) {
+      const text = content.textBetween(0, content.size, undefined, LEAF_PLACEHOLDER)
+      // One paste, one landing — the first replace step is it.
+      return { start: { pos: mapping.map(step.from, 1), text, atEnd: false }, end: null }
+    }
 
-    // Where the merged text landed in the FINAL doc: inline content begins
-    // exactly at the step's `from`; later steps' maps carry it forward.
-    const from = tr.mapping.slice(stepIndex + 1).map(step.from, 1)
-    const $from = doc.resolve(from)
-    const target = $from.parent
-    if (!target.isTextblock) continue
-    const targetUid = target.attrs[NODE_ID_ATTRIBUTE] as unknown
-    if (typeof targetUid !== 'string' || targetUid === '' || targetUid === sourceUid) continue
-
-    const align = contentString(source.node).indexOf(copyText)
-    if (align === -1) continue
-
-    return extendComments(
-      doc,
-      comments,
-      sourceUid,
-      targetUid,
-      align,
-      align + copyText.length,
-      $from.parentOffset, // one latch, one paste — the first inline step is it
-    )
+    return {
+      start:
+        openStart > 0 && content.firstChild
+          ? { pos: mapping.map(step.from, 1), text: contentString(content.firstChild), atEnd: false }
+          : null,
+      end:
+        openEnd > 0 && content.childCount > 1 && content.lastChild
+          ? {
+              pos: mapping.map(step.from + step.slice.size, -1),
+              text: contentString(content.lastChild),
+              atEnd: true,
+            }
+          : null,
+    }
   }
-  return extended
+  return none
+}
+
+function extendEntriesForMergedPaste(
+  doc: PMNode,
+  comments: Map<string, SegmentEntry[]>,
+  sourceUid: string,
+  landing: { targetUid: string; text: string; offset: number },
+): Set<string> {
+  const source = nodeIdIndex(doc).byId.get(sourceUid)
+  // The source is gone — that paste was a move, and a move extends nothing.
+  if (!source || landing.targetUid === sourceUid) return new Set()
+  const align = contentString(source.node).indexOf(landing.text)
+  if (align === -1) return new Set()
+  return extendComments(
+    doc,
+    comments,
+    sourceUid,
+    landing.targetUid,
+    align,
+    align + landing.text.length,
+    landing.offset,
+  )
+}
+
+/* ------------------------------------------------------------------------- *
+ * CUT-CARRY — the third half of "the comment follows the text" (plan §6,
+ * decision 5: "cut = move"). Cutting a WHOLE BLOCK is already free: its uid
+ * leaves the document and reappears on paste, and the revival trigger
+ * restores the highlight with zero traffic. Cutting TEXT is the gap this
+ * closes — the node survives, so no uid ever moves; the range simply
+ * collapses and the comment orphans. Pasting it back cannot go through the
+ * copy halves either: they extend from LIVE segments, and there is nothing
+ * live left.
+ *
+ * So the cut transaction (ProseMirror stamps `uiEvent: 'cut'`) records what
+ * it took: the text, plus every comment range inside it as an offset and
+ * length in that text's frame. The next paste whose content CONTAINS it
+ * re-anchors those ranges onto wherever it landed. Session-scoped and
+ * text-gated by construction: nothing revives unless the very characters
+ * that were cut come back.
+ * ------------------------------------------------------------------------- */
+
+interface CutCarry {
+  /** One entry per TEXTBLOCK the cut touched (a two-paragraph cut has two),
+   *  each with the exact text taken from it (leaf-faithful, so chips count 1)
+   *  and the comment ranges inside that text. The paste matches whichever
+   *  block's text it brought back. */
+  blocks: Array<{
+    text: string
+    ranges: Array<{ id: string; from: number; to: number }>
+  }>
+}
+
+/**
+ * What a cut took from the commented ranges — computed on the OLD document
+ * (the transaction's mapping has not been applied to these positions yet).
+ * Single-textblock cuts only: inside one block, position arithmetic IS
+ * character arithmetic, while a multi-block cut would have to account for the
+ * boundary tokens `textBetween` skips. Whole-block cuts do not need this
+ * anyway — the uid revival already restores them.
+ */
+function recordCutCarry(oldState: EditorState, prev: CommentSegmentsState): CutCarry | null {
+  const { from, to } = oldState.selection
+  if (from >= to) return null
+
+  const blocks: CutCarry['blocks'] = []
+  oldState.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true // descend — wrappers take nothing
+    const base = pos + 1
+    const start = Math.max(from, base)
+    const end = Math.min(to, base + node.content.size)
+    if (start >= end) return false
+    const text = oldState.doc.textBetween(start, end, undefined, LEAF_PLACEHOLDER)
+    if (text.length === 0) return false
+
+    const ranges: CutCarry['blocks'][number]['ranges'] = []
+    for (const [id, entries] of prev.comments) {
+      for (const entry of entries) {
+        if (!entry.live) continue
+        const rangeStart = Math.max(entry.live.from, start)
+        const rangeEnd = Math.min(entry.live.to, end)
+        if (rangeStart >= rangeEnd) continue
+        ranges.push({ id, from: rangeStart - start, to: rangeEnd - start })
+      }
+    }
+    // Tombstoned comments cannot contribute: they have no live range to take.
+    if (ranges.length > 0) blocks.push({ text, ranges })
+    return false
+  })
+  return blocks.length > 0 ? { blocks } : null
+}
+
+/**
+ * Re-anchor a cut's commented ranges onto the paste that brought the text
+ * back. Scans every TEXTBLOCK the paste touched — merged edges AND
+ * materialized blocks alike — for a block of the cut, matched by its exact
+ * text. That breadth is what makes the four shapes of a paste one case:
+ * whether the content landed inside an existing block or as a node of its
+ * own, the evidence is the same characters coming back.
+ *
+ * The carry survives repeated pastes (pasting a cut buffer twice duplicates
+ * it, exactly like a copy), a tombstoned comment is resurrected here (its
+ * text demonstrably returned — the same evidence every revival demands), and
+ * a range already anchored at that exact spot is never added twice.
+ */
+function applyCutCarry(
+  tr: Transaction,
+  oldState: EditorState,
+  doc: PMNode,
+  comments: Map<string, SegmentEntry[]>,
+  dropped: Map<string, SegmentEntry[]>,
+  onResurrect: (id: string) => void,
+  carry: CutCarry,
+): Set<string> {
+  const carried = new Set<string>()
+  // The entries the cut killed are KEPT, flagged `moved`: they are the undo
+  // seed. Dropping them (they are dormant, and dormant never travels)
+  // silently broke undo — reverting cut+paste left the original text with no
+  // anchor to revive from.
+  const supersede = (entries: SegmentEntry[]) =>
+    entries.map((candidate) => (candidate.live ? candidate : { ...candidate, moved: true }))
+
+  const changes = getChangedRanges(combineTransactionSteps(oldState.doc, [tr]))
+  for (const { newRange } of changes) {
+    for (const { node } of findChildrenInRange(doc, newRange, (candidate) =>
+      candidate.isTextblock,
+    )) {
+      const uid = node.attrs[NODE_ID_ATTRIBUTE] as unknown
+      if (typeof uid !== 'string' || uid === '') continue
+      const text = contentString(node)
+      for (const block of carry.blocks) {
+        const align = text.indexOf(block.text)
+        if (align === -1) continue
+        for (const range of block.ranges) {
+          const stored: CommentNodeSegment = {
+            id: uid,
+            from: align + range.from,
+            to: align + range.to,
+          }
+          const live = resolveSegment(doc, stored)
+          if (!live) continue
+          const existing = comments.get(range.id)
+          const tombstoned = dropped.get(range.id)
+          const alreadyThere = (existing ?? tombstoned ?? []).some(
+            (candidate) =>
+              candidate.live &&
+              candidate.stored.id === stored.id &&
+              candidate.stored.from === stored.from &&
+              candidate.stored.to === stored.to,
+          )
+          if (alreadyThere) continue
+          const entry: SegmentEntry = { stored, live, moved: true }
+          if (existing) {
+            comments.set(range.id, [...supersede(existing), entry])
+          } else if (tombstoned) {
+            comments.set(range.id, [...supersede(tombstoned), entry])
+            onResurrect(range.id)
+          } else {
+            continue
+          }
+          carried.add(range.id)
+        }
+      }
+    }
+  }
+  return carried
 }
 
 /* ------------------------------------------------------------------------- *
  * The anchor reporter — the WRITE side of the anchor model
  * ------------------------------------------------------------------------- */
-
-/** Trailing debounce per comment between "live geometry changed" and the
- *  report leaving for the sink — long enough to swallow a typing burst (and
- *  an undo inside the window), short enough that the consumer's save pump
- *  usually finds the report already queued. Exported for tests. */
-export const ANCHOR_REPORT_DEBOUNCE_MS = 800
 
 /**
  * The canonical anchor payload of a comment's CURRENT entries — the one
@@ -434,64 +660,66 @@ function payloadsEqual(a: CommentAnchorPayload, b: CommentAnchorPayload): boolea
   })
 }
 
-/** The seams {@link applySegments} feeds the reporter through — state changes
- *  are detected where they happen (apply), but TIMING stays out of apply: the
- *  plugin view's update()/destroy() own the debounce and delivery. */
+/**
+ * The DIRTY LEDGER behind the atomic save envelope (rodada 6) — no timers, no
+ * sink, no queue. `applySegments` marks ids whose live geometry changed;
+ * `sweep` (plugin view, once per dispatch) settles the picture against the
+ * confirmed baselines (an edit undone within the cycle silences itself, an
+ * all-dormant anchor is never written); `collect` derives the CURRENT
+ * canonical payloads for the envelope without clearing anything; `confirm`
+ * lands the envelope's payloads as the persisted truth — dirt that arrived
+ * after the collect stays dirty for the next envelope. The consumer's save
+ * debounce is the only cadence.
+ */
 interface AnchorReporter {
   /** A comment's live geometry changed: mapped, coalesced, collapsed, revived. */
   markDirty(id: string): void
   /** An id was seeded from storage (membership) — the storage row is the last
    *  written truth, so it becomes the comparison baseline. NOT dirty. */
   noteSeeded(doc: PMNode, record: CommentAnchorRecord): void
-  /** `documentReplaced`: every comment re-seeded from storage. Pendings were
-   *  computed against the replaced doc — dropped, never delivered (the
-   *  consumer's pump flushes anchors BEFORE swapping documents). */
+  /** `documentReplaced`: every comment re-seeded from storage; the ledger
+   *  starts clean against the fresh baselines. */
   reset(doc: PMNode, records: CommentAnchorRecord[]): void
   /** One pass after the dispatch settled (appendTransaction fixpoint):
-   *  recompute every dirtied comment's payload SYNCHRONOUSLY, schedule/cancel
-   *  its trailing debounce. Only delivery is deferred. */
+   *  drop marked ids whose payload landed back on its baseline (or that have
+   *  nothing live to write), notify the ledger listener on changes. */
   sweep(state: EditorState): void
-  /** Deliver every pending (debounced) report into the sink NOW — the save
-   *  pump's pre-drain step (plan §7: payloads are "recomputed from live state
-   *  at flush time", and these were). */
-  flushPending(): void
-  /** View teardown: pending reports deliver synchronously — the sink is a
-   *  queue, not the network, so this loses nothing and blocks nothing. */
+  /** The envelope's anchors: CURRENT canonical payloads of every dirty id,
+   *  derived from `state` — call it in the same synchronous frame as the doc
+   *  snapshot. Read-only: nothing clears until {@link AnchorReporter.confirm}. */
+  collect(state: EditorState): CommentAnchorReport[]
+  /** The envelope carrying these payloads was confirmed saved: they become
+   *  the baselines; ids whose CURRENT payload already drifted again stay
+   *  dirty. */
+  confirm(state: EditorState, reports: CommentAnchorReport[]): void
+  /** Ids currently dirty — the `pendingSave` badge source. */
+  dirtyIds(): string[]
+  /** ONE tracked anchor's current canonical payload (null when nothing is
+   *  live) — what a queued create's envelope entry is derived from. */
+  payloadFor(state: EditorState, id: string): CommentAnchorPayload | null
   destroy(): void
 }
 
 function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
-  /** Ids whose live geometry changed since the last sweep — grows across the
-   *  applies of one dispatch (main transaction + appended), drained by sweep. */
+  /** Ids whose anchors drifted from the confirmed baselines. */
   const dirty = new Set<string>()
-  /** Per comment, the last payload ACTUALLY DELIVERED to the sink (seeded
-   *  from storage when the comment arrives). Lives outside the debounce: a
-   *  recompute that lands back on it cancels the pending report — that is the
-   *  undo-within-the-window silencer and the move-zero-traffic guarantee. */
+  /** Per comment, the last payload CONFIRMED saved (seeded from storage when
+   *  the comment arrives). A recompute landing back on it un-dirties the id —
+   *  the undo-within-a-cycle silencer and the move-zero-traffic guarantee. */
   const lastReported = new Map<string, CommentAnchorPayload>()
-  const pending = new Map<
-    string,
-    { payload: CommentAnchorPayload; timer: ReturnType<typeof setTimeout> }
-  >()
+  /** Ledger-change detector for the provider's badge re-derivation. */
+  let lastPicture = ''
 
-  const cancel = (id: string) => {
-    const entry = pending.get(id)
-    if (!entry) return
-    clearTimeout(entry.timer)
-    pending.delete(id)
+  const notifyLedger = () => {
+    const picture = [...dirty].sort().join('|')
+    if (picture === lastPicture) return
+    lastPicture = picture
+    storage.onAnchorLedgerChanged?.()
   }
 
-  const deliver = (id: string) => {
-    const entry = pending.get(id)
-    if (!entry) return
-    clearTimeout(entry.timer) // no-op when the timer itself delivers
-    pending.delete(id)
-    const sink = storage.onAnchorReport
-    // No sink → dropped silently; lastReported stays put, so the next dirty
-    // recompute still differs and re-schedules once a sink exists.
-    if (!sink) return
-    lastReported.set(id, entry.payload)
-    sink({ id, ...entry.payload })
+  const payloadOf = (state: EditorState, id: string): CommentAnchorPayload | null => {
+    const entries = commentSegmentsKey.getState(state)?.comments.get(id)
+    return entries ? derivePayload(state.doc, entries) : null
   }
 
   const baseline = (doc: PMNode, record: CommentAnchorRecord): CommentAnchorPayload => ({
@@ -505,67 +733,66 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
     },
     noteSeeded: (doc, record) => {
       lastReported.set(record.id, baseline(doc, record))
-      cancel(record.id)
+      dirty.delete(record.id)
     },
     reset: (doc, records) => {
       dirty.clear()
-      for (const id of [...pending.keys()]) cancel(id)
       lastReported.clear()
       for (const record of records) lastReported.set(record.id, baseline(doc, record))
-      // Queued writes describe the replaced document — the bridge drops them.
-      storage.onAnchorsReset?.()
+      notifyLedger()
     },
     sweep: (state) => {
-      // An id gone from storage forgets everything — pending report, timer,
-      // baseline (a re-added id re-seeds fresh, mirroring the membership
-      // reconcile's "starts fresh" rule).
+      // An id gone from storage forgets everything — dirt and baseline (a
+      // re-added id re-seeds fresh, mirroring the membership reconcile).
       const known = new Set(storage.comments.map((record) => record.id))
-      for (const id of [...pending.keys()]) if (!known.has(id)) cancel(id)
       for (const id of [...lastReported.keys()]) if (!known.has(id)) lastReported.delete(id)
-      if (dirty.size === 0) return
-      const segments = commentSegmentsKey.getState(state)
-      for (const id of dirty) {
-        if (!known.has(id)) continue
-        const entries = segments?.comments.get(id)
-        const payload = entries ? derivePayload(state.doc, entries) : null
-        // All-dormant, tombstoned or evicted: never reported — and a pending
-        // payload computed before the collapse is stale now, so it dies too.
+      for (const id of [...dirty]) {
+        if (!known.has(id)) {
+          dirty.delete(id)
+          continue
+        }
+        const payload = payloadOf(state, id)
+        // All-dormant, tombstoned or evicted: never written — not dirty.
         if (!payload) {
-          cancel(id)
+          dirty.delete(id)
           continue
         }
         const last = lastReported.get(id)
-        if (last && payloadsEqual(payload, last)) {
-          cancel(id)
-          continue
-        }
-        // Trailing debounce: a fresh payload restarts the comment's window.
-        cancel(id)
-        const timer = setTimeout(() => deliver(id), ANCHOR_REPORT_DEBOUNCE_MS)
-        pending.set(id, { payload, timer })
+        if (last && payloadsEqual(payload, last)) dirty.delete(id)
       }
-      dirty.clear()
+      notifyLedger()
     },
-    flushPending: () => {
-      for (const id of [...pending.keys()]) deliver(id)
+    collect: (state) => {
+      const reports: CommentAnchorReport[] = []
+      for (const id of [...dirty]) {
+        const payload = payloadOf(state, id)
+        if (payload) reports.push({ id, ...payload })
+      }
+      return reports
     },
+    confirm: (state, reports) => {
+      for (const report of reports) {
+        const saved: CommentAnchorPayload = { nodes: report.nodes, quote: report.quote }
+        lastReported.set(report.id, saved)
+        const current = payloadOf(state, report.id)
+        if (!current) continue // all-dormant: never written (orphan rule)
+        // BOTH directions against the NEW baseline — what the envelope just
+        // persisted. Equal: clean. Different: dirty, whichever way it drifted.
+        // The delete-only version silently lost the UNDO case: an edit that
+        // reverted to the OLD baseline while the envelope flew un-dirtied
+        // itself in the sweep, and the persisted doc kept an anchor no
+        // further envelope would ever correct.
+        if (payloadsEqual(current, saved)) dirty.delete(report.id)
+        else dirty.add(report.id)
+      }
+      notifyLedger()
+    },
+    dirtyIds: () => [...dirty],
+    payloadFor: (state, id) => payloadOf(state, id),
     destroy: () => {
       dirty.clear()
-      for (const id of [...pending.keys()]) deliver(id)
     },
   }
-}
-
-/**
- * The reporter's derivation, on demand — what a manual RETRY must send: the
- * canonical `nodes[]` + `quote` for `id` as of the CURRENT doc, never a
- * stored or previously-failed payload. Null when the id is unknown to the
- * plugin or nothing is live (an all-dormant anchor is never written).
- */
-export function deriveAnchorPayload(editor: Editor, id: string): CommentAnchorPayload | null {
-  const entries = commentSegmentsKey.getState(editor.state)?.comments.get(id)
-  if (!entries) return null
-  return derivePayload(editor.state.doc, entries)
 }
 
 /** Sum of live lengths — the "innermost" measure for anchor comments: the
@@ -694,8 +921,8 @@ function buildDecorations(
  *    decorations only when something changed (doc, membership, active) —
  *    otherwise the DecorationSet instance is kept as-is.
  *
- * Along the way the pass FEEDS THE REPORTER (state changes are detected here;
- * timing lives in the plugin view): every id whose live geometry changed —
+ * Along the way the pass FEEDS THE LEDGER (state changes are detected here;
+ * the envelope derives payloads on demand): every id whose live geometry changed —
  * mapped, coalesced, collapsed, revived — is marked dirty, while
  * membership-only changes are seeded as baselines instead (a comment arriving
  * from storage IS the stored truth — reporting it back would be an echo).
@@ -706,7 +933,17 @@ function applySegments(
   oldState: EditorState,
   storage: CommentsStorage,
   reporter: AnchorReporter,
-  consumePastedSourceUid: () => string | null,
+  consumePastedEdgeUids: () => PastedEdgeUids | null,
+  clipboard: {
+    noteCut: (carry: CutCarry | null) => void
+    carry: () => CutCarry | null
+    /** A paste happened while a cut buffer was live: try to re-anchor it on
+     *  the next few applies too (blocks born now get their uid later). */
+    openCarryWindow: () => void
+    consumeCarryWindow: () => boolean
+    notePending: (landings: PendingLanding[]) => void
+    takePending: () => PendingLanding[]
+  },
 ): CommentSegmentsState {
   const doc = tr.doc
 
@@ -747,9 +984,17 @@ function applySegments(
     const mapped = entries.map((entry): SegmentEntry => {
       if (!entry.live) return entry
       hadLive = true
-      const from = tr.mapping.map(entry.live.from, 1)
-      const to = tr.mapping.map(entry.live.to, -1)
-      if (from >= to) {
+      const fromResult = tr.mapping.mapResult(entry.live.from, 1)
+      const toResult = tr.mapping.mapResult(entry.live.to, -1)
+      const from = fromResult.pos
+      const to = toResult.pos
+      // WIPED: everything the range covered was deleted — a paste (or typing)
+      // OVER the commented text. The endpoints survive as boundaries, so the
+      // biased map alone would let the range swallow whatever replaced it and
+      // the comment would "cover" text nobody commented. The commented text
+      // is gone: orphan it, exactly like a plain delete.
+      const wiped = fromResult.deletedAfter && toResult.deletedBefore
+      if (wiped || from >= to) {
         mutated = true
         // Collapse-time snapshot: refresh `stored` from the PRE-collapse live
         // geometry (the seed may predate edits the reporter already shipped)
@@ -759,6 +1004,7 @@ function applySegments(
         const [first] = segmentsFromRange(oldState.doc, entry.live.from, entry.live.to)
         if (!first) return { stored: entry.stored, live: null }
         return {
+          ...entry,
           stored: first,
           live: null,
           dormantText: textForSegments(oldState.doc, [first]),
@@ -780,7 +1026,7 @@ function applySegments(
       }
       mutated = true
       hasLive = true
-      return { stored: entry.stored, live: { from, to } }
+      return { ...entry, live: { from, to } }
     })
     if (hadLive && !hasLive) collapsedNow.add(id)
     if (mutated) {
@@ -833,7 +1079,7 @@ function applySegments(
           return entry
         }
         mutated = true
-        return { stored: entry.stored, live }
+        return { stored: entry.stored, live } // revived: no longer superseded
       })
       if (mutated) {
         changed = true
@@ -881,6 +1127,52 @@ function applySegments(
     }
   }
 
+  // -- 3a½. remap revival: the copy of a CUT block ---------------------------
+  // Cutting whole blocks usually frees their uids, and the paste restores
+  // them (revival trigger i). But a cut that merges two partially-selected
+  // blocks leaves an EMPTY SHELL still holding the first uid, so the pasted
+  // copy collides and is re-minted — the uid never "reappeared", and without
+  // this the comment stays orphaned on a paste that visibly brought its text
+  // back. Same truth gate as every revival: the snapshot text must match.
+  const remapMeta = tr.getMeta(UID_REMAPPED_META) as UidRemapMeta | undefined
+  if (remapMeta && remapMeta.size > 0) {
+    const reviveOnto = (entries: SegmentEntry[]): SegmentEntry[] | null => {
+      let revived = false
+      const next = entries.map((entry): SegmentEntry => {
+        if (entry.live || entry.dormantText === undefined) return entry
+        for (const [newUid, sourceUid] of remapMeta) {
+          if (entry.stored.id !== sourceUid) continue
+          const stored: CommentNodeSegment = { ...entry.stored, id: newUid }
+          const live = resolveSegment(doc, stored)
+          if (!live) continue
+          if (doc.textBetween(live.from, live.to, undefined, LEAF_PLACEHOLDER) !== entry.dormantText) {
+            continue
+          }
+          revived = true
+          return { stored, live }
+        }
+        return entry
+      })
+      return revived ? next : null
+    }
+    for (const [id, entries] of comments) {
+      const revived = reviveOnto(entries)
+      if (!revived) continue
+      comments.set(id, revived)
+      changed = true
+      touched.add(id)
+    }
+    for (const [id, snapshot] of dropped) {
+      if (!storageById.has(id)) continue
+      const revived = reviveOnto(snapshot)
+      if (!revived || !revived.some((entry) => entry.live)) continue
+      comments.set(id, normalizeEntries(revived))
+      mutableDropped().delete(id)
+      changed = true
+      touched.add(id)
+    }
+  }
+
   // -- 3b. copy-extend, remap half ------------------------------------------
   // The meta rides the uid kernel's APPENDED transaction (attribute-only
   // steps), so the live ranges mapped above are already valid in its doc.
@@ -892,20 +1184,98 @@ function applySegments(
     }
   }
 
-  // -- 3b½. copy-extend, merge half -----------------------------------------
-  // Open slices merged at a caret never reach the remap half (no node, no
-  // collision). Identity rides the transformPasted latch, consumed — and
-  // thereby cleared — on the FIRST doc change after it was set: only the
-  // paste/drop dispatch immediately following transformPasted may use it, and
-  // any other edit landing first proves that paste never dispatched.
-  const pastedSourceUid = tr.docChanged ? consumePastedSourceUid() : null
-  const uiEvent = tr.getMeta('uiEvent') as unknown
-  if (pastedSourceUid && (uiEvent === 'paste' || uiEvent === 'drop')) {
-    for (const id of extendEntriesForMergedPaste(tr, doc, comments, pastedSourceUid)) {
+  // -- 3b⅗. the cut buffer, retried while the kernel stamps ------------------
+  const carry = clipboard.carry()
+  if (carry && tr.docChanged && clipboard.consumeCarryWindow()) {
+    const carried = applyCutCarry(tr, oldState, doc, comments, dropped, (id) => {
+      mutableDropped().delete(id)
+    }, carry)
+    for (const id of carried) {
       changed = true
       touched.add(id)
     }
   }
+
+  // -- 3b⅔. the deferred edge (the kernel stamps it a transaction later) ----
+  const stillPending: PendingLanding[] = []
+  for (const spot of clipboard.takePending()) {
+    // Positions ride the mapping, so an intervening doc change (the trailing
+    // paragraph the kernel appends) cannot shear them.
+    const moved: PendingLanding = {
+      ...spot,
+      pos: tr.mapping.map(spot.pos, spot.atEnd ? -1 : 1),
+      tries: spot.tries + 1,
+    }
+    const landing = landingAt(doc, moved)
+    if (landing && landing.targetUid !== moved.sourceUid) {
+      for (const id of extendEntriesForMergedPaste(doc, comments, moved.sourceUid, landing)) {
+        changed = true
+        touched.add(id)
+      }
+      continue
+    }
+    if (moved.tries < 4) stillPending.push(moved)
+  }
+  if (stillPending.length > 0) clipboard.notePending(stillPending)
+
+  // -- 3b½. merged pastes: copy-extend + cut-carry ---------------------------
+  // Open slices merged at a caret never reach the remap half (no node, no
+  // collision). Identity for the COPY case rides the transformPasted latch,
+  // consumed — and thereby cleared — on the FIRST doc change after it was
+  // set: only the paste/drop dispatch immediately following transformPasted
+  // may use it, and any other edit landing first proves that paste never
+  // dispatched. The CUT case needs no latch: the buffer recorded at cut time
+  // is matched by TEXT.
+  const pastedEdges = tr.docChanged ? consumePastedEdgeUids() : null
+  const uiEvent = tr.getMeta('uiEvent') as unknown
+  if (uiEvent === 'paste' || uiEvent === 'drop') {
+    const spots = tr.docChanged ? mergedPasteSpots(tr) : { start: null, end: null }
+    // Both open edges of the slice, each with its own source: a multi-block
+    // copy merges its FIRST child into the caret's block and its LAST into
+    // the tail's — the closed blocks between them go through the remap half.
+    const pending: PendingLanding[] = []
+    for (const edge of ['start', 'end'] as const) {
+      const spot = spots[edge]
+      const sourceUid = pastedEdges?.[edge] ?? null
+      if (!spot || !sourceUid) continue
+      const landing = landingAt(doc, spot)
+      // DEFER when the landing block was born in THIS dispatch: it has either
+      // no uid yet, or still the SOURCE's (a split copies the attrs over).
+      // The NodeIds kernel stamps it in an APPENDED, attribute-only
+      // transaction, so `pos` still means the same thing on the retry.
+      if (!landing || landing.targetUid === sourceUid) {
+        pending.push({ sourceUid, tries: 0, ...spot })
+        continue
+      }
+      for (const id of extendEntriesForMergedPaste(doc, comments, sourceUid, landing)) {
+        changed = true
+        touched.add(id)
+      }
+    }
+    if (pending.length > 0) clipboard.notePending(pending)
+    // The cut buffer is matched by TEXT across every block the paste touched
+    // — merged edges and materialized nodes alike. Blocks that ALREADY exist
+    // (a merged edge) re-anchor right here; a block born in THIS dispatch has
+    // no uid until the kernel stamps it, so the window below repeats the
+    // attempt over the next few applies of the appendTransaction fixpoint.
+    const pasteCarry = tr.docChanged ? clipboard.carry() : null
+    if (pasteCarry) {
+      const carried = applyCutCarry(tr, oldState, doc, comments, dropped, (id) => {
+        mutableDropped().delete(id)
+      }, pasteCarry)
+      for (const id of carried) {
+        changed = true
+        touched.add(id)
+      }
+      clipboard.openCarryWindow()
+    }
+  }
+
+  // -- 3b¾. the cut buffer ---------------------------------------------------
+  // Recorded from the OLD state: what this cut took out of commented ranges,
+  // so the paste that brings the text back can re-anchor it (plan §6's
+  // "cut = move" for TEXT — whole blocks ride uid revival instead).
+  if (uiEvent === 'cut' && tr.docChanged) clipboard.noteCut(recordCutCarry(oldState, prev))
 
   // -- 3c. stored-uid death → dirty (see the docstring) ---------------------
   // Re-checked on every doc change while the stored id stays dead (storage
@@ -973,7 +1343,11 @@ function applySegments(
 export type CommentAnchorState = 'anchored' | 'partial' | 'orphaned'
 
 export function getCommentAnchorState(editor: Editor, id: string): CommentAnchorState {
-  const entries = commentSegmentsKey.getState(editor.state)?.comments.get(id)
+  const all = commentSegmentsKey.getState(editor.state)?.comments.get(id)
+  // The DORMANT end of a move is not a piece the comment lost (the text is
+  // alive at the other end) — counting it would badge every cut+paste, and
+  // every undo of one, as "partially detached".
+  const entries = all?.filter((entry) => !(entry.live === null && entry.moved))
   if (!entries || entries.length === 0) return 'orphaned'
   const live = entries.filter((entry) => entry.live !== null).length
   if (live === 0) return 'orphaned'
@@ -1014,22 +1388,57 @@ const CommentsKernel = Extension.create({
       activeId: null,
       onCommentClick: null,
       comments: [],
-      onAnchorReport: null,
-      flushPendingReports: null,
-      onAnchorsReset: null,
+      collectDirtyAnchors: null,
+      confirmAnchorsSaved: null,
+      anchorPayloadFor: null,
+      dirtyAnchorIds: null,
+      onAnchorLedgerChanged: null,
     }
   },
 
   addProseMirrorPlugins() {
     const storage = this.storage as CommentsStorage
-    // One reporter per editor, shared between the segments plugin's apply
-    // (which detects changes) and its view (which owns the debounce timers).
+    // One ledger per editor, shared between the segments plugin's apply
+    // (which marks changes) and its view (which sweeps and hosts the
+    // envelope seams).
     const reporter = createAnchorReporter(storage)
     // The merge half of copy-extend needs the pasted fragment's SOURCE uid,
     // visible only on the pre-fit clipboard slice — transformPasted latches
     // it, the next paste/drop transaction consumes it. Overwritten on every
     // paste (foreign content latches null), so nothing stale survives.
-    let pastedSourceUid: string | null = null
+    let pastedEdges: PastedEdgeUids | null = null
+    // What the last cut took out of commented ranges, waiting for the paste
+    // that brings it back (see CutCarry). A new cut replaces it; it survives
+    // repeated pastes, which duplicate the text exactly like a copy would.
+    let cutCarry: CutCarry | null = null
+    // Edges whose landing block had no uid yet — consumed by the very next
+    // apply (the kernel's attribute-only stamping transaction).
+    let pendingLandings: PendingLanding[] = []
+    // Applies still allowed to re-attempt the carry after a paste.
+    let carryWindow = 0
+    const clipboard = {
+      noteCut: (carry: CutCarry | null) => {
+        cutCarry = carry
+        carryWindow = 0
+      },
+      carry: () => cutCarry,
+      openCarryWindow: () => {
+        carryWindow = 4
+      },
+      consumeCarryWindow: () => {
+        if (carryWindow <= 0) return false
+        carryWindow -= 1
+        return true
+      },
+      notePending: (landings: PendingLanding[]) => {
+        pendingLandings = landings
+      },
+      takePending: () => {
+        const taken = pendingLandings
+        pendingLandings = []
+        return taken
+      },
+    }
     return [
       new Plugin({
         key: new PluginKey('commentsKernel'),
@@ -1089,31 +1498,45 @@ const CommentsKernel = Extension.create({
             activeId: null,
           }),
           apply: (tr, value, previousState) =>
-            applySegments(tr, value, previousState, storage, reporter, () => {
-              const uid = pastedSourceUid
-              pastedSourceUid = null
-              return uid
-            }),
+            applySegments(
+              tr,
+              value,
+              previousState,
+              storage,
+              reporter,
+              () => {
+                const edges = pastedEdges
+                pastedEdges = null
+                return edges
+              },
+              clipboard,
+            ),
         },
         props: {
           decorations: (state) => commentSegmentsKey.getState(state)?.decorations ?? null,
           transformPasted: (slice) => {
-            pastedSourceUid = pastedSourceUidOf(slice)
+            pastedEdges = pastedEdgeUids(slice)
             return slice
           },
         },
-        // The reporter's clock: update() runs once per dispatch, AFTER the
-        // appendTransaction fixpoint — payloads are computed synchronously
-        // there (never from a stale doc), only delivery is debounced. destroy
-        // flushes what is pending straight into the sink.
-        view: () => {
-          // The save pump's pre-drain hook (see CommentsStorage) — lives with
-          // the view because the reporter's timers do.
-          storage.flushPendingReports = () => reporter.flushPending()
+        // The ledger's clock: update() runs once per dispatch, AFTER the
+        // appendTransaction fixpoint, and only settles WHICH ids are dirty.
+        // Payloads are derived on demand by `collect`, inside the caller's
+        // synchronous frame — nothing is ever held for later delivery.
+        view: (view) => {
+          // The envelope seams (see CommentsStorage) — live with the view
+          // because they read the CURRENT editor state.
+          storage.collectDirtyAnchors = () => reporter.collect(view.state)
+          storage.confirmAnchorsSaved = (reports) => reporter.confirm(view.state, reports)
+          storage.dirtyAnchorIds = () => reporter.dirtyIds()
+          storage.anchorPayloadFor = (id) => reporter.payloadFor(view.state, id)
           return {
-            update: (view) => reporter.sweep(view.state),
+            update: (current) => reporter.sweep(current.state),
             destroy: () => {
-              storage.flushPendingReports = null
+              storage.collectDirtyAnchors = null
+              storage.confirmAnchorsSaved = null
+              storage.dirtyAnchorIds = null
+              storage.anchorPayloadFor = null
               reporter.destroy()
             },
           }

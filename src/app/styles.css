@@ -46,6 +46,30 @@ body {
   white-space: nowrap;
 }
 
+/* The autosave banners, above the canvas (full width, never inside the
+   editor's own flex chain). Amber for "retrying", red for the terminal
+   version conflict. */
+.app__banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.app__banner--failed {
+  color: #7a4f01;
+  background: #fff4e5;
+  border-bottom: 1px solid #ffd699;
+}
+
+.app__banner--conflict {
+  color: #8c1d18;
+  background: #fceeec;
+  border-bottom: 1px solid #f2b8b5;
+}
+
 .app__canvas {
   flex: 1;
   /* No padding: the editor brings its own header bar (flush at the top)

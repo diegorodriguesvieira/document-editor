@@ -6,8 +6,15 @@ import type { Transaction } from '@tiptap/pm/state'
 import { POPUP_CLASS, useFeatureState } from '../../editor'
 import type { Editor } from '../../editor'
 import { icons } from '../icons'
-import { deriveAnchorPayload, getCommentsStorage, type CommentAnchorRecord } from './comments'
-import { useComments } from './commentsProvider'
+import { getCommentsStorage, type CommentAnchorRecord } from './comments'
+import {
+  useComments,
+  type CommentAnchorBridge,
+  type CommentSaveCreate,
+} from './commentsProvider'
+
+/** Stable empty list — a fresh literal would re-run the records memo. */
+const EMPTY_PENDING_CREATES: readonly CommentSaveCreate[] = []
 
 /** 6px below the selection — the spec'd balloon spot (Floating UI options). */
 const BALLOON_OPTIONS = { placement: 'bottom', offset: 6 } as const
@@ -49,10 +56,13 @@ const appendToBody = () => document.body
  * 4. Lands the OPEN `nodes[]`-carrying rows in the kernel storage (the
  *    segments plugin's population — resolved/archived/soft-deleted rows shed
  *    their highlight by simply not landing; a backend comment nothing
- *    anchors stays visible as an ORPHANED card in the panel), points the
- *    reporter's sink at the provider's sync queue, mirrors
- *    `editor.isEditable` into `queueCreates`, and registers the live
- *    fresh-payload source `retryAnchor` reads.
+ *    anchors stays visible as an ORPHANED card in the panel) TOGETHER with
+ *    the comments queued for the next save (under their `tempId`, so their
+ *    range maps with every edit), registers the envelope bridge
+ *    (`registerAnchorBridge`: the doc snapshot and the collect/confirm seams,
+ *    all read from the LIVE editor state), forwards the ledger's changes to
+ *    the badge derivation, and mirrors `editor.isEditable` into
+ *    `queueCreates`.
  *
  * Nothing here ever writes to the document — highlights are decorations over
  * external anchors, so review mode is zero-write by construction.
@@ -65,11 +75,10 @@ export function useCommentsBridge(editor: Editor | null): void {
   const setActiveId = context?.setActiveId ?? null
   const setDraft = context?.setDraft ?? null
   const clearDraft = context?.clearDraft ?? null
-  const enqueueReport = context?.anchorSync?.enqueue ?? null
-  const clearAnchorQueue = context?.anchorSync?.clear ?? null
   const setQueueCreates = context?.setQueueCreates ?? null
-  const registerAnchorPayloadSource = context?.registerAnchorPayloadSource ?? null
-  const registerPendingReportsFlush = context?.registerPendingReportsFlush ?? null
+  const pendingCreates = context?.pendingCreates ?? EMPTY_PENDING_CREATES
+  const registerAnchorBridge = context?.registerAnchorBridge ?? null
+  const notifyAnchorLedgerChanged = context?.notifyAnchorLedgerChanged ?? null
 
   // Document clicks on a highlight activate the comment (panel card lights
   // up); clicks on plain text deactivate — the kernel's handleClick reports
@@ -119,13 +128,24 @@ export function useCommentsBridge(editor: Editor | null): void {
   // exclusion; rows without `nodes` have nothing to resolve (orphan cards).
   const anchorRecords = useMemo<CommentAnchorRecord[] | null>(() => {
     if (comments == null) return null
-    return comments
-      .filter(
-        (comment) =>
-          comment.status === 'OPEN' && !comment.isDeleted && (comment.nodes?.length ?? 0) > 0,
-      )
-      .map((comment) => ({ id: comment.id, nodes: comment.nodes ?? [], quote: comment.quote }))
-  }, [comments])
+    return [
+      ...comments
+        .filter(
+          (comment) =>
+            comment.status === 'OPEN' && !comment.isDeleted && (comment.nodes?.length ?? 0) > 0,
+        )
+        .map((comment) => ({ id: comment.id, nodes: comment.nodes ?? [], quote: comment.quote })),
+      // Comments submitted in EDIT mode but not yet saved ride the plugin
+      // under their tempId: their range maps with every edit, so the envelope
+      // carries live geometry instead of a submit-time freeze (and the new
+      // highlight shows immediately). They leave when the row arrives.
+      ...pendingCreates.map((create) => ({
+        id: create.tempId,
+        nodes: create.nodes,
+        quote: create.quote,
+      })),
+    ]
+  }, [comments, pendingCreates])
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || anchorRecords == null) return
@@ -137,53 +157,43 @@ export function useCommentsBridge(editor: Editor | null): void {
     editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
   }, [editor, anchorRecords])
 
-  // The reporter's sink: debounced anchor reports land in the provider's sync
-  // queue — NEVER the network (the consumer's save pump flushes the queue
-  // after its doc save confirms; that call order is the doc-first rule).
+  // The envelope bridge: the provider's collectSavePayload reads the doc,
+  // the dirty anchors and the baselines through these editor-side seams —
+  // all against the LIVE state, in one synchronous frame (the coherence law).
   useEffect(() => {
-    if (!editor || editor.isDestroyed || !enqueueReport) return
+    if (!editor || editor.isDestroyed || !registerAnchorBridge) return
+    const bridge: CommentAnchorBridge = {
+      getDoc: () => editor.getJSON(),
+      collect: () => getCommentsStorage(editor)?.collectDirtyAnchors?.() ?? [],
+      confirm: (reports) => getCommentsStorage(editor)?.confirmAnchorsSaved?.(reports),
+      dirtyIds: () => getCommentsStorage(editor)?.dirtyAnchorIds?.() ?? [],
+      payloadFor: (id) => getCommentsStorage(editor)?.anchorPayloadFor?.(id) ?? null,
+    }
+    registerAnchorBridge(bridge)
+    // Owner-checked: this hook runs in BOTH the layer and the panel, so a
+    // cleanup must not clear a registration the other one already replaced.
+    return () => registerAnchorBridge(null, bridge)
+  }, [editor, registerAnchorBridge])
+
+  // Badge reactivity: the segments plugin's ledger notifies here after every
+  // sweep/reset/confirm that changed the dirty picture.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !notifyAnchorLedgerChanged) return
     const storage = getCommentsStorage(editor)
     if (!storage) return
-    storage.onAnchorReport = enqueueReport
+    storage.onAnchorLedgerChanged = notifyAnchorLedgerChanged
     return () => {
-      storage.onAnchorReport = null
+      storage.onAnchorLedgerChanged = null
     }
-  }, [editor, enqueueReport])
+  }, [editor, notifyAnchorLedgerChanged])
 
-  // The save pump's pre-drain hook: `flushAnchors` delivers the reporter's
-  // debounced pendings through this registration before draining the queue.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || !registerPendingReportsFlush) return
-    registerPendingReportsFlush(() => getCommentsStorage(editor)?.flushPendingReports?.())
-    return () => registerPendingReportsFlush(null)
-  }, [editor, registerPendingReportsFlush])
-
-  // `documentReplaced` drops the queue — every queued anchor write describes
-  // the document that just left.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || !clearAnchorQueue) return
-    const storage = getCommentsStorage(editor)
-    if (!storage) return
-    storage.onAnchorsReset = clearAnchorQueue
-    return () => {
-      storage.onAnchorsReset = null
-    }
-  }, [editor, clearAnchorQueue])
-
-  // EDIT mode queues creates behind the doc save; review posts immediately.
+  // EDIT mode rides creates in the envelope; review posts immediately.
   // Live: setEditable emits a doc-less update, whose nudge re-runs selectors.
   const editable = useFeatureState(editor, (current) => current.isEditable)
   useEffect(() => {
     setQueueCreates?.(editable === true)
   }, [setQueueCreates, editable])
 
-  // retryAnchor's fresh-payload source: the plugin's CURRENT canonical
-  // derivation, read at retry time — a retry never resends what failed.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || !registerAnchorPayloadSource) return
-    registerAnchorPayloadSource((id) => deriveAnchorPayload(editor, id))
-    return () => registerAnchorPayloadSource(null)
-  }, [editor, registerAnchorPayloadSource])
 }
 
 /**

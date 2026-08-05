@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { renderEditor } from '../../test/editorHarness'
-import type { CommentAnchorPayload, CommentNodeSegment } from './commentAnchor'
+import type { CommentAnchorReport, CommentNodeSegment } from './commentAnchor'
 import { CommentsFeature } from './comments'
 import { CommentsPanel } from './commentsPanel'
 import {
@@ -13,6 +13,7 @@ import {
   STALE_CONTENT,
   useComments,
   type CommentDraft,
+  type CommentSavePayload,
   type CommentsAdapter,
   type CommentsContextValue,
   type CommentStatus,
@@ -1204,87 +1205,83 @@ describe('<CommentsPanel /> anchor sync states', () => {
     return context
   }
 
-  it('pendingSave → saving → synced: the card indicator follows the queue', async () => {
-    const created = anchoredEditor()
-    let releaseWrite!: (value: unknown) => void
-    const adapter = {
-      ...fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })]),
-      updateAnchor: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            releaseWrite = resolve
-          }),
-      ),
+  /** A stand-in for the editor-side bridge {@link CommentsLayer} registers:
+   *  the panel reads badges through whatever bridge the provider holds, so a
+   *  fake one drives the whole lifecycle without touching plugin state. */
+  function fakeBridge(dirty: () => string[], reports: CommentAnchorReport[]) {
+    return {
+      getDoc: () => ({ type: 'doc', content: [] }),
+      collect: () => reports,
+      confirm: vi.fn(),
+      payloadFor: () => null,
+      dirtyIds: dirty,
     }
+  }
+
+  it('pendingSave → saving → gone: the card indicator follows the envelope', async () => {
+    const created = anchoredEditor()
+    const adapter = fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })])
     const context = probeRig(adapter, created.editor)
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await within(panel).findByText('sync me')
 
-    // A report lands in the queue (exactly what the reporter's sink does).
+    // The ledger says c-1 drifted — the card badges as soon as it notifies
+    // (no network of its own: anchors only ever travel inside a save).
+    const report: CommentAnchorReport = { id: 'c-1', nodes: HELLO_NODES, quote: 'hello' }
+    let dirty = ['c-1']
+    const bridge = fakeBridge(() => dirty, [report])
     act(() => {
-      context.current!.anchorSync!.enqueue({ id: 'c-1', nodes: HELLO_NODES, quote: 'hello' })
+      context.current!.registerAnchorBridge(bridge)
+      context.current!.notifyAnchorLedgerChanged()
     })
-    expect(
-      await within(panel).findByRole('img', { name: 'Waiting for document save' }),
-    ).toBeInTheDocument()
-    expect(adapter.updateAnchor).not.toHaveBeenCalled() // queue, never network
+    const pending = await within(panel).findByRole('img', { name: 'Waiting for the next save' })
+    expect(pending.closest('.comments-panel__sync--pending')).not.toBeNull()
 
-    // The consumer's pump flushes (after its doc save): saving while in
-    // flight…
-    let flushed!: Promise<void>
+    // The consumer's pump collects the envelope: in flight while it travels…
+    let payload: CommentSavePayload | null = null
     act(() => {
-      flushed = context.current!.anchorSync!.flushAnchors()
+      payload = context.current!.anchorSync!.collectSavePayload()
     })
-    expect(await within(panel).findByRole('img', { name: 'Saving anchor…' })).toBeInTheDocument()
+    expect(payload!.anchors).toEqual([report])
+    const saving = await within(panel).findByRole('img', { name: 'Saving…' })
+    expect(saving.closest('.comments-panel__sync--saving')).not.toBeNull()
 
-    // …and synced (nothing rendered) once the write lands.
-    await act(async () => {
-      releaseWrite({})
-      await flushed
-    })
+    // …and nothing once the save is confirmed: the collected payloads land as
+    // the plugin's baselines, so the ledger goes clean.
+    dirty = []
+    act(() => context.current!.anchorSync!.confirmSaved(payload!.token))
+    expect(bridge.confirm).toHaveBeenCalledWith([report])
     await waitFor(() => expect(within(panel).queryByRole('img')).toBeNull())
   })
 
-  it('saveFailed renders the warning + Retry; Retry re-enqueues the FRESH plugin payload', async () => {
+  it('a failed envelope keeps the badge at pendingSave — no per-card failure, no Retry', async () => {
     const created = anchoredEditor()
-    const adapter = {
-      ...fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })]),
-      updateAnchor: vi
-        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockRejectedValueOnce(new Error('anchor endpoint down'))
-        .mockResolvedValue({}),
-    }
+    const adapter = fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })])
     const context = probeRig(adapter, created.editor)
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await within(panel).findByText('sync me')
 
+    const report: CommentAnchorReport = { id: 'c-1', nodes: HELLO_NODES, quote: 'hello' }
+    const bridge = fakeBridge(() => ['c-1'], [report])
     act(() => {
-      context.current!.anchorSync!.enqueue({ id: 'c-1', nodes: HELLO_NODES, quote: 'hello' })
+      context.current!.registerAnchorBridge(bridge)
+      context.current!.notifyAnchorLedgerChanged()
     })
-    // Both in-flush attempts fail (one automatic retry inside the flush).
-    await act(async () => {
-      await context.current!.anchorSync!.flushAnchors()
+    let payload: CommentSavePayload | null = null
+    act(() => {
+      payload = context.current!.anchorSync!.collectSavePayload()
     })
-    expect(adapter.updateAnchor).toHaveBeenCalledTimes(2)
-    expect(within(panel).getByRole('img', { name: 'Anchor save failed' })).toBeInTheDocument()
+    await within(panel).findByRole('img', { name: 'Saving…' })
 
-    // Retry: the panel wires the card's button to retryAnchor, which reads
-    // the FRESH derivation through the bridge-registered source (the plugin
-    // still resolves c-1 → hello) — back to pendingSave, awaiting a flush.
-    await userEvent.click(within(panel).getByRole('button', { name: 'Retry' }))
+    // The save failed: NOTHING was persisted (no confirm reaches the plugin),
+    // the card falls back to pendingSave and the consumer's autosave retries
+    // the whole envelope — there is no per-card recovery to offer.
+    act(() => context.current!.anchorSync!.discardSave(payload!.token))
     expect(
-      await within(panel).findByRole('img', { name: 'Waiting for document save' }),
+      await within(panel).findByRole('img', { name: 'Waiting for the next save' }),
     ).toBeInTheDocument()
-
-    await act(async () => {
-      await context.current!.anchorSync!.flushAnchors()
-    })
-    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
-      nodes: HELLO_NODES,
-      quote: 'hello',
-    })
-    await waitFor(() => expect(within(panel).queryByRole('img')).toBeNull())
+    expect(bridge.confirm).not.toHaveBeenCalled()
+    expect(within(panel).queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 })
 
