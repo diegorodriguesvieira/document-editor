@@ -25,12 +25,22 @@ export {
   MAX_CONDITIONAL_DEPTH,
 } from './custom/conditionalBlock'
 export type { Condition, ConditionId, ConditionLeaf, ConditionOperand } from './custom/conditionalBlock'
-// Review-mode comments: the decoration kernel (feature), the consumer-fed
-// provider (user + endpoint adapter), the "Add comment" balloon layer and the
-// panel for the consumer-owned right rail — all read-only-mode only.
-export { CommentsFeature } from './custom/comments'
-export { CommentsProvider, useComments } from './custom/commentsProvider'
+// Anchor-based comments: the decoration/segments kernel (feature), the
+// consumer-fed provider (user + endpoint adapter), the "Add comment" balloon
+// layer and the panel for the consumer-owned right rail. Anchors are external
+// `nodes[]` rows — nothing about a comment is ever written to the document.
+export { CommentsFeature, getCommentAnchorState, getCommentPosition } from './custom/comments'
+export {
+  AnchorFlushBinder,
+  CommentsProvider,
+  PARENT_DELETED,
+  STALE_CONTENT,
+  isParentDeletedError,
+  isStaleContentError,
+  useComments,
+} from './custom/commentsProvider'
 export type {
+  CommentAnchorSync,
   CommentDraft,
   CommentReply,
   CommentsAdapter,
@@ -38,14 +48,18 @@ export type {
   CommentUser,
   DocumentComment,
 } from './custom/commentsProvider'
+// The anchor write contract an adapter implements against: the
+// segment/payload shapes `add`/`updateAnchor` carry, and the per-comment sync
+// state the panel renders.
+export type { CommentAnchorPayload, CommentNodeSegment } from './custom/commentAnchor'
+export type { CommentSyncState } from './custom/commentSync'
+// The migration valve for documents saved by the RETIRED mark model: sheds
+// legacy `comment` marks from raw JSON before load (the mark is gone from the
+// schema, so an unstripped legacy doc throws instead of loading).
+export { stripCommentMarks } from './custom/commentAnchor'
 export { CommentsLayer, commentBalloonShouldShow, useCommentsBridge } from './custom/commentsLayer'
 export { CommentsPanel } from './custom/commentsPanel'
 export type { ActionsMenuItem } from './custom/commentsPanel'
-// The anchor toolkit a CUSTOM panel needs: applying the backend id over the
-// draft range (the `applyAnchor` callback of `addComment`) and deriving
-// positions/orphans from the doc.
-export { applyCommentAnchor, collectCommentAnchors } from './custom/commentAnchors'
-export type { CommentAnchor } from './custom/commentAnchors'
 export { DEFAULT_COMMENTS_LABELS } from './custom/commentsProvider'
 export type { CommentsLabels } from './custom/commentsProvider'
 export { HeaderFooterFeature } from './custom/headerFooter'

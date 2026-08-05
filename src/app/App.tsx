@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Button from '@mui/material/Button'
 import {
   BubbleToolbar,
@@ -7,8 +7,11 @@ import {
   useFeatureState,
   useZoom,
   type DocumentEditorRenderContext,
+  type DocumentJSON,
+  type EditorApi,
 } from '../editor'
 import {
+  AnchorFlushBinder,
   CommentsLayer,
   CommentsPanel,
   CommentsProvider,
@@ -17,7 +20,7 @@ import {
   type DocumentVariable,
 } from '../features'
 import { contractTemplate } from './contractTemplate'
-import { createFakeCommentsAdapter, MOCK_USER } from './commentsMock'
+import { createFakeCommentsApi, MOCK_USER } from './commentsMock'
 import { normalizeConditionals, RAW_CONDITIONALS } from './decisionConditionals'
 import { ZoomControls } from './ZoomControls'
 import { fullFeatures } from './presets'
@@ -55,7 +58,7 @@ function ModeToggle({
 
 // Fake comments backend (module-scope: one "database" per app load) — a real
 // consumer builds a CommentsAdapter over its HTTP client instead.
-const commentsAdapter = createFakeCommentsAdapter()
+const commentsApi = createFakeCommentsApi()
 
 export default function App() {
   // Zoom state + policy (clamp/step/rounding) come ready from the SDK hook;
@@ -66,6 +69,30 @@ export default function App() {
   // no remount, so undo history and scroll survive the toggle. The app only
   // hides its OWN mutating chrome (the insert actions); the SDK hides the rest.
   const [preview, setPreview] = useState(false)
+
+  // The comments doc-first pump reads flushAnchors through this ref (bound by
+  // AnchorFlushBinder inside the provider).
+  const flushAnchorsRef = useRef<(() => Promise<void>) | null>(null)
+  const bindFlushAnchors = useCallback((flush: (() => Promise<void>) | null) => {
+    flushAnchorsRef.current = flush
+  }, [])
+
+  // ONE save pump for both entry points: organic edits (onChange hands the
+  // serialized doc) and provider-requested cycles (a queued create, an anchor
+  // Retry — no doc change happened, so the doc is read off the live api).
+  const editorApiRef = useRef<EditorApi | null>(null)
+  const pumpSave = useCallback((doc?: DocumentJSON) => {
+    const json = doc ?? editorApiRef.current?.getJSON()
+    if (!json) return
+    void commentsApi
+      .saveTemplate(json)
+      .then(() => flushAnchorsRef.current?.())
+      .catch((failure) => {
+        // Doc save failed → anchors are NOT touched; the queue waits for the
+        // next successful save.
+        console.warn('[autosave] document save failed', failure)
+      })
+  }, [])
 
   // Fake API: @-variables and the EOR decision catalog arrive ~1.5s after
   // mount. Because they flow through context (not the `features` list), the
@@ -100,7 +127,8 @@ export default function App() {
           {/* Review comments: identity + endpoints come from the consumer.
               Context reaches every surface, including the body-portaled
               balloon and the right-rail panel. */}
-          <CommentsProvider user={MOCK_USER} adapter={commentsAdapter}>
+          <CommentsProvider user={MOCK_USER} adapter={commentsApi.adapter} onFlushNeeded={pumpSave}>
+          <AnchorFlushBinder bind={bindFlushAnchors} />
           {/* The full feature set, presented through the bubble + footer dock. */}
           <DocumentEditor
             features={fullFeatures}
@@ -121,11 +149,14 @@ export default function App() {
                 />
               </>
             )}
-            // `onChange` is debounced (~250ms after edits stop) — i.e. the exact
-            // moment an autosave would fire. Here we just log the generated JSON.
-            onChange={(doc) => {
-              console.log(`[autosave ${new Date().toLocaleTimeString()}] would persist now`)
-              console.log('document JSON:', doc)
+            // `onChange` is debounced (~250ms after edits stop) — the autosave
+            // moment, and the DOC-FIRST pump (plan §7): PUT the document, and
+            // only after that save RESOLVES flush the queued comment-anchor
+            // writes. That call order is the whole doc-first guarantee — no
+            // anchor write ever describes an unsaved document.
+            onChange={(doc) => pumpSave(doc)}
+            onReady={(api) => {
+              editorApiRef.current = api
             }}
             // Shown centered on screen while the doc is empty; the CTA inserts
             // a starter template (and the overlay vanishes — no longer empty).
@@ -148,7 +179,7 @@ export default function App() {
               </div>
             )}
             // The right rail is consumer-owned. The comments panel lives in
-            // BOTH modes (anchors are marks in the doc; it self-hides while
+            // BOTH modes (highlights are decorations; it self-hides while
             // empty) — only COMPOSING a comment is preview-only.
             renderRightPanel={(ctx) => (
               <div className="right-rail">

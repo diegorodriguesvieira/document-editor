@@ -199,9 +199,9 @@ describe('node ids in the editor', () => {
   })
 
   it('re-mints a duplicated id on setJSON — the first occurrence keeps it', () => {
-    // Entry injection owns this policy: without it, the extension re-mints
-    // BOTH copies on the setContent transaction, so every colliding id would
-    // churn on every load.
+    // Entry injection owns this policy: the duplicate is resolved before the
+    // setContent transaction, so a load never leans on the runtime collision
+    // rule — and never records a remap meta for what is just a dirty document.
     const { api } = renderEditor([])
     api.setJSON(duplicatedDoc())
     const ids = collectNodeIds(api.getJSON().doc)
@@ -211,8 +211,9 @@ describe('node ids in the editor', () => {
   })
 
   it('re-mints a duplicated id on a content-option load — the duplicate never enters the doc', () => {
-    // The extension's create-scan only fills nulls: without entry injection
-    // this duplicate would survive into the document (and the backend).
+    // The extension only watches transactions and a content-option mount
+    // dispatches none: without entry injection this duplicate would survive
+    // into the document (and the backend).
     const { api } = renderEditor([], { content: duplicatedDoc() })
     const ids = collectNodeIds(api.getJSON().doc)
     expect(ids[0]).toBe('dup')
@@ -225,7 +226,7 @@ describe('node ids in the editor', () => {
     // rawTableDoc ends in a table, so the load transaction makes
     // BodyTrailingNode append the trailing paragraph — a node that never
     // existed in the injected entry content. Its id can only come from the
-    // UniqueID appendTransaction rounds running to fixpoint after it.
+    // NodeIds appendTransaction rounds running to fixpoint after it.
     const { api } = renderEditor([TableFeature])
     api.setJSON(rawTableDoc())
     const doc = api.getJSON().doc
@@ -259,17 +260,16 @@ describe('node ids in the editor', () => {
     expect(ids).toContain(original)
   })
 
-  it('pasted content is re-minted — a stolen uid never duplicates', () => {
+  it('pasted copies of a live uid are re-minted — the original keeps it', () => {
     const { editor, api } = renderEditor([], { content: injectNodeIds(docWith('target')) })
     const [stolen] = collectNodeIds(api.getJSON().doc)
-    // The extension's transformPasted is gated on a REAL paste/drop event
-    // (an internal flag its handleDOMEvents.paste sets) — prime it first,
-    // then feed markup through PM's own paste pipeline.
+    // No event-flag priming: the extension has no DOM handlers — pasteHTML
+    // still exercises the real pipeline (parse keeps data-uid, then the
+    // appendTransaction collision rule re-mints whatever collides).
     editor.commands.setTextSelection(7)
     // jsdom has no ClipboardEvent constructor — hand pasteHTML a plain Event
     // so it doesn't try to build one itself.
     const pasteEvent = new Event('paste') as ClipboardEvent
-    editor.view.someProp('handleDOMEvents', (handlers) => handlers.paste?.(editor.view, pasteEvent))
     editor.view.pasteHTML(
       `<p data-uid="${String(stolen)}">one</p><p data-uid="${String(stolen)}">two</p>`,
       pasteEvent,
@@ -277,10 +277,13 @@ describe('node ids in the editor', () => {
     const text = editor.getText()
     expect(text).toContain('one') // the paste actually landed…
     expect(text).toContain('two')
-    const ids = collectNodeIds(api.getJSON().doc)
+    const doc = api.getJSON().doc
+    const ids = collectNodeIds(doc)
     expect(ids.length).toBeGreaterThanOrEqual(2)
+    // …and the SOURCE node still owns the uid; the colliding copies do not.
+    expect(doc.content?.[0]?.attrs?.[NODE_ID_ATTRIBUTE]).toBe(stolen)
     expect(ids.filter((id) => id === stolen)).toHaveLength(1)
-    for (const id of ids) expect(id).toMatch(UUID_V4) // …re-minted, never nulled
+    for (const id of ids) expect(id).toMatch(UUID_V4) // re-minted, never nulled
     expect(new Set(ids).size).toBe(ids.length)
   })
 

@@ -30,8 +30,9 @@ export interface CreatedEditor {
  * silently wiping the doc). ONE owner: `createEditor` and `useDocumentEditor`
  * both spread this, so the policy can never drift between them.
  * Content is uid-stamped on the way in (injectNodeIds), so mounting never
- * mutates the document — UniqueID's create-scan finds nothing missing, and
- * read-only mounts stay free of phantom updates.
+ * mutates the document — NodeIds has no create-scan and only watches
+ * transactions (a mount dispatches none), which keeps read-only mounts both
+ * id-complete and free of phantom updates.
  */
 export function baseEditorOptions(
   resolved: ResolvedFeatures,

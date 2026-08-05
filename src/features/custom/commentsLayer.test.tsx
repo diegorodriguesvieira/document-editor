@@ -1,10 +1,18 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// Two tests below switch to fake timers INLINE mid-test; a failure between
+// the switch and its inline restore would leak fake timers into every test
+// after it — this backstop keeps the suite hermetic.
+afterEach(() => {
+  vi.useRealTimers()
+})
+import type { JSONContent } from '@tiptap/core'
 import { docWith, renderEditor } from '../../test/editorHarness'
-import { HistoryFeature } from '../history'
-import { CommentsFeature, getCommentsStorage } from './comments'
-import { applyCommentAnchor } from './commentAnchors'
+import { ANCHOR_REPORT_DEBOUNCE_MS, CommentsFeature, getCommentsStorage } from './comments'
+import type { CommentAnchorPayload } from './commentAnchor'
+import { ANCHOR_RETRY_BACKOFF_MS } from './commentSync'
 import { CommentsLayer, commentBalloonShouldShow } from './commentsLayer'
 import {
   CommentsProvider,
@@ -36,8 +44,8 @@ const SAVED: DocumentComment = {
   text: 'tighten',
   author: ANA,
   createdAt: '2026-07-15T12:00:00Z',
-  // 'open' matters: only OPEN comments keep their mark through reconciliation.
-  status: 'open',
+  // 'OPEN' matters: only OPEN comments keep their mark through reconciliation.
+  status: 'OPEN',
   canEdit: true,
   canReply: true,
   canDelete: true,
@@ -62,6 +70,17 @@ const quietAdapter = () => ({
 })
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/* Fixtures with EXPLICIT uids, so `nodes[]` anchors are deterministic —
+ * injectNodeIds keeps unique explicit ids verbatim on the way in. */
+const paragraph = (uid: string, text: string): JSONContent => ({
+  type: 'paragraph',
+  attrs: { uid },
+  content: [{ type: 'text', text }],
+})
+const docOf = (...blocks: JSONContent[]): { doc: JSONContent } => ({
+  doc: { type: 'doc', content: blocks },
+})
 
 describe('commentBalloonShouldShow', () => {
   it('true only for a read-only TEXT selection with no draft in flight', () => {
@@ -139,54 +158,65 @@ describe('<CommentsLayer />', () => {
   })
 })
 
-describe('<CommentsLayer /> doc↔backend reconciliation', () => {
-  it('strips marks the backend does not know once the list lands — known ones stay', async () => {
-    // EDITABLE on purpose: reconciliation is not a review-mode-only job.
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    applyCommentAnchor(created.editor, 'c-ghost', { from: 7, to: 12 })
-
-    render(
-      <CommentsProvider adapter={quietAdapter()}>
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
-    )
-
-    await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-ghost"]')).toBeNull(),
-    )
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).not.toBeNull()
-  })
-
-  it('sheds the mark of a comment that turned RESOLVED — only open comments keep anchors', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    applyCommentAnchor(created.editor, 'c-2', { from: 7, to: 12 })
-    const adapter = {
-      ...quietAdapter(),
-      list: vi.fn(async () => [
-        { ...SAVED, id: 'c-1', status: 'resolved' as const },
-        { ...SAVED, id: 'c-2' },
-      ]),
+describe('<CommentsLayer /> list → highlight lifecycle', () => {
+  it('a comment that turns RESOLVED or SOFT-DELETED remotely sheds its highlight on refresh', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'beta')),
+    })
+    let rows: DocumentComment[] = [
+      { ...SAVED, id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] },
+      { ...SAVED, id: 'c-2', nodes: [{ id: 'p2', from: 0, to: 4 }] },
+    ]
+    const adapter = { ...quietAdapter(), list: vi.fn(async () => [...rows]) }
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
     }
-
     render(
       <CommentsProvider adapter={adapter}>
+        <Probe />
         <CommentsLayer editor={created.editor} />
       </CommentsProvider>,
     )
-
     await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).toBeNull(),
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id]')).toHaveLength(2),
     )
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-2"]')).not.toBeNull()
+
+    // Someone else resolved one and soft-deleted the other; this client only
+    // sees the refreshed list — the bridge stops handing both to the plugin.
+    rows = [
+      { ...rows[0], status: 'RESOLVED' },
+      { ...rows[1], isDeleted: true },
+    ]
+    await act(async () => {
+      await context.current!.refresh()
+    })
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id]')).toHaveLength(0),
+    )
   })
 
-  it('a FRESH anchor survives a lagging backend list (grace), then expires', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+  it('an optimistic full-row create paints its highlight BEFORE the refetch lands', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
     created.editor.setEditable(false)
-    // Read-replica lag: the list NEVER includes the just-created comment.
-    const adapter = { ...quietAdapter(), list: vi.fn(async () => [] as DocumentComment[]) }
+    const fullRow = (nodes: DocumentComment['nodes']): DocumentComment => ({
+      ...SAVED,
+      id: 'c-new',
+      text: 'fresh',
+      nodes,
+    })
+    const adapter = {
+      ...quietAdapter(),
+      list: vi
+        .fn<() => Promise<DocumentComment[]>>()
+        .mockResolvedValueOnce([])
+        // The post-add refetch hangs — the optimistic row must carry the UI.
+        .mockReturnValue(new Promise<DocumentComment[]>(() => {})),
+      add: vi.fn(async (input: { nodes?: DocumentComment['nodes'] }) => fullRow(input.nodes)),
+    }
     const context = { current: null as CommentsContextValue | null }
     function Probe() {
       context.current = useComments()
@@ -200,28 +230,19 @@ describe('<CommentsLayer /> doc↔backend reconciliation', () => {
     )
     await waitFor(() => expect(adapter.list).toHaveBeenCalled())
 
-    // The real add flow: draft → add returns the id → anchor applied.
+    // The composer flow: draft captured, payload recomputed at submit.
     act(() => context.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
-    await act(async () => {
-      await context.current!.addComment('fresh', (id) =>
-        applyCommentAnchor(created.editor, id, { from: 1, to: 6 }),
-      )
+    act(() => {
+      void context.current!.addComment('fresh', {
+        nodes: [{ id: 'p1', from: 0, to: 5 }],
+        quote: 'hello',
+      })
     })
 
-    // The post-add refetch came back WITHOUT c-new — the grace set must keep
-    // the fresh mark from being stripped as unknown.
-    await sleep(20)
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-new"]')).not.toBeNull()
-
-    // …but an id the backend never acknowledges expires after a few fetches.
-    await act(async () => {
-      await context.current!.refresh()
-    })
-    await act(async () => {
-      await context.current!.refresh()
-    })
     await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-new"]')).toBeNull(),
+      expect(
+        created.editor.view.dom.querySelector('[data-comment-id="c-new"]')?.textContent,
+      ).toBe('hello'),
     )
   })
 
@@ -259,142 +280,6 @@ describe('<CommentsLayer /> doc↔backend reconciliation', () => {
     await waitFor(() => expect(context.current!.draft).toBeNull())
   })
 
-  it('a failed MUTATION does not freeze reconciliation — only a failed fetch does', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    const adapter = {
-      ...quietAdapter(),
-      update: vi.fn(async () => {
-        throw new Error('PATCH exploded')
-      }),
-    }
-    const context = { current: null as CommentsContextValue | null }
-    function Probe() {
-      context.current = useComments()
-      return null
-    }
-    render(
-      <CommentsProvider adapter={adapter}>
-        <Probe />
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
-    )
-    await waitFor(() => expect(adapter.list).toHaveBeenCalled())
-
-    // A mutation fails → the panel banner has an error…
-    await act(async () => {
-      expect(await context.current!.updateComment('c-1', 'boom')).toBe(false)
-    })
-    expect(context.current!.error).toBe('PATCH exploded')
-    expect(context.current!.listError).toBeNull()
-
-    // …but the doc-side reconciliation must still run: a ghost mark appearing
-    // now (undo resurrection, hand-crafted content) is stripped regardless.
-    act(() => {
-      applyCommentAnchor(created.editor, 'c-ghost', { from: 7, to: 12 })
-    })
-    await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-ghost"]')).toBeNull(),
-    )
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).not.toBeNull()
-  })
-
-  it('never strips while the fetch is still pending', async () => {
-    const created = reviewEditor()
-    applyCommentAnchor(created.editor, 'c-ghost', { from: 1, to: 6 })
-    const adapter = { ...quietAdapter(), list: vi.fn(() => new Promise<DocumentComment[]>(() => {})) }
-
-    render(
-      <CommentsProvider adapter={adapter}>
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
-    )
-
-    await waitFor(() => expect(adapter.list).toHaveBeenCalled())
-    await sleep(20)
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-ghost"]')).not.toBeNull()
-  })
-
-  it('re-strips a mark RESURRECTED by undo after its comment died on the backend', async () => {
-    // EDIT mode with history: the mark's own transactions are off-history,
-    // but deleting the commented TEXT is a normal, undoable edit — undo
-    // brings the text back WITH the mark. This is the scenario the layer's
-    // doc-derived anchoredKey dep exists for: the backend list did not
-    // change, only the DOC did, and reconciliation must still re-run.
-    const created = renderEditor([HistoryFeature, CommentsFeature], {
-      content: docWith('hello world'),
-    })
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    // In-memory backend that actually FORGETS on remove (quietAdapter is static).
-    let db = [SAVED]
-    const adapter = {
-      ...quietAdapter(),
-      list: vi.fn(async () => [...db]),
-      remove: vi.fn(async (id: string) => {
-        db = db.filter((comment) => comment.id !== id)
-      }),
-    }
-    const context = { current: null as CommentsContextValue | null }
-    function Probe() {
-      context.current = useComments()
-      return null
-    }
-    render(
-      <CommentsProvider adapter={adapter}>
-        <Probe />
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
-    )
-    // Baseline: the backend knows c-1, so the landed list keeps its mark.
-    await waitFor(() => expect(adapter.list).toHaveBeenCalled())
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).not.toBeNull()
-
-    // The commented text is deleted (undoable edit — the mark goes with it),
-    // THEN the comment is deleted backend-side (delete + refetch).
-    act(() => {
-      created.editor.commands.deleteRange({ from: 1, to: 6 })
-    })
-    await act(async () => {
-      await context.current!.removeComment('c-1')
-    })
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).toBeNull()
-
-    // Undo resurrects the text WITH its mark…
-    let resurrected = false
-    act(() => {
-      created.editor.commands.undo()
-      resurrected = JSON.stringify(created.editor.getJSON()).includes('c-1')
-    })
-    expect(resurrected).toBe(true)
-
-    // …and reconciliation re-strips it: the backend no longer knows c-1.
-    await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).toBeNull(),
-    )
-    // Only the dangling ANCHOR was shed — the undone text itself stays.
-    expect(created.editor.state.doc.textContent).toContain('hello')
-  })
-
-  it('never strips on a FAILED fetch — an offline blip must not shed anchors', async () => {
-    const created = reviewEditor()
-    applyCommentAnchor(created.editor, 'c-ghost', { from: 1, to: 6 })
-    const adapter = {
-      ...quietAdapter(),
-      list: vi.fn(async () => {
-        throw new Error('offline')
-      }),
-    }
-
-    render(
-      <CommentsProvider adapter={adapter}>
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
-    )
-
-    await waitFor(() => expect(adapter.list).toHaveBeenCalled())
-    await sleep(20)
-    expect(created.editor.view.dom.querySelector('[data-comment-id="c-ghost"]')).not.toBeNull()
-  })
 })
 
 describe('<CommentsLayer /> document-click → active comment', () => {
@@ -413,5 +298,201 @@ describe('<CommentsLayer /> document-click → active comment', () => {
     // Provider activeId → layer sync → back into the kernel storage (and the
     // active decoration with it).
     await waitFor(() => expect(storage.activeId).toBe('c-1'))
+  })
+})
+
+describe('<CommentsLayer /> anchor-model wiring', () => {
+  it('lands OPEN nodes-carrying rows in the kernel storage — resolved, deleted and nodeless rows stay out', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'beta')),
+    })
+    created.editor.setEditable(false)
+    const adapter = {
+      ...quietAdapter(),
+      list: vi.fn(async () => [
+        { ...SAVED, id: 'c-anchor', nodes: [{ id: 'p1', from: 0, to: 5 }] },
+        { ...SAVED, id: 'c-resolved', status: 'RESOLVED' as const, nodes: [{ id: 'p2', from: 0, to: 4 }] },
+        { ...SAVED, id: 'c-deleted', isDeleted: true, nodes: [{ id: 'p2', from: 0, to: 4 }] },
+        { ...SAVED, id: 'c-nodeless' }, // nothing to resolve → orphan card only
+      ]),
+    }
+
+    render(
+      <CommentsProvider adapter={adapter}>
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+
+    const storage = getCommentsStorage(created.editor)!
+    await waitFor(() =>
+      expect(storage.comments.map((record) => record.id)).toEqual(['c-anchor']),
+    )
+    // The row's quote rides along — it seeds the reporter's baseline.
+    expect(storage.comments[0].quote).toBe('hello')
+    // And the nudge ran the plugin's membership reconcile: highlight painted.
+    expect(
+      created.editor.view.dom.querySelector('[data-comment-id="c-anchor"]')?.textContent,
+    ).toBe('hello')
+  })
+
+  it('DOC-FIRST pin: reports only queue; every updateAnchor lands after the doc save resolved', async () => {
+    // EDIT mode (editable default): the mode where the doc changes underneath.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    const log: string[] = []
+    const adapter = {
+      ...quietAdapter(),
+      list: vi.fn(async () => [{ ...SAVED, nodes: [{ id: 'p1', from: 0, to: 5 }] }]),
+      updateAnchor: vi.fn(async (id: string) => {
+        log.push(`updateAnchor:${id}`)
+      }),
+    }
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider adapter={adapter}>
+        <Probe />
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+    const storage = getCommentsStorage(created.editor)!
+    await waitFor(() => expect(storage.comments.map((record) => record.id)).toEqual(['c-1']))
+    await waitFor(() => expect(storage.onAnchorReport).not.toBeNull())
+
+    // Type before the commented word — the reporter derives + debounces…
+    vi.useFakeTimers()
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.insertText('XX', 1))
+    })
+    act(() => {
+      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+    })
+    vi.useRealTimers()
+
+    // …and the report went into the QUEUE. Zero network so far.
+    expect(adapter.updateAnchor).not.toHaveBeenCalled()
+    expect(context.current!.anchorSync!.states.get('c-1')).toBe('pendingSave')
+
+    // The consumer's save pump: the doc save FIRST, the flush only after it
+    // RESOLVED — this call order is the whole doc-first contract.
+    const saveDoc = async () => {
+      log.push('saveDoc:start')
+      await sleep(5)
+      log.push('saveDoc:resolved')
+    }
+    await act(async () => {
+      await saveDoc()
+      await context.current!.anchorSync!.flushAnchors()
+    })
+
+    expect(adapter.updateAnchor).toHaveBeenCalledTimes(1)
+    expect(adapter.updateAnchor).toHaveBeenCalledWith('c-1', {
+      nodes: [{ id: 'p1', from: 2, to: 7 }],
+      quote: 'hello',
+    })
+    expect(log.indexOf('updateAnchor:c-1')).toBeGreaterThan(log.indexOf('saveDoc:resolved'))
+    expect(context.current!.anchorSync!.states.get('c-1')).toBe('synced')
+  })
+
+  it('mirrors editor.isEditable into queueCreates — live across setEditable', async () => {
+    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider adapter={quietAdapter()}>
+        <Probe />
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+
+    // Editable on mount → edit mode queues creates.
+    await waitFor(() => expect(context.current!.queueCreates).toBe(true))
+    act(() => {
+      created.editor.setEditable(false)
+    })
+    await waitFor(() => expect(context.current!.queueCreates).toBe(false))
+    act(() => {
+      created.editor.setEditable(true)
+    })
+    await waitFor(() => expect(context.current!.queueCreates).toBe(true))
+  })
+
+  it('retryAnchor resends the CURRENT plugin derivation — not the payload that failed', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    const adapter = {
+      ...quietAdapter(),
+      list: vi.fn(async () => [{ ...SAVED, nodes: [{ id: 'p1', from: 0, to: 5 }] }]),
+      updateAnchor: vi
+        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
+        .mockRejectedValueOnce(new Error('anchor endpoint down'))
+        .mockRejectedValueOnce(new Error('anchor endpoint down'))
+        .mockResolvedValue({}),
+    }
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider adapter={adapter}>
+        <Probe />
+        <CommentsLayer editor={created.editor} />
+      </CommentsProvider>,
+    )
+    const storage = getCommentsStorage(created.editor)!
+    await waitFor(() => expect(storage.comments.map((record) => record.id)).toEqual(['c-1']))
+    await waitFor(() => expect(storage.onAnchorReport).not.toBeNull())
+
+    vi.useFakeTimers()
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.insertText('XX', 1))
+    })
+    act(() => {
+      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+    })
+    // Both in-flush attempts fail (the backoff between them is a timer).
+    await act(async () => {
+      const flushed = context.current!.anchorSync!.flushAnchors()
+      await vi.advanceTimersByTimeAsync(ANCHOR_RETRY_BACKOFF_MS)
+      await flushed
+    })
+    expect(context.current!.anchorSync!.states.get('c-1')).toBe('saveFailed')
+    expect(adapter.updateAnchor).toHaveBeenCalledTimes(2)
+    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
+      nodes: [{ id: 'p1', from: 2, to: 7 }],
+      quote: 'hello',
+    })
+
+    // The doc moves on BEFORE the user clicks Retry — the retry must carry
+    // the freshly recomputed offsets, never replay the failed ones.
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.insertText('YY', 1))
+    })
+    act(() => {
+      context.current!.anchorSync!.retryAnchor('c-1')
+    })
+    await act(async () => {
+      await context.current!.anchorSync!.flushAnchors()
+    })
+    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
+      nodes: [{ id: 'p1', from: 4, to: 9 }],
+      quote: 'hello',
+    })
+    expect(context.current!.anchorSync!.states.get('c-1')).toBe('synced')
+
+    // Drain the reporter's own pending window before real timers return.
+    act(() => {
+      vi.advanceTimersByTime(ANCHOR_REPORT_DEBOUNCE_MS)
+    })
+    vi.useRealTimers()
   })
 })

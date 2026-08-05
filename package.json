@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "deploy": "pnpm build && pnpm build-storybook -o dist/storybook && npx wrangler pages deploy dist"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -37,7 +38,6 @@
     "@tiptap/extension-table": "3.17.0",
     "@tiptap/extension-text": "3.17.0",
     "@tiptap/extension-text-style": "3.17.0",
-    "@tiptap/extension-unique-id": "3.17.0",
     "@tiptap/extensions": "3.17.0",
     "@tiptap/pm": "3.17.0",
     "@tiptap/react": "3.17.0",

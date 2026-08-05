@@ -4,8 +4,9 @@ import type { DocumentJSON } from './document'
 /**
  * Node identity. Every content node — everything except the `doc` root and
  * `text` leaves — mandatorily carries a `uid` attribute: a unique id minted
- * once and kept for the node's lifetime. During editing the UniqueID kernel
- * extension owns the invariant (new/split/pasted nodes get fresh ids); at the
+ * once and kept for the node's lifetime. During editing the NodeIds kernel
+ * extension owns the invariant (newborn nodes are filled, colliding copies
+ * re-mint, moved nodes keep their id — see nodeIdsExtension.ts); at the
  * JSON boundary these pure helpers own it, so raw documents can enter with
  * ids injected and leave with ids stripped, no editor instance required.
  *
@@ -15,20 +16,20 @@ import type { DocumentJSON } from './document'
  */
 export const NODE_ID_ATTRIBUTE = 'uid'
 
-/** The one place node ids are minted — the kernel's UniqueID `generateID`
- *  and {@link injectNodeIds} both draw from here. Platform crypto, no uuid
- *  dependency (the extension's own uuid stays transitive and unused, since
- *  we override its `generateID`): `crypto.randomUUID` needs Node ≥ 16.7 and,
- *  in browsers, a secure context (HTTPS/localhost) — already this SDK's
- *  baseline. Still uuid v4, so existing documents are indistinguishable. */
+/** The one place node ids are minted — the kernel's NodeIds extension and
+ *  {@link injectNodeIds} both draw from here. Platform crypto, no uuid
+ *  dependency: `crypto.randomUUID` needs Node ≥ 16.7 and, in browsers, a
+ *  secure context (HTTPS/localhost) — already this SDK's baseline. Still
+ *  uuid v4, so existing documents are indistinguishable. */
 export function generateNodeId(): string {
   return crypto.randomUUID()
 }
 
 /** The id-scope rule, single-sourced: `doc` is the envelope itself and text
  *  leaves merge/split on every keystroke — neither can carry a stable id.
- *  The kernel's UniqueID `types` enumeration (buildExtensions) and the test
- *  harness walker both derive from this predicate. */
+ *  The kernel's NodeIds `types` enumeration (buildExtensions), the runtime
+ *  uid index (nodeIdIndex) and the test harness walker all derive from this
+ *  predicate. */
 export function carriesNodeId(type: string | undefined): boolean {
   return type !== 'doc' && type !== 'text'
 }
@@ -43,9 +44,7 @@ export function carriesNodeId(type: string | undefined): boolean {
  *
  * Deliberately schema-agnostic (plain JSON walk, no `Node.fromJSON`): invalid
  * content must still reach TipTap's content check so `onContentError` /
- * setJSON's throw stay the single validation story. That also rules out the
- * package's own `generateUniqueIds` helper — it parses against the schema
- * (throwing before our content check runs) and never re-mints duplicates.
+ * setJSON's throw stay the single validation story.
  */
 export function injectNodeIds(document: DocumentJSON): DocumentJSON {
   const seen = new Set<string>()

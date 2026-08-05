@@ -82,6 +82,13 @@ export const commentsPanelStyles = css`
     color: var(--editor-danger);
   }
 
+  /* Guidance notice under the composer (e.g. the stale-create "reload"). */
+  .comments-panel__notice {
+    margin: -4px 0 10px 36px;
+    font-size: 12px;
+    color: var(--editor-text-muted);
+  }
+
   .comments-panel__list {
     display: flex;
     flex-direction: column;
@@ -155,14 +162,14 @@ export const commentsPanelStyles = css`
     overflow-wrap: anywhere;
   }
 
-  /* ORPHANED comment (its marked text was deleted): inert body showing the
-     original quote — muted, so it reads as history, not a live target. */
+  /* ORPHANED comment (its anchored text was deleted): inert body showing
+     the original quote — muted, so it reads as history, not a live target. */
   .comments-panel__card-body--orphan.comments-panel__card-body--orphan {
     cursor: default;
   }
 
   /* Inert body while EDITING (no jump — a click in the field must not move
-     the document) or FROZEN (resolved/archived: read-only, mark long gone),
+     the document) or FROZEN (resolved/archived: read-only, highlight shed),
      and no hover invitation on any of them. */
   .comments-panel__card-body--editing.comments-panel__card-body--editing,
   .comments-panel__card-body--frozen.comments-panel__card-body--frozen {
@@ -227,6 +234,43 @@ export const commentsPanelStyles = css`
   .comments-panel__orphan-hint {
     font-size: 11px;
     color: var(--editor-text-muted);
+  }
+
+  /* Badge on a card whose anchor is only PARTIALLY live (some segments'
+     text was deleted) — quiet, informational. */
+  .comments-panel__partial-badge {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--editor-comment-accent) 20%, transparent);
+    font-size: 10px;
+    color: var(--editor-text-muted);
+    white-space: nowrap;
+  }
+
+  /* The per-card anchor sync strip (pendingSave/saving/saveFailed) — sits
+     under the card body, outside its ButtonBase. */
+  .comments-panel__sync {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 6px;
+    font-size: 14px;
+    color: var(--editor-text-muted);
+  }
+
+  .comments-panel__sync--failed {
+    color: var(--editor-danger);
+  }
+
+  .comments-panel__sync [role='img'] {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .comments-panel__retry.comments-panel__retry {
+    min-width: 0;
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   /* The card's top-right actions: the ✓ Resolve button + the 3-dots. */

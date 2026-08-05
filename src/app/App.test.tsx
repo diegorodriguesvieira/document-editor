@@ -175,12 +175,13 @@ describe('<App /> review comments (preview mode)', () => {
     expect(within(panel).getByText('Diego Rodrigues')).toBeInTheDocument()
     expect(within(panel).getByText('DR')).toBeInTheDocument()
     expect(within(panel).queryByText(/hello/)).toBeNull()
-    // The saved comment is ANCHORED: its mark wraps the selected word.
+    // The saved comment is ANCHORED: its highlight decoration wraps the
+    // selected word (nothing was written into the document).
     const highlight = () => document.querySelector('.ProseMirror span.comment[data-comment-id]')
     expect(highlight()?.textContent).toBe('hello')
 
     // Own comment → 3-dots → Delete → DELETE endpoint + refetch → card leaves
-    // (and reconciliation sheds the now-dangling mark).
+    // (and the tombstoned row sheds its highlight).
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Confirm delete?' }))
@@ -234,14 +235,14 @@ describe('<App /> review comments (preview mode)', () => {
     )
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     const card = (await within(panel).findByText('resolvable')).closest('li') as HTMLElement
-    // Only this comment carries a mark in THIS editor (earlier tests' shared
-    // db leftovers render as orphans, markless).
+    // Only this comment resolves in THIS editor (earlier tests' shared db
+    // leftovers point at uids from other editors — orphans, no highlight).
     const highlight = () => document.querySelector('.ProseMirror span.comment[data-comment-id]')
     expect(highlight()).not.toBeNull()
 
     await userEvent.click(within(card).getByRole('button', { name: 'Resolve' }))
 
-    // PATCH (300ms) + refetch (300ms) → reconciliation sheds the mark…
+    // PATCH (300ms) + refetch (300ms) → the resolved row sheds its highlight…
     await waitFor(() => expect(highlight()).toBeNull(), { timeout: 3000 })
     // …the card leaves the open tab and lives on, frozen, under Resolved.
     expect(within(panel).queryByText('resolvable')).toBeNull()
@@ -269,7 +270,7 @@ describe('<App /> review comments (preview mode)', () => {
       expect(document.querySelector('.ProseMirror')?.getAttribute('contenteditable')).toBe('true'),
     )
 
-    // The mark rode along into edit mode, and the panel kept its card (await:
+    // The highlight rode along into edit mode, and the panel kept its card (await:
     // the draft clears BEFORE the refetch lands — the card can lag ~300ms).
     expect(document.querySelector('.ProseMirror span.comment[data-comment-id]')?.textContent).toBe(
       'hello',

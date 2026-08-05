@@ -1,17 +1,20 @@
 import { useEffect } from 'react'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { Editor } from '@tiptap/core'
-import { docWith, renderEditor } from '../../test/editorHarness'
-import { CommentsFeature, getCommentsStorage } from './comments'
-import { applyCommentAnchor } from './commentAnchors'
+import type { Editor, JSONContent } from '@tiptap/core'
+import { renderEditor } from '../../test/editorHarness'
+import type { CommentAnchorPayload, CommentNodeSegment } from './commentAnchor'
+import { CommentsFeature } from './comments'
 import { CommentsPanel } from './commentsPanel'
 import {
   CommentsProvider,
+  PARENT_DELETED,
+  STALE_CONTENT,
   useComments,
   type CommentDraft,
   type CommentsAdapter,
+  type CommentsContextValue,
   type CommentStatus,
   type CommentUser,
   type DocumentComment,
@@ -19,6 +22,24 @@ import {
 
 const ANA: CommentUser = { id: 'u-ana', name: 'Ana Lima' }
 const BETO: CommentUser = { id: 'u-beto', name: 'Beto Souza' }
+
+/* Fixtures with EXPLICIT uids, so `nodes[]` anchors are deterministic —
+ * injectNodeIds keeps unique explicit ids verbatim on the way in. */
+const paragraph = (uid: string, text: string): JSONContent => ({
+  type: 'paragraph',
+  attrs: { uid },
+  content: [{ type: 'text', text }],
+})
+const docOf = (...blocks: JSONContent[]): { doc: JSONContent } => ({
+  doc: { type: 'doc', content: blocks },
+})
+
+/** The standard rig: ONE paragraph (uid `p1`) hosting "hello world". */
+const anchoredEditor = () =>
+  renderEditor([CommentsFeature], { content: docOf(paragraph('p1', 'hello world')) })
+
+/** `nodes` for "hello" ([0,5)) in the `p1` paragraph. */
+const HELLO_NODES: CommentNodeSegment[] = [{ id: 'p1', from: 0, to: 5 }]
 
 const saved = (
   id: string,
@@ -31,7 +52,7 @@ const saved = (
   text,
   author,
   createdAt: '2026-07-15T12:00:00Z',
-  status: 'open',
+  status: 'OPEN',
   canEdit: true,
   canReply: true,
   canDelete: true,
@@ -45,13 +66,13 @@ function fakeAdapter(initial: DocumentComment[] = []) {
   let db = [...initial]
   return {
     list: vi.fn(async () => db.map((comment) => ({ ...comment }))),
-    add: vi.fn(async (input: { text: string; quote: string }) => {
+    add: vi.fn(async (input: { text: string; quote: string; nodes?: CommentNodeSegment[] }) => {
       const created: DocumentComment = {
         ...input,
         id: `c-${db.length + 1}`,
         author: ANA,
         createdAt: 'now',
-        status: 'open',
+        status: 'OPEN',
         canEdit: true,
         canReply: true,
         canDelete: true,
@@ -160,8 +181,8 @@ describe('<CommentsPanel />', () => {
     expect(within(panel).queryByText(/hello/)).toBeNull() // the quote stays out
   })
 
-  it('composer: Comment sends the draft TEXT and anchors the backend id over the draft range', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+  it('composer: Comment POSTs the text + the anchor payload DERIVED AT SUBMIT from the draft', async () => {
+    const created = anchoredEditor()
     created.editor.setEditable(false)
     const adapter = fakeAdapter()
     renderPanel({ adapter, editor: created.editor, draft: DRAFT })
@@ -172,16 +193,25 @@ describe('<CommentsPanel />', () => {
     await userEvent.type(field, 'needs a source')
     await userEvent.click(screen.getByRole('button', { name: 'Comment' }))
 
-    // The anchor stays OUT of the payload — the doc will carry it as a mark.
-    expect(adapter.add).toHaveBeenCalledWith({ text: 'needs a source', quote: 'hello' })
+    // segmentsFromRange over the draft range [1,6) → node-local [0,5) on p1,
+    // quote recomputed from those segments — the backend's validator input.
+    expect(adapter.add).toHaveBeenCalledWith({
+      text: 'needs a source',
+      quote: 'hello',
+      nodes: HELLO_NODES,
+    })
     // Refetch-after-write: the composer closes, then the SERVER's copy lands
     // as a card (composer first — the textarea's own content would satisfy a
     // bare text query mid-save).
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Comment text' })).toBeNull())
     expect(await screen.findByText('needs a source')).toBeInTheDocument()
-    // The draft range became the mark, under the id the BACKEND minted.
-    const span = created.editor.view.dom.querySelector('span.comment[data-comment-id="c-1"]')
-    expect(span?.textContent).toBe('hello')
+    // The row's nodes[] became a live DECORATION under the backend's id —
+    // nothing was written into the document.
+    await waitFor(() => {
+      const span = created.editor.view.dom.querySelector('span.comment[data-comment-id="c-1"]')
+      expect(span?.textContent).toBe('hello')
+    })
+    expect(JSON.stringify(created.editor.getJSON())).not.toContain('comment')
   })
 
   it('keyboard contract: Shift+Enter breaks the line, Escape cancels without sending', async () => {
@@ -211,7 +241,7 @@ describe('<CommentsPanel />', () => {
   })
 
   it('a mousedown anywhere outside the panel cancels the draft — nothing sent, selection collapsed', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const created = anchoredEditor()
     created.editor.setEditable(false)
     created.editor.commands.setTextSelection({ from: 1, to: 6 })
     const adapter = fakeAdapter()
@@ -322,42 +352,57 @@ describe('<CommentsPanel />', () => {
     await waitFor(() => expect(screen.queryByText('deletable')).toBeNull())
   })
 
-  it('clicking a card jumps the document to the MARK (collapsed caret) and lights comment--active', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+  it('clicking a card jumps to the LIVE anchor position (collapsed caret) and lights comment--active', async () => {
+    const created = anchoredEditor()
     created.editor.setEditable(false)
-    applyCommentAnchor(created.editor, 'c-1', { from: 7, to: 12 })
-    const comment = saved('c-1', BETO, 'look at this', { quote: 'world' })
+    // 'world' = node-local [6,11) on p1 → live [7,12) — pos derives from the
+    // PLUGIN at click time, the panel knows no positions of its own.
+    const comment = saved('c-1', BETO, 'look at this', {
+      quote: 'world',
+      nodes: [{ id: 'p1', from: 6, to: 11 }],
+    })
     // jsdom ships no scrollIntoView — define it to pin the DOM-scroll path
     // (PM's own scrollIntoView is a no-op while focus sits in the panel).
     const scrollSpy = vi.fn()
     Element.prototype.scrollIntoView = scrollSpy
 
     renderPanel({ adapter: fakeAdapter([comment]), editor: created.editor })
+    // Wait for the highlight: the bridge must land the anchor before a click
+    // can derive its position.
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).not.toBeNull(),
+    )
     await userEvent.click(await screen.findByText('look at this'))
 
-    // The caret landed at the mark's start — derived from the DOC, the panel
-    // knows no positions of its own anymore.
+    // The caret landed at the anchor's first live position.
     expect(created.editor.state.selection.from).toBe(7)
     expect(created.editor.state.selection.empty).toBe(true) // collapsed — no balloon
-    // The HIGHLIGHT SPAN inside the document was scrolled into view — NOT
-    // PM's scrollIntoView, which silently bails while the DOM focus sits in
-    // the panel (the regression this pins: the click must scroll the doc).
+    // The document was scrolled via the shared api.scrollTo implementation —
+    // a DOM scroll, because PM's scrollIntoView silently bails while the DOM
+    // focus sits in the panel (the regression this pins). (The card ALSO
+    // scrolls itself into the panel viewport with block:'nearest' — pick the
+    // document call by its center-block signature.)
     expect(scrollSpy).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
-    const span = created.editor.view.dom.querySelector('[data-comment-id="c-1"]')
-    expect(scrollSpy.mock.contexts).toContain(span)
-    // The card itself lights up too (the active state is shared both ways).
+    const centerCall = scrollSpy.mock.calls.findIndex(
+      (args) => (args[0] as ScrollIntoViewOptions | undefined)?.block === 'center',
+    )
+    const scrolled = scrollSpy.mock.contexts[centerCall] as Node
+    expect(created.editor.view.dom.contains(scrolled)).toBe(true)
+    // The card itself lights up too (the active state is shared both ways)…
     expect(screen.getByText('look at this').closest('li')).toHaveClass(
       'comments-panel__card--active',
     )
-    // Mirror activeId into storage the way the layer would, then re-render.
-    const storage = getCommentsStorage(created.editor)!
-    storage.activeId = 'c-1'
-    created.editor.view.dispatch(created.editor.state.tr.setMeta('addToHistory', false))
-    expect(created.editor.view.dom.querySelector('span.comment--active')?.textContent).toBe('world')
+    // …and the bridge mirrors activeId into the plugin: every slice lights.
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelector('span.comment--active')?.textContent).toBe(
+        'world',
+      ),
+    )
   })
 
-  it('a comment whose mark is GONE from the doc shows as orphaned: quote + hint, no jump, Delete kept', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+  it('a comment with NOTHING live shows as orphaned: quote + hint, no jump, Delete kept', async () => {
+    const created = anchoredEditor()
+    // No `nodes` at all — nothing for the segments plugin to resolve.
     const adapter = fakeAdapter([saved('c-1', ANA, 'left orphaned')])
 
     renderPanel({ adapter, editor: created.editor })
@@ -382,18 +427,18 @@ describe('<CommentsPanel />', () => {
   })
 
   it('works in EDIT mode: anchored cards render live (not orphaned) and Delete still works', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const created = anchoredEditor()
     expect(created.editor.isEditable).toBe(true)
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', ANA, 'in edit mode')])
+    const adapter = fakeAdapter([saved('c-1', ANA, 'in edit mode', { nodes: HELLO_NODES })])
 
     renderPanel({ adapter, editor: created.editor })
 
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     const card = (await within(panel).findByText('in edit mode')).closest('li') as HTMLElement
-    // Anchored → a live card: jump body + Reply + menu, no orphan hint.
+    // Anchored → a live card: jump body + Reply + menu, no orphan hint. (The
+    // waitFor rides out the bridge landing the anchor into the plugin.)
+    await waitFor(() => expect(within(card).getAllByRole('button')).toHaveLength(3))
     expect(within(card).queryByText('Original text was removed')).toBeNull()
-    expect(within(card).getAllByRole('button')).toHaveLength(3)
 
     await userEvent.click(within(card).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
@@ -509,7 +554,7 @@ describe('<CommentsPanel /> replies', () => {
   })
 
   it('an ORPHANED comment still accepts replies — the thread outlives the anchored text', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const created = anchoredEditor()
     const adapter = fakeAdapter([saved('c-1', ANA, 'left orphaned')])
     renderPanel({ adapter, editor: created.editor })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
@@ -523,10 +568,9 @@ describe('<CommentsPanel /> replies', () => {
   })
 
   it('replying works with an EDITABLE editor — replies are not review-only', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
+    const created = anchoredEditor()
     expect(created.editor.isEditable).toBe(true)
-    applyCommentAnchor(created.editor, 'c-1', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', BETO, 'in edit mode')])
+    const adapter = fakeAdapter([saved('c-1', BETO, 'in edit mode', { nodes: HELLO_NODES })])
     renderPanel({ adapter, editor: created.editor })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
     await within(panel).findByText('in edit mode')
@@ -592,8 +636,8 @@ describe('<CommentsPanel /> status tabs', () => {
     renderPanel({
       adapter: fakeAdapter([
         saved('c-1', BETO, 'open thread'),
-        saved('c-2', BETO, 'resolved thread', { status: 'resolved' }),
-        saved('c-3', BETO, 'archived thread', { status: 'archived' }),
+        saved('c-2', BETO, 'resolved thread', { status: 'RESOLVED' }),
+        saved('c-3', BETO, 'archived thread', { status: 'ARCHIVED' }),
       ]),
     })
 
@@ -612,7 +656,7 @@ describe('<CommentsPanel /> status tabs', () => {
     renderPanel({
       adapter: fakeAdapter([
         saved('c-1', BETO, 'open thread'),
-        saved('c-2', BETO, 'resolved thread', { status: 'resolved' }),
+        saved('c-2', BETO, 'resolved thread', { status: 'RESOLVED' }),
       ]),
     })
     const panel = await screen.findByRole('complementary', { name: 'Comments' })
@@ -649,7 +693,7 @@ describe('<CommentsPanel /> status tabs', () => {
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Resolve' }))
 
-    expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'resolved' })
+    expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'RESOLVED' })
     // Refetch-after-write: the open tab empties (bare label + hint)…
     await waitFor(() => expect(within(panel).queryByText('resolvable')).toBeNull())
     expect(within(panel).getByRole('tab', { name: 'Comments' })).toBeInTheDocument()
@@ -675,7 +719,7 @@ describe('<CommentsPanel /> status tabs', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
-    expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'archived' })
+    expect(adapter.setStatus).toHaveBeenCalledWith('c-1', { status: 'ARCHIVED' })
     await waitFor(() => expect(within(panel).queryByText('archivable')).toBeNull())
     await userEvent.click(within(panel).getByRole('tab', { name: 'Archived' }))
     expect(within(panel).getByText('archivable')).toBeInTheDocument()
@@ -684,7 +728,7 @@ describe('<CommentsPanel /> status tabs', () => {
   it('frozen threads are read-only + Delete: no reply/edit/resolve, plain reply rows', async () => {
     const adapter = fakeAdapter([
       saved('c-1', BETO, 'frozen', {
-        status: 'resolved',
+        status: 'RESOLVED',
         canResolve: true, // must NOT surface a Resolve button while frozen
         canEdit: true, // must NOT surface Edit either
         canDelete: true,
@@ -921,16 +965,17 @@ describe('<CommentsPanel /> review-round hardening', () => {
     )
   })
 
-  it('reconciliation runs with the PANEL alone — no CommentsLayer required', async () => {
-    const created = renderEditor([CommentsFeature], { content: docWith('hello world') })
-    applyCommentAnchor(created.editor, 'c-ghost', { from: 1, to: 6 })
-    const adapter = fakeAdapter([saved('c-1', BETO, 'known')])
+  it('the bridge runs with the PANEL alone — highlights land without a CommentsLayer', async () => {
+    const created = anchoredEditor()
+    const adapter = fakeAdapter([saved('c-1', BETO, 'known', { nodes: HELLO_NODES })])
 
-    // ONLY the panel mounted — the bridge inside it must still strip.
+    // ONLY the panel mounted — the bridge inside it lands the anchors.
     renderPanel({ adapter, editor: created.editor })
 
     await waitFor(() =>
-      expect(created.editor.view.dom.querySelector('[data-comment-id="c-ghost"]')).toBeNull(),
+      expect(
+        created.editor.view.dom.querySelector('[data-comment-id="c-1"]')?.textContent,
+      ).toBe('hello'),
     )
   })
 })
@@ -1007,7 +1052,7 @@ describe('<CommentsPanel /> consumer menu items', () => {
         user={ANA}
         adapter={fakeAdapter([
           saved('c-1', BETO, 'frozen thread', {
-            status: 'resolved',
+            status: 'RESOLVED',
             replies: [
               {
                 id: 'r-1',
@@ -1100,5 +1145,240 @@ describe('<CommentsPanel /> edit-in-place', () => {
 
     expect(await screen.findAllByText('PATCH exploded')).not.toHaveLength(0)
     expect(screen.getByRole('textbox', { name: 'Edit text' })).toHaveValue('attempt')
+  })
+})
+
+describe('<CommentsPanel /> anchor health (plugin-derived)', () => {
+  it('a PARTIALLY detached anchor gets a badge; fully live and orphaned do not', async () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'alpha'), paragraph('p2', 'beta')),
+    })
+    const adapter = fakeAdapter([
+      saved('c-1', BETO, 'two segments', {
+        quote: 'alphabeta',
+        nodes: [
+          { id: 'p1', from: 0, to: 5 },
+          { id: 'p2', from: 0, to: 4 },
+        ],
+      }),
+    ])
+    renderPanel({ adapter, editor: created.editor })
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    const card = (await within(panel).findByText('two segments')).closest('li') as HTMLElement
+    // Fully anchored (wait for the bridge to land both segments): no badge.
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id]')).toHaveLength(2),
+    )
+    expect(within(card).queryByText('Partially detached')).toBeNull()
+
+    // Delete the whole second commented paragraph (p2 spans [7,13)) — one
+    // segment goes dormant, the other stays live: PARTIAL.
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.delete(7, 13))
+    })
+    expect(await within(card).findByText('Partially detached')).toBeInTheDocument()
+
+    // Kill the surviving text too → ORPHANED: hint replaces the badge, the
+    // card persists (orphan-forever).
+    act(() => {
+      created.editor.view.dispatch(created.editor.state.tr.delete(1, 6))
+    })
+    await within(card).findByText('Original text was removed')
+    expect(within(card).queryByText('Partially detached')).toBeNull()
+  })
+})
+
+describe('<CommentsPanel /> anchor sync states', () => {
+  function probeRig(adapter: CommentsAdapter, editor: Editor | null) {
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider user={ANA} adapter={adapter}>
+        <Probe />
+        <CommentsPanel editor={editor} />
+      </CommentsProvider>,
+    )
+    return context
+  }
+
+  it('pendingSave → saving → synced: the card indicator follows the queue', async () => {
+    const created = anchoredEditor()
+    let releaseWrite!: (value: unknown) => void
+    const adapter = {
+      ...fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })]),
+      updateAnchor: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            releaseWrite = resolve
+          }),
+      ),
+    }
+    const context = probeRig(adapter, created.editor)
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('sync me')
+
+    // A report lands in the queue (exactly what the reporter's sink does).
+    act(() => {
+      context.current!.anchorSync!.enqueue({ id: 'c-1', nodes: HELLO_NODES, quote: 'hello' })
+    })
+    expect(
+      await within(panel).findByRole('img', { name: 'Waiting for document save' }),
+    ).toBeInTheDocument()
+    expect(adapter.updateAnchor).not.toHaveBeenCalled() // queue, never network
+
+    // The consumer's pump flushes (after its doc save): saving while in
+    // flight…
+    let flushed!: Promise<void>
+    act(() => {
+      flushed = context.current!.anchorSync!.flushAnchors()
+    })
+    expect(await within(panel).findByRole('img', { name: 'Saving anchor…' })).toBeInTheDocument()
+
+    // …and synced (nothing rendered) once the write lands.
+    await act(async () => {
+      releaseWrite({})
+      await flushed
+    })
+    await waitFor(() => expect(within(panel).queryByRole('img')).toBeNull())
+  })
+
+  it('saveFailed renders the warning + Retry; Retry re-enqueues the FRESH plugin payload', async () => {
+    const created = anchoredEditor()
+    const adapter = {
+      ...fakeAdapter([saved('c-1', BETO, 'sync me', { nodes: HELLO_NODES })]),
+      updateAnchor: vi
+        .fn<(id: string, payload: CommentAnchorPayload) => Promise<unknown>>()
+        .mockRejectedValueOnce(new Error('anchor endpoint down'))
+        .mockRejectedValueOnce(new Error('anchor endpoint down'))
+        .mockResolvedValue({}),
+    }
+    const context = probeRig(adapter, created.editor)
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('sync me')
+
+    act(() => {
+      context.current!.anchorSync!.enqueue({ id: 'c-1', nodes: HELLO_NODES, quote: 'hello' })
+    })
+    // Both in-flush attempts fail (one automatic retry inside the flush).
+    await act(async () => {
+      await context.current!.anchorSync!.flushAnchors()
+    })
+    expect(adapter.updateAnchor).toHaveBeenCalledTimes(2)
+    expect(within(panel).getByRole('img', { name: 'Anchor save failed' })).toBeInTheDocument()
+
+    // Retry: the panel wires the card's button to retryAnchor, which reads
+    // the FRESH derivation through the bridge-registered source (the plugin
+    // still resolves c-1 → hello) — back to pendingSave, awaiting a flush.
+    await userEvent.click(within(panel).getByRole('button', { name: 'Retry' }))
+    expect(
+      await within(panel).findByRole('img', { name: 'Waiting for document save' }),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      await context.current!.anchorSync!.flushAnchors()
+    })
+    expect(adapter.updateAnchor).toHaveBeenLastCalledWith('c-1', {
+      nodes: HELLO_NODES,
+      quote: 'hello',
+    })
+    await waitFor(() => expect(within(panel).queryByRole('img')).toBeNull())
+  })
+})
+
+describe('<CommentsPanel /> reply lifecycle races', () => {
+  it('a reply rejected with PARENT_DELETED keeps the typed text and shows the deleted notice', async () => {
+    const adapter = fakeAdapter([saved('c-1', BETO, 'parent')])
+    adapter.reply.mockRejectedValueOnce(
+      Object.assign(new Error('Parent comment was deleted'), { code: PARENT_DELETED }),
+    )
+    renderPanel({ adapter })
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('parent')
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
+    const field = await screen.findByRole('textbox', { name: 'Reply text' })
+    await userEvent.type(field, 'racing the delete{Enter}')
+
+    // The composer survives with the text; the inline notice replaces the raw
+    // adapter message at the field.
+    expect(await screen.findByText('This comment was deleted.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Reply text' })).toHaveValue('racing the delete')
+  })
+
+  it('reply composer text survives a REMOTE status flip (the card leaves and returns)', async () => {
+    let rows = [saved('c-1', BETO, 'flippable')]
+    const adapter = fakeAdapter()
+    adapter.list.mockImplementation(async () => [...rows])
+    const context = { current: null as CommentsContextValue | null }
+    function Probe() {
+      context.current = useComments()
+      return null
+    }
+    render(
+      <CommentsProvider user={ANA} adapter={adapter}>
+        <Probe />
+        <CommentsPanel editor={null} />
+      </CommentsProvider>,
+    )
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('flippable')
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Reply' }))
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Reply text' }), 'half a reply')
+
+    // Someone resolves it remotely: the refreshed list moves the card off the
+    // open tab, unmounting the composer mid-typing.
+    rows = [{ ...saved('c-1', BETO, 'flippable'), status: 'RESOLVED' }]
+    await act(async () => {
+      await context.current!.refresh()
+    })
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Reply text' })).toBeNull())
+
+    // It reopens remotely later — the typed text is restored on the next
+    // composer mount instead of being lost with the unmount.
+    rows = [saved('c-1', BETO, 'flippable')]
+    await act(async () => {
+      await context.current!.refresh()
+    })
+    await userEvent.click(await within(panel).findByRole('button', { name: 'Reply' }))
+    expect(await screen.findByRole('textbox', { name: 'Reply text' })).toHaveValue('half a reply')
+  })
+
+  it('soft-deleted rows are tombstones: no card renders for them', async () => {
+    const adapter = fakeAdapter([
+      saved('c-1', BETO, 'visible'),
+      saved('c-2', BETO, 'tombstoned', { isDeleted: true }),
+    ])
+    renderPanel({ adapter })
+
+    const panel = await screen.findByRole('complementary', { name: 'Comments' })
+    await within(panel).findByText('visible')
+    expect(within(panel).queryByText('tombstoned')).toBeNull()
+    // The open count skips tombstones too.
+    expect(within(panel).getByRole('tab', { name: 'Comments (1)' })).toBeInTheDocument()
+  })
+})
+
+describe('<CommentsPanel /> stale create', () => {
+  it('a STALE_CONTENT rejection shows the reload notice by the composer, text intact', async () => {
+    const adapter = fakeAdapter()
+    adapter.add.mockRejectedValueOnce(
+      Object.assign(new Error('quote does not match the saved document'), {
+        code: STALE_CONTENT,
+      }),
+    )
+    renderPanel({ adapter, draft: DRAFT })
+    const field = await screen.findByRole('textbox', { name: 'Comment text' })
+
+    await userEvent.type(field, 'went stale{Enter}')
+
+    expect(
+      await screen.findByText('The document changed — reload to comment.'),
+    ).toBeInTheDocument()
+    // Nothing typed is lost — the user re-submits after reloading.
+    expect(screen.getByRole('textbox', { name: 'Comment text' })).toHaveValue('went stale')
   })
 })

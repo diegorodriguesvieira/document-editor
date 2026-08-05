@@ -31,6 +31,18 @@ export interface FoundNode {
 }
 
 /**
+ * Transaction meta stamped by {@link EditorApi.setJSON} on the transaction
+ * that swaps the whole document. Consumers keying external state on node uids
+ * (the comments segments plugin) treat it as "everything you mapped is stale —
+ * re-seed from your source of truth". It must ride the SAME transaction as the
+ * content swap so no half-mapped state survives in between; `editor.chain()`
+ * guarantees that — every chained command mutates ONE shared transaction that
+ * `run()` dispatches once (@tiptap/core dist, createChain: `const tr = startTr
+ * || state.tr` feeds every command's props, then `view.dispatch(tr)`).
+ */
+export const DOCUMENT_REPLACED_META = 'documentReplaced'
+
+/**
  * The stable facade the app talks to instead of the raw TipTap `Editor`.
  * Light by design (engine-swap is hygiene, not a real requirement) — its job
  * is to keep `@tiptap/*` out of product code, not to make the engine swappable.
@@ -39,8 +51,10 @@ export interface EditorApi extends EditorStateView {
   getJSON(): DocumentJSON
   /** Replace the whole document — a heavy O(n) load (full reparse), not an
    *  update channel. Content is uid-stamped on the way in (missing node ids
-   *  minted, duplicates re-minted). Throws if `doc` contains content invalid
-   *  for the active schema (e.g. a node whose feature is disabled). */
+   *  minted, duplicates re-minted). The swap transaction carries
+   *  {@link DOCUMENT_REPLACED_META} so external-anchor consumers (comments)
+   *  re-seed in the same transaction. Throws if `doc` contains content
+   *  invalid for the active schema (e.g. a node whose feature is disabled). */
   setJSON(doc: DocumentJSON): void
   getHTML(): string
   /** Whether a top-level node of this type exists in the document. */
@@ -60,6 +74,23 @@ export interface EditorApi extends EditorStateView {
   on(event: 'update' | 'selection', callback: () => void): () => void
 }
 
+/**
+ * The scroll behind {@link EditorApi.scrollTo}, callable with a bare editor —
+ * SDK feature UI holding an `Editor` but no api instance (the comments panel's
+ * jump) shares the one implementation instead of re-rolling the workaround.
+ *
+ * DOM scroll, NOT a dispatch with PM's scrollIntoView: prosemirror-view bails
+ * out of scrollToSelection while the DOM focus sits outside the view — and it
+ * does in the case this exists for, the user just clicked a panel. (Same trap
+ * the comments panel hit.) Optional-chained: jsdom has no scrollIntoView.
+ */
+export function scrollEditorTo(editor: Editor, pos: number): void {
+  const clamped = Math.max(0, Math.min(pos, editor.state.doc.content.size))
+  const dom = editor.view.nodeDOM(clamped) ?? editor.view.domAtPos(clamped).node
+  const el = dom instanceof Element ? dom : dom.parentElement
+  el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+}
+
 export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): EditorApi {
   return {
     isActive: (name, attrs) => editor.isActive(name, attrs),
@@ -75,20 +106,17 @@ export function createEditorApi(editor: Editor, resolved: ResolvedFeatures): Edi
       })
       return found
     },
-    scrollTo: (pos) => {
-      const clamped = Math.max(0, Math.min(pos, editor.state.doc.content.size))
-      // DOM scroll, NOT a dispatch with PM's scrollIntoView: prosemirror-view
-      // bails out of scrollToSelection while the DOM focus sits outside the
-      // view — and it does in the case this API exists for, the user just
-      // clicked a panel. (Same trap the comments panel hit.) Optional-chained:
-      // jsdom has no scrollIntoView.
-      const dom = editor.view.nodeDOM(clamped) ?? editor.view.domAtPos(clamped).node
-      const el = dom instanceof Element ? dom : dom.parentElement
-      el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
-    },
+    scrollTo: (pos) => scrollEditorTo(editor, pos),
     getJSON: () => toDocumentJSON(editor),
     setJSON: (doc) => {
-      editor.commands.setContent(injectNodeIds(doc).doc)
+      // One transaction: the meta and the replaceWith ride together (chained
+      // commands share a single tr — see DOCUMENT_REPLACED_META). setContent
+      // still throws synchronously on invalid content inside run().
+      editor
+        .chain()
+        .setMeta(DOCUMENT_REPLACED_META, true)
+        .setContent(injectNodeIds(doc).doc)
+        .run()
     },
     getHTML: () => editor.getHTML(),
     focus: () => {

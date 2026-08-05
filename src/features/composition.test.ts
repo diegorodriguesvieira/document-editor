@@ -54,7 +54,8 @@ const KITCHEN_SINK = {
           { type: 'text', text: ' italic', marks: [{ type: 'italic' }] },
           { type: 'text', text: ' link', marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] },
           { type: 'text', text: ' colored', marks: [{ type: 'textStyle', attrs: { color: '#188038' } }] },
-          { type: 'text', text: ' commented', marks: [{ type: 'comment', attrs: { commentId: 'c-ks' } }] },
+          // No comment mark on purpose: comments are anchor-based now —
+          // nothing about them appears in the document (see comments.test.ts).
           { type: 'variable', attrs: { id: 'client.name', label: 'Client name' } },
         ],
       },
@@ -170,7 +171,6 @@ describe('cross-feature composition (kitchen sink)', () => {
       'data-conditional-block',
       '&quot;ref&quot;:&quot;country&quot;', // condition JSON inside data-condition, entity-escaped
       'data-variable="client.name"',
-      'data-comment-id="c-ks"',
       'data-type="callout"',
       'data-uid',
       '<strong', '<em', 'href="https://example.com"',

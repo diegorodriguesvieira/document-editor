@@ -4,18 +4,19 @@ import { Document as DocumentNode } from '@tiptap/extension-document'
 import { HardBreak } from '@tiptap/extension-hard-break'
 import { Paragraph } from '@tiptap/extension-paragraph'
 import { Text as TextNode } from '@tiptap/extension-text'
-import { UniqueID } from '@tiptap/extension-unique-id'
 import { Dropcursor, Gapcursor } from '@tiptap/extensions'
 import { BodyTrailingNode } from './bodyTrailingNode'
-import { NODE_ID_ATTRIBUTE, carriesNodeId, generateNodeId } from './nodeIds'
+import { carriesNodeId } from './nodeIds'
+import { NodeIds } from './nodeIdsExtension'
 import type { ResolvedFeatures } from './registry'
 
 /**
  * The always-on schema kernel. You can't have a document without a top node,
  * paragraphs and text, so these are never opt-in — features build on top.
  * HardBreak is kernel for the same reason: Shift+Enter is basic typing, not a
- * feature (it ships its own Shift-Enter/Mod-Enter bindings and serializes as a
- * plain <br>, so the backend HTML contract is untouched).
+ * feature (it ships its own Shift-Enter/Mod-Enter bindings and serializes as
+ * `<br data-uid="…">` — like every content node it carries the uid the
+ * NodeIds kernel stamps).
  * BodyTrailingNode keeps an empty paragraph after the last BODY block (table,
  * code, conditional block…) so you can always click below it and keep typing —
  * kept just above a bottom-pinned page region (e.g. a document footer), which
@@ -68,12 +69,12 @@ function registryKeymap(resolved: ResolvedFeatures): Extension {
 
 /**
  * Every node type the final schema will hold except `doc` and `text` — the
- * UniqueID scope. Derived from the actual extension list, with
+ * NodeIds scope. Derived from the actual extension list, with
  * `resolveExtensions` flattening `addExtensions()` first (TableKit hides
  * TableRow that way), so nodes from any feature — including kits authored by
- * consumer teams later — are covered without registration. (A later TipTap
- * 3.x ships `types: 'all'` with the same doc/text exclusions — on upgrade
- * this enumeration can collapse into it.)
+ * consumer teams later — are covered without registration. Enumerating here
+ * keeps the NodeIds extension itself schema-agnostic: it stamps exactly the
+ * scope it is handed.
  */
 function nodeIdTypes(extensions: AnyExtension[]): string[] {
   const names = resolveExtensions(extensions)
@@ -83,16 +84,17 @@ function nodeIdTypes(extensions: AnyExtension[]): string[] {
   return [...new Set(names)]
 }
 
-/** Kernel + feature extensions + the synthetic keymap extension + UniqueID,
- *  which stamps a `uid` on every content node. The entry points inject ids
- *  BEFORE content reaches the editor (see nodeIds.ts), so the extension never
- *  backfills the entry document — it covers everything born after entry:
- *  typing, splits, paste, and nodes other plugins append during a load
- *  transaction (BodyTrailingNode's trailing paragraph; see nodeIds.test.ts). */
+/** Kernel + feature extensions + the synthetic keymap extension + NodeIds
+ *  (our own uid extension — see nodeIdsExtension.ts), which stamps a `uid` on
+ *  every content node. The entry points inject ids BEFORE content reaches the
+ *  editor (see nodeIds.ts), so the extension never backfills the entry
+ *  document — it covers everything born after entry: typing, splits, paste,
+ *  and nodes other plugins append during a load transaction
+ *  (BodyTrailingNode's trailing paragraph; see nodeIds.test.ts). */
 export function buildExtensions(resolved: ResolvedFeatures): AnyExtension[] {
   // Everything that can contribute to the schema, in one list — the id scope
   // is computed from exactly this list, so the only extension outside it is
-  // UniqueID itself, which contributes no nodes by construction.
+  // NodeIds itself, which contributes no nodes by construction.
   const schemaExtensions = [
     ...kernelExtensions(resolved),
     ...resolved.extensions,
@@ -100,10 +102,6 @@ export function buildExtensions(resolved: ResolvedFeatures): AnyExtension[] {
   ]
   return [
     ...schemaExtensions,
-    UniqueID.configure({
-      attributeName: NODE_ID_ATTRIBUTE,
-      types: nodeIdTypes(schemaExtensions),
-      generateID: generateNodeId,
-    }),
+    NodeIds.configure({ types: nodeIdTypes(schemaExtensions) }),
   ]
 }

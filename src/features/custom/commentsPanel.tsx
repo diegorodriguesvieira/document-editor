@@ -10,11 +10,23 @@ import Paper from '@mui/material/Paper'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Check from '@mui/icons-material/Check'
+import ErrorOutline from '@mui/icons-material/ErrorOutline'
 import MoreVert from '@mui/icons-material/MoreVert'
+import Schedule from '@mui/icons-material/Schedule'
 import type { Editor } from '@tiptap/core'
 import { POPUP_CLASS, useDismissable, useEscapeSurface, useFeatureState } from '../../editor'
-import { applyCommentAnchor, collectCommentAnchors } from './commentAnchors'
+// Deliberate deep import: the ONE scroll implementation behind api.scrollTo
+// (the panel holds an Editor, not an api) — see scrollEditorTo's docblock.
+import { scrollEditorTo } from '../../editor/core/EditorApi'
+import {
+  segmentsFromRange,
+  textForSegments,
+  type CommentAnchorPayload,
+} from './commentAnchor'
+import { getCommentAnchorState, getCommentPosition } from './comments'
+import type { CommentSyncState } from './commentSync'
 import { useCommentsBridge } from './commentsLayer'
 import {
   useComments,
@@ -120,6 +132,7 @@ function InlineTextComposer({
   alwaysShowActions = false,
   errorText = null,
   isOutsideClick,
+  onTextChange,
   onSubmit,
   onCancel,
 }: {
@@ -131,6 +144,10 @@ function InlineTextComposer({
   alwaysShowActions?: boolean
   errorText?: string | null
   isOutsideClick?: (target: Node) => boolean
+  /** Observer for a parent-owned draft store — a composer that can be
+   *  UNMOUNTED by remote lifecycle changes (its card leaving the tab) writes
+   *  every keystroke there, and `initialText` restores it on remount. */
+  onTextChange?: (text: string) => void
   onSubmit: (text: string) => Promise<boolean>
   onCancel: () => void
 }) {
@@ -164,7 +181,10 @@ function InlineTextComposer({
         error={errorText != null}
         helperText={errorText ?? undefined}
         slotProps={{ htmlInput: { 'aria-label': fieldLabel } }}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value)
+          onTextChange?.(event.target.value)
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()
@@ -221,30 +241,91 @@ function Composer({ editor, draft }: { editor: Editor | null; draft: CommentDraf
   }
 
   const submit = async (text: string) => {
-    // Once the backend returns the created id, the draft range becomes the
-    // comment's MARK (its anchor in the document). No editor → the comment
-    // still saves, anchorless, and shows as orphaned.
-    const saved = await context.addComment(text, (id) => {
-      if (editor && !editor.isDestroyed) applyCommentAnchor(editor, id, draft)
-    })
+    // The anchor payload derives from the REMAPPED draft range at SUBMIT time
+    // (the bridge keeps `draft` mapped through every doc change — deriving at
+    // capture would ship stale geometry): one segment per textblock the range
+    // touches, quote = exactly the text those segments cover. No editor → the
+    // comment still saves, anchorless, and shows as orphaned.
+    let anchor: CommentAnchorPayload | undefined
+    if (editor && !editor.isDestroyed) {
+      const nodes = segmentsFromRange(editor.state.doc, draft.from, draft.to)
+      if (nodes.length > 0) anchor = { nodes, quote: textForSegments(editor.state.doc, nodes) }
+    }
+    // Collapse BEFORE the round-trip: the payload is captured, the draft
+    // decoration owns the range's visibility from here, and a collapse issued
+    // after the save resolves would stomp whatever the user selected during
+    // the latency window. On failure the draft survives (composer + range
+    // decoration stay), so the balloon cannot resurface either way.
+    collapseSelectionAt(editor, draft.to)
+    const saved = await context.addComment(text, anchor)
     setFailed(!saved)
-    if (saved) collapseSelectionAt(editor, draft.to)
     return saved
   }
 
   return (
-    <div className="comments-panel__composer">
-      <UserAvatar user={context.user} labels={labels} />
-      <InlineTextComposer
-        placeholder={labels.commentPlaceholder}
-        fieldLabel={labels.commentText}
-        submitLabel={labels.submitComment}
-        cancelLabel={labels.cancel}
-        errorText={failed ? context.error : null}
-        isOutsideClick={panelOutsideClick}
-        onSubmit={submit}
-        onCancel={cancel}
-      />
+    <>
+      <div className="comments-panel__composer">
+        <UserAvatar user={context.user} labels={labels} />
+        <InlineTextComposer
+          placeholder={labels.commentPlaceholder}
+          fieldLabel={labels.commentText}
+          submitLabel={labels.submitComment}
+          cancelLabel={labels.cancel}
+          errorText={failed ? context.error : null}
+          isOutsideClick={panelOutsideClick}
+          onSubmit={submit}
+          onCancel={cancel}
+        />
+      </div>
+      {/* STALE_CONTENT create rejection: someone saved over the quoted text.
+          Guidance, not the raw backend message (that one rides the banner). */}
+      {context.createError === 'stale' ? (
+        <div className="comments-panel__notice">{labels.staleCreate}</div>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * The visible tail of the doc-first anchor pipeline, per card: `pendingSave`
+ * (queued behind the next confirmed doc save), `saving` (write in flight) and
+ * `saveFailed` (both in-flush attempts failed — manual **Retry** only, which
+ * re-enqueues a payload recomputed from live state). `synced` — and comments
+ * with nothing in flight — render nothing. Sits OUTSIDE the card's jump
+ * ButtonBase: Retry is a real button and must not nest inside another.
+ */
+function SyncIndicator({
+  state,
+  labels,
+  onRetry,
+}: {
+  state: CommentSyncState | undefined
+  labels: CommentsLabels
+  onRetry: () => void
+}) {
+  if (!state || state === 'synced') return null
+  if (state === 'saveFailed') {
+    return (
+      <div className="comments-panel__sync comments-panel__sync--failed">
+        <Tooltip title={labels.anchorSaveFailed}>
+          <span role="img" aria-label={labels.anchorSaveFailed}>
+            <ErrorOutline fontSize="inherit" />
+          </span>
+        </Tooltip>
+        <Button size="small" className="comments-panel__retry" onClick={onRetry}>
+          {labels.retry}
+        </Button>
+      </div>
+    )
+  }
+  const pending = state === 'pendingSave'
+  return (
+    <div className={`comments-panel__sync comments-panel__sync--${pending ? 'pending' : 'saving'}`}>
+      <Tooltip title={pending ? labels.anchorPendingSave : labels.anchorSaving}>
+        <span role="img" aria-label={pending ? labels.anchorPendingSave : labels.anchorSaving}>
+          {pending ? <Schedule fontSize="inherit" /> : <CircularProgress size={12} />}
+        </span>
+      </Tooltip>
     </div>
   )
 }
@@ -335,13 +416,22 @@ function ActionsMenu({
   )
 }
 
-/** The reply composer a card's Reply button opens: small avatar + field. */
+/**
+ * The reply composer a card's Reply button opens: small avatar + field.
+ * The typed text is mirrored into the panel's `drafts` store keyed by the
+ * PARENT comment id: a remote status flip moves the card off the tab and
+ * unmounts this composer, and the draft must survive to the next mount.
+ * A reply rejected with PARENT_DELETED keeps the text too and swaps the
+ * error line for the "comment was deleted" notice.
+ */
 function ReplyComposer({
   comment,
+  drafts,
   onClose,
   onReplied,
 }: {
   comment: DocumentComment
+  drafts: Map<string, string>
   onClose: () => void
   onReplied: () => void
 }) {
@@ -349,10 +439,12 @@ function ReplyComposer({
   const [failed, setFailed] = useState(false)
   if (!context) return null
   const { labels } = context
+  const parentDeleted = context.parentDeletedId === comment.id
   return (
     <div className="comments-panel__reply-composer">
       <UserAvatar user={context.user} labels={labels} small />
       <InlineTextComposer
+        initialText={drafts.get(comment.id) ?? ''}
         placeholder={labels.replyPlaceholder}
         fieldLabel={labels.replyText}
         submitLabel={labels.submitReply}
@@ -360,17 +452,23 @@ function ReplyComposer({
         // Cancel visible from the start — an empty composer must still show
         // its way out.
         alwaysShowActions
-        errorText={failed ? context.error : null}
+        errorText={failed ? (parentDeleted ? labels.replyParentDeleted : context.error) : null}
+        onTextChange={(text) => drafts.set(comment.id, text)}
         onSubmit={async (text) => {
           const sent = await context.replyToComment(comment.id, text)
           setFailed(!sent)
           if (sent) {
+            drafts.delete(comment.id)
             onClose()
             onReplied()
           }
           return sent
         }}
-        onCancel={onClose}
+        onCancel={() => {
+          // Cancel is EXPLICIT abandonment — remounting must not resurrect it.
+          drafts.delete(comment.id)
+          onClose()
+        }}
       />
     </div>
   )
@@ -458,35 +556,38 @@ function ReplyRow({
  * One comment thread: avatar + author + time + text, its direct replies, and
  * a Reply footer when the backend allows (`canReply` — orphans included, the
  * discussion outlives the anchored text). Clicking the body scrolls the
- * document to the anchored range and lights it up (`comment--active`, via
- * `activeId`). Actions render from the comment's flags: the ✓ Resolve corner
- * button (`canResolve`, spinner while its mutation is in flight), and the
- * 3-dots with Edit/Archive/Delete (Delete confirms in place). While EDITING
- * the body goes inert (the orphan trick) so a click in the field can't jump,
- * and the corner hides — actions are footguns mid-edit.
- * An ORPHANED comment — its mark no longer exists in the doc (the commented
- * text was deleted) — keeps its content but loses the jump: the body shows
- * the original quote with a hint instead.
+ * document to the anchor's first live segment and lights every segment up
+ * (`comment--active`, via `activeId`). Anchor health comes from the segments
+ * PLUGIN (`getCommentAnchorState`, re-derived per transaction): `partial`
+ * (some segments dormant) adds a small badge; `orphaned` (nothing live —
+ * orphan-forever) keeps the content but loses the jump: the body shows the
+ * original quote with a hint instead. Actions render from the comment's
+ * flags: the ✓ Resolve corner button (`canResolve`, spinner while its
+ * mutation is in flight), and the 3-dots with Edit/Archive/Delete (Delete
+ * confirms in place). While EDITING the body goes inert (the orphan trick)
+ * so a click in the field can't jump, and the corner hides — actions are
+ * footguns mid-edit.
  * `frozen` (the resolved/archived tabs) is read-only + Delete: inert body
- * with the quote for context (their marks are gone by design — no anomaly
- * hint), plain reply rows, no Reply/Edit/Resolve/Archive.
+ * with the quote for context (their highlights are gone by design — no
+ * anomaly hint), plain reply rows, no Reply/Edit/Resolve/Archive.
  */
 function CommentCard({
   comment,
   editor,
-  orphan,
   frozen = false,
   announce,
   focusPanel,
+  replyDrafts,
   commentMenuItems,
   replyMenuItems,
 }: {
   comment: DocumentComment
   editor: Editor | null
-  orphan: boolean
   frozen?: boolean
   announce: (message: string) => void
   focusPanel: () => void
+  /** Panel-owned reply-draft store (id → typed text) — see ReplyComposer. */
+  replyDrafts: Map<string, string>
   commentMenuItems?: (comment: DocumentComment) => ActionsMenuItem[]
   replyMenuItems?: (reply: CommentReply, comment: DocumentComment) => ActionsMenuItem[]
 }) {
@@ -495,6 +596,14 @@ function CommentCard({
   const [replying, setReplying] = useState(false)
   const [editFailed, setEditFailed] = useState(false)
   const cardRef = useRef<HTMLLIElement>(null)
+  // Anchor health, straight from the plugin state — re-derived on every
+  // transaction, so edits that kill (or revive) segments reflect live. No
+  // editor mounted → null → never orphan-style (positions are unknowable).
+  const anchorState = useFeatureState(editor, (current) =>
+    getCommentAnchorState(current, comment.id),
+  )
+  const orphan = !frozen && anchorState === 'orphaned'
+  const partial = !frozen && anchorState === 'partial'
   const active = !orphan && !frozen && context?.activeId === comment.id
   // Clicking the HIGHLIGHT in the document activates this card — bring it
   // into the panel's scrolled viewport. (Optional chaining: jsdom has no
@@ -505,28 +614,26 @@ function CommentCard({
   if (!context) return null
   const { labels } = context
   const busy = context.busyIds.has(comment.id)
+  const syncState = context.anchorSync?.states.get(comment.id)
 
   const jump = () => {
     context.setActiveId(comment.id)
     if (!editor || editor.isDestroyed) return
-    const anchor = collectCommentAnchors(editor.state.doc).get(comment.id)
-    if (!anchor) return
-    // A COLLAPSED caret at the mark's start — selecting the whole range would
-    // summon the "Add comment" balloon over the very comment being read.
-    editor.chain().setTextSelection(anchor.from).run()
-    // PM's own scrollIntoView is a NO-OP here: prosemirror-view bails out of
-    // scrollToSelection while the DOM focus sits outside the view — and it
-    // does, the user just clicked this panel. Scroll the highlight span
-    // itself instead (the mark's rendered span carries `data-comment-id`).
-    // Optional-chained: jsdom has no scrollIntoView.
-    const escaped = globalThis.CSS?.escape?.(comment.id) ?? comment.id
-    editor.view.dom
-      .querySelector(`[data-comment-id="${escaped}"]`)
-      ?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    // The FIRST live segment in document order, from the plugin — positions
+    // shift with every edit, so this derives fresh at click time.
+    const pos = getCommentPosition(editor, comment.id)
+    if (pos == null) return
+    // A COLLAPSED caret at the anchor's start — selecting the whole range
+    // would summon the "Add comment" balloon over the very comment being read.
+    editor.chain().setTextSelection(pos).run()
+    // The api.scrollTo implementation: a DOM scroll, because PM's own
+    // scrollIntoView bails while the DOM focus sits outside the view — and it
+    // does, the user just clicked this panel.
+    scrollEditorTo(editor, pos)
   }
 
   const resolve = async () => {
-    if (await context.setCommentStatus(comment.id, 'resolved')) {
+    if (await context.setCommentStatus(comment.id, 'RESOLVED')) {
       announce(labels.announceResolved)
       focusPanel()
     }
@@ -542,7 +649,7 @@ function CommentCard({
     items.push({
       label: labels.archive,
       onClick: () =>
-        void context.setCommentStatus(comment.id, 'archived').then((done) => {
+        void context.setCommentStatus(comment.id, 'ARCHIVED').then((done) => {
           if (done) {
             announce(labels.announceArchived)
             focusPanel()
@@ -572,6 +679,9 @@ function CommentCard({
       <UserAvatar user={comment.author} labels={labels} />
       <span className="comments-panel__author">{comment.author.name}</span>
       <TimeStamp iso={comment.createdAt} />
+      {partial ? (
+        <span className="comments-panel__partial-badge">{labels.partiallyDetached}</span>
+      ) : null}
     </span>
   )
 
@@ -624,6 +734,14 @@ function CommentCard({
           <span className="comments-panel__text">{comment.text}</span>
         </ButtonBase>
       )}
+      {/* Anchor sync state — outside the ButtonBase (Retry is a button). */}
+      {!frozen ? (
+        <SyncIndicator
+          state={syncState}
+          labels={labels}
+          onRetry={() => context.anchorSync?.retryAnchor(comment.id)}
+        />
+      ) : null}
       {/* Corner BEFORE the replies: keyboard order matches the visual order
           (the container is absolutely positioned, so DOM order is free). */}
       {!editing ? (
@@ -663,6 +781,7 @@ function CommentCard({
         replying ? (
           <ReplyComposer
             comment={comment}
+            drafts={replyDrafts}
             onClose={() => {
               setReplying(false)
               // Keyboard users came from here — put them back.
@@ -691,10 +810,10 @@ function CommentCard({
  * the composer while a draft is being written, then the active tab's threads
  * — newest data straight from the adapter, refetched after every mutation.
  * Capturing a draft or clicking a highlight auto-switches to the Comments
- * tab. Mounts {@link useCommentsBridge}, so the doc stays reconciled even if
+ * tab. Mounts {@link useCommentsBridge}, so the highlights stay wired even if
  * the consumer forgot {@link CommentsLayer}. Renders nothing without a
  * {@link CommentsProvider}, and nothing while there is neither a draft nor
- * any comment of ANY status NOR an error to show.
+ * any (undeleted) comment of ANY status NOR an error to show.
  */
 export function CommentsPanel({
   editor,
@@ -711,36 +830,35 @@ export function CommentsPanel({
 }) {
   const context = useComments()
   useCommentsBridge(editor)
-  const [tab, setTab] = useState<CommentStatus>('open')
+  const [tab, setTab] = useState<CommentStatus>('OPEN')
   const [announcement, setAnnouncement] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
+  // Reply drafts by PARENT comment id: typed text survives its composer being
+  // unmounted by a REMOTE lifecycle flip (the card leaving the tab). A ref,
+  // not state — keystrokes must not re-render the panel.
+  const replyDraftsRef = useRef(new Map<string, string>())
   const draft = context?.draft ?? null
   const activeId = context?.activeId ?? null
-  // Ids anchored in the doc — an OPEN backend comment missing here is
-  // ORPHANED. (Doc-derived so edits that delete a mark reflect immediately.)
-  const anchoredKey = useFeatureState(editor, (current) =>
-    [...collectCommentAnchors(current.state.doc).keys()].sort().join(' '),
-  )
   // Composing and the active highlight live on the Comments tab — follow
   // them there. (The composer still renders on ANY tab, see below.)
   useEffect(() => {
-    if (draft) setTab('open')
+    if (draft) setTab('OPEN')
   }, [draft])
   useEffect(() => {
-    if (activeId) setTab('open')
+    if (activeId) setTab('OPEN')
   }, [activeId])
   if (!context) return null
-  const { comments, error, labels } = context
+  const { error, labels } = context
+  // Soft-deleted rows are tombstones for delta sync — never rendered.
+  const comments = context.comments.filter((comment) => !comment.isDeleted)
   // An initial-fetch failure must not be a silent nothing — show the error.
   if (!draft && comments.length === 0 && !error) return null
-  const anchoredIds =
-    anchoredKey == null ? null : new Set(anchoredKey.split(' ').filter(Boolean))
-  const openCount = comments.filter((comment) => comment.status === 'open').length
+  const openCount = comments.filter((comment) => comment.status === 'OPEN').length
   const visible = comments.filter((comment) => comment.status === tab)
   const emptyCopy: Record<CommentStatus, string> = {
-    open: labels.emptyOpen,
-    resolved: labels.emptyResolved,
-    archived: labels.emptyArchived,
+    OPEN: labels.emptyOpen,
+    RESOLVED: labels.emptyResolved,
+    ARCHIVED: labels.emptyArchived,
   }
   const countBadge = openCount > 99 ? '99+' : `${openCount}`
 
@@ -767,19 +885,19 @@ export function CommentsPanel({
         scrollButtons={false}
       >
         <Tab
-          value="open"
+          value="OPEN"
           id="comments-tab-open"
           aria-controls="comments-tabpanel"
           label={`${labels.tabOpen}${openCount > 0 ? ` (${countBadge})` : ''}`}
         />
         <Tab
-          value="resolved"
+          value="RESOLVED"
           id="comments-tab-resolved"
           aria-controls="comments-tabpanel"
           label={labels.tabResolved}
         />
         <Tab
-          value="archived"
+          value="ARCHIVED"
           id="comments-tab-archived"
           aria-controls="comments-tabpanel"
           label={labels.tabArchived}
@@ -804,17 +922,16 @@ export function CommentsPanel({
                 key={comment.id}
                 comment={comment}
                 editor={editor}
-                // No editor mounted → positions unknowable; never orphan-style.
-                orphan={tab === 'open' && anchoredIds != null && !anchoredIds.has(comment.id)}
-                frozen={tab !== 'open'}
+                frozen={tab !== 'OPEN'}
                 announce={announce}
                 focusPanel={focusPanel}
+                replyDrafts={replyDraftsRef.current}
                 commentMenuItems={commentMenuItems}
                 replyMenuItems={replyMenuItems}
               />
             ))}
           </ul>
-        ) : !(tab === 'open' && draft) ? (
+        ) : !(tab === 'OPEN' && draft) ? (
           <div className="comments-panel__empty">{emptyCopy[tab]}</div>
         ) : null}
       </div>

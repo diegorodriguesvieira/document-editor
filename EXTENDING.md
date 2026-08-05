@@ -253,38 +253,50 @@ history and scroll survive. A consumer `renderFooter` owns its own gating.
 Programmatic `api.exec`/`api.setJSON` stay available — the prop gates the UI,
 not the API.
 
-**Comments are anchored IN the document, owned by YOUR backend**: the anchor
-is a `comment` mark carrying only the backend's id — it SERIALIZES
-(`marks: [{ "type": "comment", "attrs": { "commentId": "<id>" } }]` in JSON,
-`<span class="comment" data-comment-id="…">` in HTML) and ProseMirror moves
-it through every edit. Everything else (text, author, replies, permission
-flags, status) lives behind your `CommentsAdapter`. Highlights, the panel
+**Comments are an EDIT-TIME OVERLAY, owned by YOUR backend** — nothing about
+a comment is ever written into the document. Each backend row carries its
+anchor as `nodes: [{ id, from, to }]` (the target node's `uid` + node-local
+content offsets) plus `quote` (the covered text at the last write — the
+backend's stale-content checksum); the SDK resolves the segments into
+DECORATIONS and maps them through every edit, so review mode is provably
+zero-write (no doc transaction, no `onChange`). The offset norm is the FE/BE
+contract: 0-based, end-exclusive; text counts one per character; inline atoms
+(variable chips) and hardBreak count exactly 1 and quote nothing — your
+backend's quote validator must pass the shared golden vectors in
+`src/features/custom/commentAnchor.golden.ts` verbatim. Highlights, the panel
 (status tabs, replies, edit-in-place) and every action work in BOTH modes —
 only COMPOSING a new comment (the balloon) is review-only (`editable={false}`).
 
 ```tsx
 import {
   CommentsFeature, CommentsLayer, CommentsPanel, CommentsProvider,
-  type CommentsAdapter,
+  useComments, type CommentsAdapter,
 } from '@your-scope/document-editor'
 
-// The endpoint seam — all six methods, over your HTTP client. IDs are minted
-// by YOUR backend and must be globally unique (update/remove/setStatus take a
-// comment id OR a reply id). Throw localized Errors: a thrown message is
-// shown VERBATIM to the user in the panel.
+// The endpoint seam, over your HTTP client. IDs are minted by YOUR backend
+// and must be globally unique (update/remove/setStatus take a comment id OR
+// a reply id). Throw localized Errors: a thrown message is shown VERBATIM in
+// the panel. Coded rejections the SDK reacts to: STALE_CONTENT (add /
+// updateAnchor whose quote no longer matches the SAVED doc) and
+// PARENT_DELETED (reply to a soft-deleted comment).
 const adapter: CommentsAdapter = {
-  list: () => api.get('/documents/42/comments'),            // EVERY status; panel filters
-  add: (input) => api.post('/documents/42/comments', input), // {text, quote} → returns {id}
+  list: () => api.get('/documents/42/comments'),             // EVERY status; panel filters
+  add: (input) => api.post('/documents/42/comments', input), // {text, quote, nodes} → full row
   reply: (commentId, input) => api.post(`/comments/${commentId}/replies`, input),
   update: (id, input) => api.patch(`/comments/${id}`, input),
   setStatus: (id, input) => api.patch(`/comments/${id}/status`, input),
   remove: (id) => api.delete(`/comments/${id}`),
+  // The anchor write channel — implementing it turns the sync pipeline on.
+  // NOT gated by canEdit: whoever edits the document reshapes anchors of any
+  // author. Same quote validation as `add`.
+  updateAnchor: (id, payload) => api.patch(`/comments/${id}/anchor`, payload),
 }
 
 <CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
   <DocumentEditor
-    features={[…, CommentsFeature]}   // the mark + interaction kernel
+    features={[…, CommentsFeature]}   // the segments/decoration kernel
     editable={!preview}
+    onChange={(doc) => savePump(doc)} // the DOC-FIRST pump — see below
     renderBubble={(ctx) => (
       <>
         <BubbleToolbar {...ctx} />            {/* edit mode only */}
@@ -298,25 +310,49 @@ const adapter: CommentsAdapter = {
 
 Things the first integration must know:
 
-- **Commenting WRITES to the document.** Anchoring a saved comment and the
-  reconciliation strips (below) dispatch real doc transactions, which fire
-  your debounced `onChange` — including while `editable={false}`. Keep your
-  save path live in review mode, or every anchor created in a review session
-  is lost on reload (the comments come back as orphans).
+- **The DOC-FIRST pipeline** (the one wiring you MUST add for edit mode):
+  edits move anchors, the SDK re-derives each touched comment's `nodes[]` +
+  `quote` (debounced) and QUEUES the write — nothing travels on its own. Your
+  save pump releases the queue only after the document save confirmed:
+
+  ```ts
+  const savePump = async (doc: DocumentJSON) => {
+    await api.put('/template', doc)                 // the document FIRST
+    await commentsContext.anchorSync?.flushAnchors() // then the anchors, one by one
+  }
+  ```
+
+  (`useComments().anchorSync` — null while your adapter has no
+  `updateAnchor`.) A failed doc save leaves the queue untouched. Per-comment
+  states surface on the cards: `pendingSave` (clock) → `saving` (spinner) →
+  `synced`, or `saveFailed` (warning + **Retry** — the retry re-derives a
+  FRESH payload from the live document, never replays the failed one, and
+  rides the next flush). In edit mode new-comment POSTs join the same queue
+  (never validate a quote against an unsaved doc); in review mode they post
+  immediately. Replies/status/delete are doc-independent and go straight out.
+- **Supported topology**: ONE editor + N reviewers commenting. The list is a
+  SNAPSHOT (fetch on mount + refetch after own mutations) — propagating other
+  people's comments is the consumer's job via `refresh()` or polling. Two
+  racing writers on the same anchor are resolved by the backend's quote
+  validation, not by the client.
+- **Orphans are forever**: delete the commented text and the card persists —
+  quote + "Original text was removed", still replyable/deletable. Nothing
+  auto-reattaches; only undo (or the anchored node's uid reappearing, e.g.
+  cut+paste) revives the highlight. A PARTIALLY surviving anchor gets a badge.
+- **Legacy documents**: the old model serialized anchors as `comment` marks;
+  that mark is GONE from the schema, so a stored doc still carrying them
+  THROWS on load. Run it through `stripCommentMarks(doc)` once on the way in
+  — it sheds only the legacy comment marks, everything else verbatim.
 - **Actions come from YOUR flags, never from authorship**: each comment
   carries `canEdit/canReply/canDelete/canResolve/canArchive` (each reply
   `canEdit/canDelete`) stamped by the backend; `user` only feeds the composer
-  avatar (omit it for anonymous commenting).
-- **Reconciliation**: after each successful `list()`, marks whose id is not
-  an OPEN comment are silently stripped (resolve/archive/delete sheds the
-  highlight); backend comments without a mark render as ORPHANED cards
-  (quote + hint) — still replyable/deletable. It runs from `CommentsLayer`
-  AND `CommentsPanel` (both mount `useCommentsBridge`), so mounting either
-  keeps the document clean.
+  avatar (omit it for anonymous commenting). Soft-deleted rows (`isDeleted`)
+  may stay in `list()` as tombstones — the UI ignores them.
 - **Custom surfaces**: a custom panel is buildable — `useCommentsBridge`,
-  `applyCommentAnchor` (the `applyAnchor` callback of `addComment`),
-  `collectCommentAnchors` and `commentBalloonShouldShow` are all exported.
-  For just EXTENDING the stock panel's 3-dots menus, pass
+  `commentBalloonShouldShow`, and the anchor-health reads the stock panel
+  itself uses (`getCommentAnchorState`, `getCommentPosition`) are exported.
+  For just EXTENDING the stock
+  panel's 3-dots menus, pass
   `commentMenuItems={(comment) => [{ label, onClick, confirmLabel? }]}` (and
   `replyMenuItems={(reply, comment) => …}`) to `CommentsPanel` — items are
   data (`ActionsMenuItem`), land between the built-ins and Delete, inherit
@@ -325,9 +361,12 @@ Things the first integration must know:
 - **i18n**: every UI string is overridable via
   `<CommentsProvider labels={{ … }}>` (`CommentsLabels`, English defaults).
 
-The active highlight is BIDIRECTIONAL: clicking a card scrolls to the mark
-and lights it up (`comment--active`); clicking a highlight in the document
-lights (and scrolls to) its card in the panel.
+The active highlight is BIDIRECTIONAL: clicking a card scrolls to the
+anchor's first live segment and lights every segment (`comment--active`);
+clicking a highlight in the document lights (and scrolls to) its card. The
+faithful reference integration — mock endpoints with real quote validation,
+failure knobs and the save pump — is `src/app/commentsMock.ts` + the
+Comments stories.
 
 ## 7. Save & load
 
@@ -360,22 +399,24 @@ carries a `uid` attribute: a unique id minted by the SDK. You get this for
 free: raw documents are stamped on the way
 in (initial `content` and `api.setJSON` fill missing ids and re-mint
 duplicates, keeping the first occurrence in document order), and nodes born
-while editing (typing, splits, paste) are stamped by the kernel's UniqueID
+while editing (typing, splits, paste) are stamped by the kernel's NodeIds
 extension. Your feature's nodes are covered with zero configuration — even
 nodes hidden inside a kit extension's `addExtensions()`.
 
 Rules and caveats:
 
 - **Never mint or copy a `uid` yourself** (e.g. `insertContent` with a
-  hand-rolled `uid`) — programmatic inserts aren't policed, and a copied id
-  silently breaks the uniqueness invariant.
+  hand-rolled `uid`) — a COLLIDING id is healed by a re-mint, but an id whose
+  original holder is gone is silently adopted, stealing that node's identity
+  (and anything anchored to it, like comments).
 - **`uid` is not your feature's `id`.** Business identity (the variable
   chip's `attrs.id` → `data-variable`) stays yours; `uid` is the SDK's.
-- **Ids are unique, not eternal.** An id survives typing around the node and
-  save/reload, but copy-like operations re-mint: paste always does, and
-  dragging a block to a new position counts as one (ProseMirror flags every
-  drag as a potential copy). Key long-lived external data on business ids,
-  not on `uid`.
+- **Ids are unique, not eternal.** An id survives typing around the node,
+  save/reload, and MOVES — dragging a block to a new position and cut+paste
+  both keep it. What re-mints is DUPLICATION: pasting while the source is
+  still in the document re-mints the pasted copy (the source keeps its id),
+  and a block-type conversion may change the id. Key long-lived external
+  data on business ids, not on `uid`.
 - `api.getHTML()` serializes `uid` as `data-uid` on every node whose
   `renderHTML` merges `HTMLAttributes` (today: all of them — pinned by the
   composition suite). The LIVE editor DOM is different: node views build
@@ -414,6 +455,9 @@ async function pump() {
   dirty = null
   try {
     await save(doc)
+    // Using review comments? This is the doc-first moment: the document save
+    // just CONFIRMED, so release the queued anchor writes (§6).
+    await commentsContext.anchorSync?.flushAnchors()
   } finally {
     inFlight = false
     pump() // anything that arrived meanwhile goes out now
@@ -467,10 +511,12 @@ Backend-contract values are exported for whoever renders the document:
 `ConditionOperand`, `CONDITION_SIGNATURES` (operator arity table),
 `isCompleteCondition` (the publish gate), and the comments backend contract:
 `DocumentComment`/`CommentReply`/`CommentStatus`/`CommentUser`/
-`CommentsAdapter`/`CommentDraft`/`CommentAnchor`, plus
+`CommentsAdapter`/`CommentDraft`, the anchor shapes
+`CommentNodeSegment`/`CommentAnchorPayload`/`CommentSyncState` (+ the
+`STALE_CONTENT`/`PARENT_DELETED` codes with their `is…Error` recognizers and
+the `stripCommentMarks` legacy-doc valve), plus
 `CommentsLabels`/`DEFAULT_COMMENTS_LABELS` (the i18n seam) and the custom-
-surface toolkit `useCommentsBridge`/`applyCommentAnchor`/
-`collectCommentAnchors`/`commentBalloonShouldShow`.
+surface toolkit `useCommentsBridge`/`commentBalloonShouldShow`.
 The condition grammar, coercion rules and error policy live in
 `CONDITION-FORMAT.md`.
 

@@ -269,75 +269,83 @@ affordance simply no-ops at the limit. Contrast with the header/footer
 no-op), *normalize* when malformed content arrives from outside (loads,
 pastes) and a canonical shape exists.
 
-### Comments — anchors in the doc, content on the backend
+### Comments — external anchors, zero document writes
 
-A comment is split in two: its ANCHOR is a `comment` mark in the document
-carrying only the backend's id (`data-comment-id` in HTML, `attrs.commentId`
-in JSON — it serializes, that's the point: ProseMirror maps the range through
-every edit for free), while its CONTENT (`text`/`author`/`createdAt`/`quote`)
-stays backend-side behind `CommentsAdapter`. `add({text, quote})` RETURNS the
-created id; the frontend then marks the draft range with it (`applyCommentAnchor`,
-`addToHistory: false` — undo never sheds anchors). Highlights, the panel and
-delete work in BOTH modes; only COMPOSING is review-only (`editable={false}`
-blocks user edits; mark transactions are programmatic dispatches, which
-`editable` does not gate). Mark spec: `inclusive: false` (typing at an edge
-doesn't grow the comment), `excludes: ''` (overlapping comments nest spans).
+A comment lives ENTIRELY outside the document. The backend row carries the
+anchor — `nodes: [{ id, from, to }]`, the target node's `uid` plus node-local
+content offsets — and `quote`, the covered text at the last anchor write (the
+backend's stale-content checksum). The segments plugin (`comments.ts`)
+resolves each segment against the uid index, maps the live ranges through
+every transaction with the classic bias pair (`map(from, 1)`/`map(to, -1)` —
+edge typing lands outside), normalizes after every mapping (sort + coalesce —
+without it, typing at the seam of two touching ranges opens a permanent hole)
+and paints DISJOINT-SLICE decorations: `.comment` per slice, `--stacked` on
+overlaps, `data-comment-id` = innermost (smallest TOTAL covered length),
+`data-comment-ids` = every covering id. Segments whose text is deleted go
+DORMANT (`stored` retained verbatim; all-dormant = tombstone, and ordinary
+typing never re-resolves — the anti-ghost rule). Revival has exactly three
+triggers: the uid reappearing (cut+paste restores highlights with zero
+traffic — offsets are move-invariant), undo/redo, and the `documentReplaced`
+meta `api.setJSON` stamps. A paste that DUPLICATES a commented node
+(uid-collision remap meta from the NodeIds kernel) extends the comment onto
+the copy by content-window intersection. The offset norm (text = 1/char;
+inline atoms and hardBreak = 1, quoting nothing) is pinned by the shared
+FE/BE golden vectors in `commentAnchor.golden.ts`.
 
-Threads and permissions are backend-shaped too: each comment carries
-`canEdit`/`canReply`/`canDelete`/`canResolve`/`canArchive` (and each reply
-`canEdit`/`canDelete`) — the panel renders actions from those flags ALONE,
-never inferring from authorship (`user` only feeds the composer avatar).
-Replies are ONE level (no reply-to-reply, enforced by `CommentReply` having
-no `canReply`), have no anchor of their own, and stay available on ORPHANED
-comments — the discussion outlives the anchored text.
-`adapter.update(id)`/`remove(id)` take a comment OR reply id: the backend
-mints globally-unique ids, so nested-route backends resolve the parent from
-their own data. Replying and editing work in BOTH modes; only the draft
-composer is review-only.
+THE ZERO-WRITE GUARANTEE: highlights are decorations over external anchors —
+creating/resolving/deleting comments and every anchor movement dispatch NO
+doc-changing transaction and fire NO `onChange`, in either mode (pinned by
+the read-only round-trip test). The old warning that review mode loses
+anchors without a live save path is obsolete: there is nothing to lose.
+Legacy documents that still carry the RETIRED `comment` mark THROW on load
+(the mark left the schema; `enableContentCheck` refuses unknown marks) — the
+exported `stripCommentMarks(doc)` sheds them, everything else verbatim.
 
-Comments also carry a backend-owned `status` (`open`/`resolved`/`archived`;
-`adapter.setStatus(id, {status})`, one-way for now) — the panel's MUI tabs
-("Comments (n)" counts open threads / Resolved / Archived) filter the single
-`list()`. Only OPEN comments keep a mark: reconciliation's keep-set is the
-open ids (plus this session's `pendingAnchorIds` — fresh anchors survive a
-backend whose read path lags its writes), so resolving/archiving sheds the
-highlight from the document (off-history — undo cannot resurrect it).
-Resolved/archived cards are frozen — inert body with the quote for context,
-plain reply rows, Delete only. Capturing a draft (or clicking a highlight)
-auto-switches to the Comments tab, but the composer renders on every tab: a
-manual flip mid-typing must never destroy typed text.
+WRITES are doc-first (the reporter → queue → pump chain): each transaction the
+segments plugin detects geometry changes and marks comments dirty; a trailing
+debounce derives the canonical payload — live ranges re-derived from the doc
+(`segmentsFromRange`), dormant segments passed through VERBATIM (never
+recomputed, never clamped, never `[]`) — and drops it into the sync queue
+(`commentSync.ts`: latest-wins per comment, sequential flush, one automatic
+in-flush retry then `saveFailed`). NOTHING travels until the consumer's save
+pump calls `anchorSync.flushAnchors()` AFTER its document save resolves — the
+call order IS the guarantee that the backend always validates quotes against
+the doc it just stored. Per-comment states (`pendingSave/saving/saveFailed` +
+Retry, which re-derives a FRESH payload) render on the panel cards. Creates
+recompute `nodes` + `quote` from the REMAPPED draft at submit; in edit mode
+the POST itself joins the flush queue, in review it goes straight out.
+Replies/status/delete are doc-independent and immediate. Coded rejections:
+`STALE_CONTENT` (a CREATE's quote mismatch → inline "reload" notice, never
+auto-retried; an ANCHOR patch does not special-case the code — it rides the
+flush's single automatic retry and then surfaces as `saveFailed` + Retry) and
+`PARENT_DELETED` (reply raced a soft-delete → typed text kept + notice).
 
-WHAT WRITES TO THE DOCUMENT, AND WHEN: anchoring a saved comment
-(`applyCommentAnchor`) and every reconciliation strip dispatch real
-doc-changing transactions (`addToHistory: false` exempts undo, not the
-`update` event) — the consumer's debounced `onChange` fires, INCLUDING in
-review mode. A consumer whose save path sleeps while `editable={false}`
-loses every anchor created during review. The serialized contract:
-`marks: [{ "type": "comment", "attrs": { "commentId": "<id>" } }]` in JSON,
-`<span class="comment" data-comment-id="…">` in HTML. The draft is REMAPPED
-through doc changes while it lives (collapse cancels it), so the pending
-anchor cannot land on the wrong text. Reconciliation lives in
-`useCommentsBridge`, mounted by BOTH `CommentsLayer` and `CommentsPanel`
-(idempotent — either component keeps the doc clean); it is gated on
-`listError` only, so a failed MUTATION never freezes stripping. Adapter
-errors: thrown `Error` messages are user-facing copy, verbatim (the panel's
-banner + the failing composer's helperText) — adapters throw localized
-messages. All UI strings flow through `CommentsLabels`
-(`<CommentsProvider labels>`).
+Threads and permissions are backend-shaped: `canEdit`/`canReply`/`canDelete`/
+`canResolve`/`canArchive` per comment (reply: `canEdit`/`canDelete`) — the
+panel renders from flags ALONE, never authorship. Replies are ONE level, have
+no anchor of their own, and stay available on ORPHANED comments (the card
+persists forever — quote + hint, no jump; PARTIAL anchors get a badge).
+`status` tabs filter the single `list()`; only OPEN, undeleted rows reach the
+plugin, so resolving/archiving/soft-deleting sheds the highlight by exclusion.
+Soft-deleted rows may stay in `list()` as `isDeleted` tombstones — the UI
+skips them, and the provider reconciles `activeId` against every refreshed
+list (a remote lifecycle flip must not leave a dangling active highlight).
+Supported topology: one editor + N reviewers; the list is a snapshot —
+cross-reviewer propagation is the consumer's (`refresh()`/polling).
 
 The pieces: `CommentsProvider` (consumer context: `user` + adapter, fetch on
-mount, REFETCH after every mutation — never optimistic) owns the data;
-`comments.ts` holds the mark + the kernel plugin (draft/active decorations
-over the marked segments, innermost-wins click reporting, `transformPasted`
-stripping comment marks — paste must not duplicate an id; note PM also runs
-it on internal drag-MOVES, so dragging commented text orphans the comment);
-`commentAnchors.ts` is the pure doc-walk toolkit; `CommentsLayer` syncs
-draft/active into storage, floats the balloon, and RECONCILES doc↔backend
-after each successful fetch — marks the backend doesn't know are stripped
-(mount it in both modes: it is the bridge, not just the balloon). The reverse
-mismatch — a backend comment whose mark is gone (text deleted, drag-moved) —
-stays in `CommentsPanel` as an ORPHANED card: quote + hint, no jump, still
-deletable.
+mount, refetch after every mutation + the optimistic full-row insert when
+`add` returns one) owns the data and the sync queue; `comments.ts` holds the
+segments plugin + the interaction kernel (draft decoration, innermost-wins
+click reporting) and the reporter; `commentAnchor.ts` is the pure geometry
+module (resolve/derive/normalize + `stripCommentMarks`); `commentSync.ts` the
+pure queue; `CommentsLayer` floats the balloon and runs `useCommentsBridge`
+(also mounted by `CommentsPanel` — idempotent): landing open rows in the
+plugin storage, wiring the reporter's sink into the queue, remapping the
+draft, mirroring `isEditable` into the create-queueing flag, and registering
+the fresh-payload source Retry reads. Adapter errors: thrown `Error` messages
+are user-facing copy, verbatim; all UI strings flow through `CommentsLabels`
+(`<CommentsProvider labels>`).
 
 ## 9. CSS architecture (Emotion, no .css files)
 

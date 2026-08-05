@@ -87,7 +87,7 @@ export function createMockEditor(init: MockEditorInit = {}): MockEditor {
     getJSON: () => doc,
     setJSON: (next) => {
       // No uid injection here, unlike the real EditorApi: the mock has no
-      // schema and no UniqueID, and wiring tests never assert on node ids.
+      // schema and no NodeIds, and wiring tests never assert on node ids.
       doc = next
       emit('update')
     },
