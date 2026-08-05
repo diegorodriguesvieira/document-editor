@@ -47,8 +47,8 @@ body {
 }
 
 /* The autosave banners, above the canvas (full width, never inside the
-   editor's own flex chain). Amber for "retrying", red for the terminal
-   version conflict. */
+   editor's own flex chain). Amber for "retrying", red for the version
+   conflict that stops saving for good. */
 .app__banner {
   display: flex;
   align-items: center;

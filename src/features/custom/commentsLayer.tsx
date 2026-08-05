@@ -157,13 +157,13 @@ export function useCommentsBridge(editor: Editor | null): void {
     editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false))
   }, [editor, anchorRecords])
 
-  // The envelope bridge: the provider's collectSavePayload reads the doc,
-  // the dirty anchors and the baselines through these editor-side seams —
-  // all against the LIVE state, in one synchronous frame (the coherence law).
+  // The envelope bridge: the provider's collectSavePayload reads the dirty
+  // anchors and the baselines through these editor-side seams — all against
+  // the LIVE state, inside the save layer's collect frame (the coherence law;
+  // the document half is snapshotted there, from this same editor).
   useEffect(() => {
     if (!editor || editor.isDestroyed || !registerAnchorBridge) return
     const bridge: CommentAnchorBridge = {
-      getDoc: () => editor.getJSON(),
       collect: () => getCommentsStorage(editor)?.collectDirtyAnchors?.() ?? [],
       confirm: (reports) => getCommentsStorage(editor)?.confirmAnchorsSaved?.(reports),
       dirtyIds: () => getCommentsStorage(editor)?.dirtyAnchorIds?.() ?? [],

@@ -314,10 +314,25 @@ describe('<App /> autosave envelope', () => {
       editor().commands.insertContent(text)
     })
 
+  let view: ReturnType<typeof render>
   beforeEach(async () => {
     commentsApi.failNext.clear()
-    render(<App />)
+    view = render(<App />)
     await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+  }, 20000)
+
+  it('teardown FLUSHES a pending autosave window — closing the tab does not drop the last edits', async () => {
+    const before = envelopePuts()
+    edit('typed, paused, then gone')
+    // Long enough to arm the autosave window, short enough to still be inside
+    // it: the unmount is what has to send, not the timer.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600))
+    })
+
+    view.unmount()
+
+    await waitFor(() => expect(envelopePuts()).toBe(before + 1), { timeout: CYCLE })
   }, 20000)
 
   it('edits during a slow save coalesce into ONE follow-up envelope — never a self-conflict', async () => {
@@ -352,7 +367,7 @@ describe('<App /> autosave envelope', () => {
 
       // At most two: the in-flight one plus the single coalesced follow-up.
       expect(settled - before).toBeLessThanOrEqual(2)
-      // And no conflict was ever raised — the terminal notice never appeared.
+      // And no conflict was ever raised — the reload notice never appeared.
       expect(screen.queryByText(/refresh/i)).toBeNull()
     } finally {
       commentsApi.latencyMs = 0

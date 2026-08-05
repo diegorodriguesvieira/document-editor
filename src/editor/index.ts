@@ -68,6 +68,18 @@ export { EditorContent } from '@tiptap/react'
 export type { DocumentJSON } from './core/document'
 export { hasTopLevelNode } from './core/document'
 export { injectNodeIds, stripNodeIds } from './core/nodeIds'
+// Autosave: the save cycle (debounce, one-in-flight, stopping for good) is
+// the SDK's; the endpoint, the cadence and when to stop are yours.
+// Features that must be persisted WITH the document (comments' anchors)
+// register a slice of the envelope.
+export { DocumentSaveProvider, useDocumentSave } from './core/documentSave'
+export type {
+  DocumentSaveContributor,
+  DocumentSaveEnvelope,
+  DocumentSaveHandle,
+  DocumentSaveOptions,
+  DocumentSaveState,
+} from './core/documentSave'
 
 // Authoring surface for custom features
 export * from './authoring'

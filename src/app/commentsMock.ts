@@ -81,6 +81,23 @@ export type MockFailureKind = 'save' | 'add'
 /** Optimistic-concurrency rejection: the envelope carried a stale `versionId`. */
 export const VERSION_CONFLICT = 'VERSION_CONFLICT'
 
+/**
+ * Recognizes {@link VERSION_CONFLICT} in any of the shapes it may arrive in —
+ * lives HERE, next to the code that throws it: whoever defines a rejection
+ * owns identifying it, or every caller reinvents a weaker check.
+ *
+ * This is what a consumer hands the save layer as `shouldStop`: another
+ * session owns the document now, so every retry would be rejected identically
+ * and saving must stop instead of promising a retry it cannot deliver.
+ */
+export const isVersionConflict = (failure: unknown): boolean => {
+  if (typeof failure === 'string') return failure.includes(VERSION_CONFLICT)
+  if (typeof failure !== 'object' || failure === null) return false
+  const { code, message } = failure as { code?: unknown; message?: unknown }
+  if (code === VERSION_CONFLICT) return true
+  return typeof message === 'string' && message.includes(VERSION_CONFLICT)
+}
+
 /** An existing comment whose anchor moved in this save. */
 export interface SaveEnvelopeAnchor {
   id: string

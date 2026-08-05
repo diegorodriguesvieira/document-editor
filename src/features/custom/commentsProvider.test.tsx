@@ -1,11 +1,16 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import type { JSONContent } from '@tiptap/core'
+import { DocumentSaveProvider, type Editor } from '../../editor'
+import { useDocumentSaveRegistry } from '../../editor/core/documentSave'
+import { renderEditor } from '../../test/editorHarness'
 import type { CommentAnchorPayload, CommentAnchorReport } from './commentAnchor'
 import {
   CommentsProvider,
   type CommentAnchorBridge,
   type CommentAnchorSync,
+  type CommentSaveCreate,
   PARENT_DELETED,
   STALE_CONTENT,
   isParentDeletedError,
@@ -112,16 +117,55 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+/** Hands a headless editor to the save layer, the way `useDocumentEditor`
+ *  does for React-mounted ones — without it a cycle has no document to carry
+ *  and never calls `save`. */
+function RegisterEditor({ editor }: { editor: Editor }) {
+  const registry = useDocumentSaveRegistry()
+  useEffect(() => registry?.registerEditor(editor), [registry, editor])
+  return null
+}
+
+/** The envelope as this suite's backend sees it. */
+type Envelope = {
+  doc: JSONContent
+  anchors: CommentAnchorReport[]
+  creates: CommentSaveCreate[]
+}
+
+/** A save layer whose cycles never complete — for tests that drive
+ *  collect/confirm by hand and must not have a real cycle confirming
+ *  underneath them. Never combine with a REVIEW-mode create: that one awaits
+ *  the in-flight save, by design. */
+const pendingSave = () => vi.fn((_envelope: Envelope) => new Promise<never>(() => {}))
+
+/**
+ * Mount the provider. Passing `save` puts a real {@link DocumentSaveProvider}
+ * above it (plus a live editor for its cycles to carry) — that is what makes
+ * edit-mode creates ride the envelope. Without it there is no envelope, and
+ * creates POST immediately.
+ */
 function mount(
   adapter: CommentsAdapter,
   user: CommentUser | undefined = ANA,
-  onFlushNeeded?: () => void,
+  save?: (envelope: Envelope) => Promise<unknown>,
 ) {
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <CommentsProvider user={user} adapter={adapter} onFlushNeeded={onFlushNeeded}>
-      {children}
-    </CommentsProvider>
-  )
+  const editor = save ? renderEditor([]).editor : null
+  // The save window is long on purpose: these tests drive the cycle
+  // explicitly, so a debounced one must never fire underneath them.
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    save && editor ? (
+      <DocumentSaveProvider save={save} debounceMs={1000}>
+        <RegisterEditor editor={editor} />
+        <CommentsProvider user={user} adapter={adapter}>
+          {children}
+        </CommentsProvider>
+      </DocumentSaveProvider>
+    ) : (
+      <CommentsProvider user={user} adapter={adapter}>
+        {children}
+      </CommentsProvider>
+    )
   return renderHook(() => useComments(), { wrapper })
 }
 
@@ -437,7 +481,6 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
 
   function fakeBridge(overrides: Partial<CommentAnchorBridge> = {}): CommentAnchorBridge {
     return {
-      getDoc: () => ({ type: 'doc', content: [] }),
       collect: () => [],
       confirm: vi.fn(),
       dirtyIds: () => [],
@@ -450,7 +493,7 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
 
   it('collectSavePayload is null without a bridge — and creates never park without a pump', async () => {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter) // no onFlushNeeded → no envelope pump
+    const { result } = mount(adapter) // no save layer → no envelope to ride
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
     expect(result.current!.anchorSync!.collectSavePayload()).toBeNull()
@@ -464,17 +507,12 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
     expect(adapter.add).toHaveBeenCalledTimes(1)
   })
 
-  it('the envelope snapshots doc + anchors coherently; badges go pendingSave → saving', async () => {
+  it('the collected slice carries the dirty anchors; badges go pendingSave → saving', async () => {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter, ANA, () => {})
+    const { result } = mount(adapter, ANA, pendingSave())
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
-    const doc = { type: 'doc', content: [{ type: 'paragraph' }] }
-    const bridge = fakeBridge({
-      getDoc: () => doc,
-      collect: () => [REPORT],
-      dirtyIds: () => ['c-9'],
-    })
+    const bridge = fakeBridge({ collect: () => [REPORT], dirtyIds: () => ['c-9'] })
     act(() => result.current!.registerAnchorBridge(bridge))
     act(() => result.current!.notifyAnchorLedgerChanged())
     expect(result.current!.anchorSync!.states.get('c-9')).toBe('pendingSave')
@@ -483,14 +521,27 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
     act(() => {
       payload = result.current!.anchorSync!.collectSavePayload()
     })
-    expect(payload).toMatchObject({ doc, anchors: [REPORT], creates: [] })
+    // The document it belongs with is the save layer's half of the frame —
+    // pinned in documentSave.test.tsx, deliberately not duplicated here.
+    expect(payload).toMatchObject({ anchors: [REPORT], creates: [] })
     expect(result.current!.anchorSync!.states.get('c-9')).toBe('saving')
   })
 
-  it('a queued create asks the pump for a cycle, rides the envelope and settles on confirm', async () => {
+  it('a queued create asks for a cycle, rides the envelope and settles on confirm', async () => {
     const adapter = fakeAdapter()
-    const onFlushNeeded = vi.fn()
-    const { result } = mount(adapter, ANA, onFlushNeeded)
+    // A backend that mints the rows the envelope asked for — the response
+    // shape the save layer relays back to the contributors.
+    const sent: Envelope[] = []
+    const save = vi.fn(async (envelope: Envelope) => {
+      sent.push(envelope)
+      return {
+        created: envelope.creates.map((create) => ({
+          tempId: create.tempId,
+          row: saved('c-created', create.text),
+        })),
+      }
+    })
+    const { result } = mount(adapter, ANA, save)
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
     const bridge = fakeBridge({ collect: () => [REPORT] })
@@ -499,39 +550,37 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
     act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'draft-time quote' }))
 
     let queued!: Promise<boolean>
+    // Sync act: leaving it flushes the effect that asks for the cycle (which
+    // must run AFTER the create is live in the plugin).
     act(() => {
       queued = result.current!.addComment('queued in edit mode', {
         nodes: HELLO_NODES,
         quote: 'submit-time quote',
       })
     })
+    await act(async () => {
+      await queued
+    })
     // Parked for the envelope — the adapter's POST is NOT used in edit mode —
-    // and the pump was asked to run NOW (no waiting for an organic edit).
+    // and a cycle went out NOW: submitting a comment changes no text, so
+    // waiting for the save window to arm would park it until the next edit.
     expect(adapter.add).not.toHaveBeenCalled()
-    expect(onFlushNeeded).toHaveBeenCalledTimes(1)
+    expect(save).toHaveBeenCalledTimes(1)
     expect(result.current!.draft).toBeNull() // optimistic clear
 
-    let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
-    act(() => {
-      payload = result.current!.anchorSync!.collectSavePayload()
-    })
     // RE-DERIVED, never replayed: the plugin tracks the queued create under
     // its tempId, so the envelope carries the range as it stands NOW (the
     // bridge's payloadFor) instead of the submit-time freeze.
-    expect(payload!.creates).toEqual([
+    expect(sent[0].creates).toEqual([
       {
-        tempId: payload!.creates[0].tempId,
+        tempId: sent[0].creates[0].tempId,
         text: 'queued in edit mode',
         nodes: HELLO_NODES,
         quote: 'hello',
       },
     ])
-
-    act(() =>
-      result.current!.anchorSync!.confirmSaved(payload!.token, {
-        created: [{ tempId: payload!.creates[0].tempId, row: saved('c-created', 'queued in edit mode') }],
-      }),
-    )
+    // Confirmed by the backend's response: the composer's promise settles and
+    // the anchors collected in that same envelope become baselines.
     expect(await queued).toBe(true)
     expect(bridge.confirm).toHaveBeenCalledWith([REPORT])
     expect(adapter.add).not.toHaveBeenCalled()
@@ -547,7 +596,7 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
 
   it('discardSave keeps everything queued — the next collect resends the create', async () => {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter, ANA, () => {})
+    const { result } = mount(adapter, ANA, pendingSave())
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
     act(() => result.current!.registerAnchorBridge(fakeBridge({ dirtyIds: () => ['c-9'] })))
@@ -575,7 +624,7 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
 
   it('a stale token cannot confirm — only the LATEST collect counts', async () => {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter, ANA, () => {})
+    const { result } = mount(adapter, ANA, pendingSave())
     await waitFor(() => expect(result.current!.loading).toBe(false))
 
     const bridge = fakeBridge({ collect: () => [REPORT] })
@@ -706,7 +755,6 @@ describe('queued creates are live, not frozen', () => {
 
   function bridgeWith(payloadFor: (id: string) => CommentAnchorPayload | null): CommentAnchorBridge {
     return {
-      getDoc: () => ({ type: 'doc', content: [] }),
       collect: () => [],
       confirm: vi.fn(),
       dirtyIds: () => [],
@@ -714,9 +762,9 @@ describe('queued creates are live, not frozen', () => {
     }
   }
 
-  async function queueOne(onFlushNeeded = () => {}, bridge?: CommentAnchorBridge) {
+  async function queueOne(bridge?: CommentAnchorBridge) {
     const adapter = fakeAdapter()
-    const { result } = mount(adapter, ANA, onFlushNeeded)
+    const { result } = mount(adapter, ANA, pendingSave())
     await waitFor(() => expect(result.current!.loading).toBe(false))
     if (bridge) act(() => result.current!.registerAnchorBridge(bridge))
     act(() => result.current!.setQueueCreates(true))
@@ -730,7 +778,7 @@ describe('queued creates are live, not frozen', () => {
 
   it('the envelope carries the CURRENT geometry — an edit after submit travels, the freeze does not', async () => {
     const moved = { nodes: [{ id: 'p1', from: 3, to: 8 }], quote: 'moved' }
-    const { result } = await queueOne(() => {}, bridgeWith(() => moved))
+    const { result } = await queueOne(bridgeWith(() => moved))
 
     let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
     act(() => {
@@ -743,7 +791,7 @@ describe('queued creates are live, not frozen', () => {
     // Without eviction one dead create would reject every future envelope
     // (the backend validates its quote against the doc), wedging the autosave
     // for the rest of the session.
-    const { result, settled } = await queueOne(() => {}, bridgeWith(() => null))
+    const { result, settled } = await queueOne(bridgeWith(() => null))
 
     let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
     act(() => {
@@ -761,10 +809,7 @@ describe('queued creates are live, not frozen', () => {
   })
 
   it('a TERMINAL discard settles every queued create — no composer promise hangs', async () => {
-    const { result, settled } = await queueOne(
-      () => {},
-      bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })),
-    )
+    const { result, settled } = await queueOne(bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })))
 
     let payload!: ReturnType<CommentAnchorSync['collectSavePayload']>
     act(() => {
@@ -774,7 +819,7 @@ describe('queued creates are live, not frozen', () => {
 
     // The pump gave up (version conflict): retrying would be rejected
     // identically, so the queue must not wait forever.
-    act(() => result.current!.anchorSync!.discardSave(payload!.token, { terminal: true }))
+    act(() => result.current!.anchorSync!.discardSave(payload!.token, { stopped: true }))
     expect(await settled).toBe(false)
 
     act(() => {
@@ -784,10 +829,7 @@ describe('queued creates are live, not frozen', () => {
   })
 
   it('a create queued AFTER the collect survives that envelope confirm and rides the next one', async () => {
-    const { result } = await queueOne(
-      () => {},
-      bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })),
-    )
+    const { result } = await queueOne(bridgeWith(() => ({ nodes: HELLO_NODES, quote: 'hello' })))
 
     let first!: ReturnType<CommentAnchorSync['collectSavePayload']>
     act(() => {

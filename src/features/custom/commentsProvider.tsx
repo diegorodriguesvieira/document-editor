@@ -13,7 +13,11 @@ import type {
   CommentAnchorReport,
   CommentNodeSegment,
 } from './commentAnchor'
-import type { JSONContent } from '@tiptap/core'
+// Deliberate deep import: the registration seam stays off the curated barrel.
+import {
+  useDocumentSaveRegistry,
+  type DocumentSaveContributor,
+} from '../../editor/core/documentSave'
 
 /** Who is reviewing. Provided by the consumer; omit for anonymous commenting.
  *  The SDK reads only `name`/`avatarUrl` (composer avatar); `id` exists for
@@ -303,18 +307,19 @@ export interface CommentSaveCreate {
 }
 
 /**
- * One atomic save envelope (rodada 6): the document plus every anchor that
- * drifted and every comment created since the last confirmed save — ALL read
- * from the same editor state in one synchronous frame (the coherence law).
- * The consumer PUTs it transactionally; on success it calls
- * {@link CommentAnchorSync.confirmSaved} with the token (and the backend's
- * created-row mapping), on failure {@link CommentAnchorSync.discardSave} —
- * nothing was persisted, everything stays queued, and the next collect
- * supersedes this one with fresher state.
+ * Comments' slice of the atomic save envelope: every anchor that drifted and
+ * every comment created since the last confirmed save. The DOCUMENT it belongs
+ * with is snapshotted by the save layer in the same synchronous frame (the
+ * coherence law) — which is why this carries no doc of its own: two readings
+ * are two chances to disagree.
+ *
+ * On success the save layer calls {@link CommentAnchorSync.confirmSaved} with
+ * the token (and the backend's created-row mapping), on failure
+ * {@link CommentAnchorSync.discardSave} — nothing was persisted, everything
+ * stays queued, and the next collect supersedes this one with fresher state.
  */
 export interface CommentSavePayload {
   token: number
-  doc: JSONContent
   anchors: CommentAnchorReport[]
   creates: CommentSaveCreate[]
 }
@@ -322,7 +327,6 @@ export interface CommentSavePayload {
 /** The bridge {@link CommentsLayer} registers: the editor-side reads/writes
  *  the envelope needs, all against the LIVE editor state. */
 export interface CommentAnchorBridge {
-  getDoc(): JSONContent
   collect(): CommentAnchorReport[]
   confirm(reports: CommentAnchorReport[]): void
   dirtyIds(): string[]
@@ -332,16 +336,18 @@ export interface CommentAnchorBridge {
 }
 
 /**
- * The anchor side of the atomic save envelope, as the UI and the consumer's
- * save pump see it.
+ * The anchor side of the atomic save envelope: what the UI reads, and what
+ * comments' {@link DocumentSaveContributor} is a thin adapter over. Exposed on
+ * the context as an escape hatch for a shell that drives the cycle itself.
  */
 export interface CommentAnchorSync {
   /** Per-comment sync state — drives the card badge; absence = synced. */
   states: ReadonlyMap<string, CommentSyncState>
-  /** Snapshot the envelope: doc + dirty anchors + queued creates, coherent
-   *  (one synchronous frame). Null while no editor bridge is mounted. Marks
-   *  the collected anchors `saving` until confirmed/discarded; a newer
-   *  collect supersedes an unconfirmed older one. */
+  /** Snapshot comments' slice of the envelope: dirty anchors + queued creates,
+   *  read in the save layer's own synchronous frame. Null while no editor
+   *  bridge is mounted. Marks the collected anchors `saving` until
+   *  confirmed/discarded; a newer collect supersedes an unconfirmed older
+   *  one. */
   collectSavePayload(): CommentSavePayload | null
   /** The envelope was persisted: anchors become baselines, created rows land
    *  (their composer promises resolve `true`) and the list refetches. */
@@ -351,10 +357,10 @@ export interface CommentAnchorSync {
   ): void
   /** The envelope failed — nothing persisted. Everything stays queued; the
    *  anchors drop back to `pendingSave` and the next collect resends fresher
-   *  state. `terminal` (the pump is giving up — a version conflict) also
+   *  state. `stopped` (the save layer gave up for good) also
    *  settles every queued create with `false`, so no composer promise hangs
    *  forever. */
-  discardSave(token: number, options?: { terminal?: boolean }): void
+  discardSave(token: number, options?: { stopped?: boolean }): void
 }
 
 export interface CommentsContextValue {
@@ -444,21 +450,11 @@ export function CommentsProvider({
   user,
   adapter,
   labels,
-  onFlushNeeded,
   children,
 }: {
   user?: CommentUser
   adapter: CommentsAdapter
   labels?: Partial<CommentsLabels>
-  /** Asks the consumer's save pump for a cycle NOW. Two callers:
-   *  - a create QUEUED for the next envelope (edit mode) — otherwise it
-   *    would wait for the next organic edit, which never comes without
-   *    typing;
-   *  - a REVIEW-mode create, which the backend validates against the SAVED
-   *    document — the provider AWAITS the returned promise, so anything the
-   *    consumer still has pending lands before the quote is checked.
-   *  Return a promise to make that wait meaningful. */
-  onFlushNeeded?: () => void | Promise<void>
   children: ReactNode
 }) {
   const [comments, setComments] = useState<DocumentComment[]>([])
@@ -479,9 +475,8 @@ export function CommentsProvider({
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
   // The editor-side envelope bridge (registered by CommentsLayer), the
-  // creates parked for the next envelope (edit mode), the latest UNCONFIRMED
-  // collect, and the consumer's pump trigger — refs so the callbacks below
-  // stay identity-stable.
+  // creates parked for the next envelope (edit mode) and the latest
+  // UNCONFIRMED collect — refs so the callbacks below stay identity-stable.
   const bridgeRef = useRef<CommentAnchorBridge | null>(null)
   const pendingCreatesRef = useRef<
     Array<CommentSaveCreate & { resolve: (ok: boolean) => void }>
@@ -501,8 +496,15 @@ export function CommentsProvider({
   const outstandingRef = useRef<{ token: number; anchors: CommentAnchorReport[] } | null>(null)
   const tokenSeqRef = useRef(0)
   const tempSeqRef = useRef(0)
-  const onFlushNeededRef = useRef<(() => void | Promise<void>) | undefined>(onFlushNeeded)
-  onFlushNeededRef.current = onFlushNeeded
+  // The save layer above, when there is one: it owns the cycle and comments
+  // merely contributes a slice to its envelope (registration below). Without
+  // one there is no envelope, so a create must never be parked for it — it
+  // POSTs immediately instead.
+  const saveRegistry = useDocumentSaveRegistry()
+  const saveRegistryRef = useRef(saveRegistry)
+  saveRegistryRef.current = saveRegistry
+  /** A queued create is waiting for a cycle (see the effect below). */
+  const cycleWantedRef = useRef(false)
 
   // Badge derivation: ledger-dirty → pendingSave; collected-in-flight →
   // saving. Re-runs on ledger notifications and around collect/confirm.
@@ -576,11 +578,11 @@ export function CommentsProvider({
       if (!draft || !body) return false
       const runCreate = async (): Promise<boolean> => {
         // REVIEW mode: the backend validates this quote against the SAVED
-        // document, so give the consumer's pump the chance to land whatever
-        // it still holds (its autosave window is its own policy, and may be
-        // seconds long) BEFORE the check.
+        // document, so let the save layer land whatever it still holds (the
+        // autosave window is the consumer's policy, and may be seconds long)
+        // BEFORE the check.
         try {
-          await onFlushNeededRef.current?.()
+          await saveRegistryRef.current?.flush()
         } catch {
           // A failed save is the consumer's business — the create still
           // tries, and the backend decides.
@@ -616,7 +618,7 @@ export function CommentsProvider({
         await refresh()
         return true
       }
-      if (queueCreates && onFlushNeededRef.current) {
+      if (queueCreates && saveRegistry) {
         // EDIT mode: the create RIDES THE ENVELOPE — its quote and nodes are
         // validated against the very doc the same save carries, so a stale
         // rejection is impossible by construction. The draft clears now
@@ -633,23 +635,24 @@ export function CommentsProvider({
             resolve,
           })
           publishPendingCreates()
-          // Ask the consumer to run a save cycle NOW — a queued create must
-          // not wait for the next organic edit.
-          onFlushNeededRef.current?.()
+          // The cycle is asked for in an EFFECT (below), not here: the plugin
+          // only learns this tempId on the re-render `publishPendingCreates`
+          // triggers, and a collect that runs before that finds nothing under
+          // it — and evicts the create as "text removed".
+          cycleWantedRef.current = true
         })
       }
       return runCreate()
     },
-    [draft, refresh, queueCreates, publishPendingCreates],
+    [draft, refresh, queueCreates, publishPendingCreates, saveRegistry],
   )
 
   const collectSavePayload = useCallback((): CommentSavePayload | null => {
     const bridge = bridgeRef.current
     if (!bridge) return null
-    // THE COHERENCE LAW (rodada 6): doc and anchors read back-to-back in one
-    // synchronous frame from the same editor state — never pair a debounced
-    // doc snapshot with anchors derived later.
-    const doc = bridge.getDoc()
+    // THE COHERENCE LAW: this runs inside the save layer's collect frame, so
+    // everything below is derived from the very editor state whose document
+    // the envelope carries — never a snapshot taken a tick earlier.
     const anchors = bridge.collect()
     // Creates are RE-DERIVED, never replayed: the plugin tracks each queued
     // create under its tempId, so its range moved with every edit since
@@ -686,7 +689,7 @@ export function CommentsProvider({
     // save, the retry simply snapshots fresher state.
     outstandingRef.current = { token, anchors }
     recomputeAnchorStates()
-    return { token, doc, anchors, creates }
+    return { token, anchors, creates }
   }, [recomputeAnchorStates, publishPendingCreates])
 
   const confirmSaved = useCallback(
@@ -717,10 +720,10 @@ export function CommentsProvider({
   )
 
   const discardSave = useCallback(
-    (token: number, options?: { terminal?: boolean }) => {
+    (token: number, options?: { stopped?: boolean }) => {
       if (outstandingRef.current?.token === token) outstandingRef.current = null
-      if (options?.terminal) {
-        // The pump gave up (a version conflict: every retry would be
+      if (options?.stopped) {
+        // Saving gave up for good (a version conflict: every retry would be
         // rejected identically). Settle every queued create instead of
         // leaving composer promises hanging forever.
         for (const create of pendingCreatesRef.current.splice(0)) create.resolve(false)
@@ -730,6 +733,42 @@ export function CommentsProvider({
     },
     [recomputeAnchorStates, publishPendingCreates],
   )
+
+  // COMMENTS AS A CONTRIBUTOR: the anchors and the queued creates are a SLICE
+  // of the document's save envelope, not a channel of their own — which is the
+  // whole point of the atomic model. The save layer owns the cycle (debounce,
+  // one-in-flight, stopping for good) and calls straight into the seams below,
+  // the collect/confirm/discard logic itself is untouched by the arrangement.
+  const saveContributor = useMemo<DocumentSaveContributor>(
+    () => ({
+      collect: () => {
+        const payload = collectSavePayload()
+        if (!payload) return null
+        return {
+          token: payload.token,
+          slice: { anchors: payload.anchors, creates: payload.creates },
+        }
+      },
+      confirm: (token, result) =>
+        confirmSaved(token, result as Parameters<typeof confirmSaved>[1]),
+      discard: discardSave,
+    }),
+    [collectSavePayload, confirmSaved, discardSave],
+  )
+  useEffect(
+    () => saveRegistry?.registerContributor(saveContributor),
+    [saveRegistry, saveContributor],
+  )
+  // Submitting a comment changes no text, so no save window arms and the
+  // envelope would wait for the next organic edit — which may never come. Ask
+  // for a cycle instead, but only HERE: this effect runs after the bridge (a
+  // child) has landed the new tempId in the plugin, so the collect finds it
+  // alive instead of evicting it.
+  useEffect(() => {
+    if (!cycleWantedRef.current) return
+    cycleWantedRef.current = false
+    void saveRegistry?.requestCycle()
+  }, [pendingCreates, saveRegistry])
 
   const registerAnchorBridge = useCallback(
     (bridge: CommentAnchorBridge | null, previous?: CommentAnchorBridge | null) => {
@@ -876,23 +915,4 @@ export function CommentsProvider({
 /** Null outside a provider — comment UI components render nothing then. */
 export function useComments(): CommentsContextValue | null {
   return useContext(CommentsContext)
-}
-
-/**
- * Reaches the anchor sync (collect/confirm/discard) from OUTSIDE the provider
- * subtree — the consumer's save pump usually lives beside the provider, not
- * inside it, so it cannot call {@link useComments} itself. Render this inside
- * the provider and read the bound object from wherever the pump keeps it.
- */
-export function AnchorSyncBinder({
-  bind,
-}: {
-  bind: (sync: CommentAnchorSync | null) => void
-}) {
-  const sync = useComments()?.anchorSync ?? null
-  useEffect(() => {
-    bind(sync)
-    return () => bind(null)
-  }, [bind, sync])
-  return null
 }

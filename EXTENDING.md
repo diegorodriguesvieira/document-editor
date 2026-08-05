@@ -270,7 +270,7 @@ only COMPOSING a new comment (the balloon) is review-only (`editable={false}`).
 ```tsx
 import {
   CommentsFeature, CommentsLayer, CommentsPanel, CommentsProvider,
-  useComments, type CommentsAdapter,
+  DocumentSaveProvider, useComments, useDocumentSave, type CommentsAdapter,
 } from '@your-scope/document-editor'
 
 // The endpoint seam, over your HTTP client. IDs are minted by YOUR backend
@@ -289,63 +289,68 @@ const adapter: CommentsAdapter = {
   remove: (id) => api.delete(`/comments/${id}`),
 }
 
-<CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
-  <DocumentEditor
-    features={[…, CommentsFeature]}   // the segments/decoration kernel
-    editable={!preview}
-    onChange={() => savePump()}       // the ENVELOPE pump — see below
-    renderBubble={(ctx) => (
-      <>
-        <BubbleToolbar {...ctx} />            {/* edit mode only */}
-        <CommentsLayer editor={ctx.editor} /> {/* BOTH modes: bridge + review-only balloon */}
-      </>
-    )}
-    renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}  {/* BOTH modes */}
-  />
-</CommentsProvider>
+// Your document's version token lives in this closure — the SDK carries it
+// without ever reading it. Read it before the call, advance it from the reply.
+const versionRef = useRef(loadedVersionId)
+const save = async (envelope) => {                 // { doc, anchors, creates }
+  const result = await api.put('/template', { versionId: versionRef.current, ...envelope })
+  versionRef.current = result.versionId
+  return result                                    // relayed to the contributors
+}
+
+<DocumentSaveProvider
+  save={save}
+  debounceMs={1500}                                // YOUR cadence
+  shouldStop={isVersionConflict}                   // stop saving for good — optional
+>
+  <SaveBanner />                                   {/* useDocumentSave().state */}
+  <CommentsProvider user={{ id: 'u-1', name: 'Ana Lima', avatarUrl }} adapter={adapter}>
+    <DocumentEditor
+      features={[…, CommentsFeature]}   // the segments/decoration kernel
+      editable={!preview}
+      renderBubble={(ctx) => (
+        <>
+          <BubbleToolbar {...ctx} />            {/* edit mode only */}
+          <CommentsLayer editor={ctx.editor} /> {/* BOTH modes: bridge + review-only balloon */}
+        </>
+      )}
+      renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}  {/* BOTH modes */}
+    />
+  </CommentsProvider>
+</DocumentSaveProvider>
 ```
 
 Things the first integration must know:
 
-- **The SAVE ENVELOPE** (the one wiring you MUST add for edit mode): edits
-  move anchors, and the SDK keeps them in a dirty ledger — nothing travels on
-  its own. Your pump snapshots document + anchors + queued comments TOGETHER
-  and saves them as ONE transaction:
+- **The SAVE ENVELOPE**: edits move anchors, and the SDK keeps them in a dirty
+  ledger — nothing travels on its own. `DocumentSaveProvider` snapshots the
+  document, the drifted anchors and the queued comments TOGETHER and hands
+  them to your `save` as ONE `{ doc, anchors, creates }` — which your backend
+  writes in a TRANSACTION, validating every quote against the doc IN THE
+  REQUEST. That is the whole point: the pair is coherent by construction, so a
+  create can never be "stale" against a document you just sent. Everything
+  else about the cycle is the SDK's — one envelope in flight (overlapping
+  cycles coalesce into a single follow-up, so two saves never race on the same
+  version token), the flush on teardown and on leaving edit mode, and stopping
+  for good when `shouldStop` says so. You bring the endpoint, the cadence and
+  the version token.
 
-  ```ts
-  const savePump = () => {
-    const sync = commentsContext.anchorSync
-    const payload = sync?.collectSavePayload()   // doc + anchors + creates, ONE frame
-    if (!payload) return
-    api.put('/template', {
-      versionId: myVersionId,                    // your document's version token
-      doc: payload.doc,
-      anchors: payload.anchors,
-      creates: payload.creates,
-    })
-      .then((result) => {
-        myVersionId = result.versionId
-        sync.confirmSaved(payload.token, result) // { created: [{ tempId, row }] }
-      })
-      .catch((failure) => {
-        // Nothing persisted. Stale version = someone else saved: STOP and ask
-        // for a refresh (a terminal discard settles queued comments).
-        const stale = isVersionConflict(failure)
-        sync.discardSave(payload.token, stale ? { terminal: true } : undefined)
-      })
-  }
-  ```
-
-  Your backend writes it in a TRANSACTION and validates every quote against
-  the doc IN THE REQUEST — the whole point: the pair is coherent by
-  construction, so a create can never be "stale" against a document you just
-  sent. Allow ONE envelope in flight (coalesce overlapping cycles into one
-  follow-up), or two saves race on the same version token. Per-comment states
-  surface on the cards: `pendingSave` (clock) → `saving` (spinner) → nothing.
-  There is no per-anchor retry: a failed envelope persisted NOTHING, and your
-  next save cycle carries fresher state. In edit mode new comments ride the
-  envelope; in review mode (frozen document) they POST immediately.
-  Replies/status/delete are doc-independent and go straight out.
+  Per-comment states surface on the cards: `pendingSave` (clock) → `saving`
+  (spinner) → nothing. There is no per-anchor retry: a failed envelope
+  persisted NOTHING, and the next cycle carries fresher state. In edit mode
+  new comments ride the envelope; in review mode (frozen document) they POST
+  immediately. Replies/status/delete are doc-independent and go straight out.
+- **`onChange` is NOT the autosave** — the save layer watches the editor
+  itself, so there is no prop to forget to wire (and no full-document
+  serialization per typing pause: the doc is read once per envelope). Use
+  `onChange` when you want the serialized DOCUMENT for something else — a
+  mirror, a word count, a dirty flag, or your own save pipeline if you skip
+  `DocumentSaveProvider` (it is optional; without it, edit-mode comments POST
+  immediately instead of queuing).
+- **The save layer is not comments-specific**: it saves the DOCUMENT, and
+  comments happens to contribute a slice so the pair stays atomic. Use it for
+  a document with no comments at all, or for a future feature that must be
+  persisted alongside the doc.
 - **Supported topology**: ONE editor + N reviewers commenting. The list is a
   SNAPSHOT (fetch on mount + refetch after own mutations) — propagating other
   people's comments is the consumer's job via `refresh()` or polling. Two

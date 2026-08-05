@@ -1,11 +1,14 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import { docWith, renderEditor } from '../../test/editorHarness'
+import { docWith, editorFromDOM, renderEditor } from '../../test/editorHarness'
+import { DocumentEditor, DocumentSaveProvider, type Editor } from '../../editor'
+import { useDocumentSaveRegistry } from '../../editor/core/documentSave'
+import { createMockCommentsApi, type SaveEnvelope } from '../../app/commentsMock'
 import { CommentsFeature, getCommentsStorage } from './comments'
 import { CommentsLayer, commentBalloonShouldShow } from './commentsLayer'
-import { createMockCommentsApi } from '../../app/commentsMock'
 import {
   CommentsProvider,
   useComments,
@@ -72,6 +75,14 @@ const paragraph = (uid: string, text: string): JSONContent => ({
 const docOf = (...blocks: JSONContent[]): { doc: JSONContent } => ({
   doc: { type: 'doc', content: blocks },
 })
+
+/** Hands a headless editor to the save layer, the way `useDocumentEditor`
+ *  does for React-mounted ones. */
+function RegisterEditor({ editor }: { editor: Editor }) {
+  const registry = useDocumentSaveRegistry()
+  useEffect(() => registry?.registerEditor(editor), [registry, editor])
+  return null
+}
 
 describe('commentBalloonShouldShow', () => {
   it('true only for a read-only TEXT selection with no draft in flight', () => {
@@ -361,8 +372,9 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     })
     await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('pendingSave'))
 
-    // The consumer's pump snapshots the envelope: doc and anchors read from
-    // the SAME editor state, in one synchronous frame (the coherence law).
+    // The save layer collects this slice inside the frame that snapshots the
+    // document (the coherence law — pinned in documentSave.test.tsx and in the
+    // end-to-end test above); here we pin what the slice CONTAINS.
     let payload: CommentSavePayload | null = null
     act(() => {
       payload = context.current!.anchorSync!.collectSavePayload()
@@ -370,7 +382,6 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     expect(payload!.anchors).toEqual([
       { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
     ])
-    expect(payload!.doc).toEqual(created.editor.getJSON())
     // Collected = in flight.
     await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('saving'))
 
@@ -382,6 +393,56 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
       payload = context.current!.anchorSync!.collectSavePayload()
     })
     expect(payload!.anchors).toEqual([])
+  })
+
+  it('ENVELOPE end-to-end: the save layer carries doc + anchors, with no wiring in between', async () => {
+    // The whole composition as a consumer writes it: a save provider on the
+    // outside, comments inside it, the editor inside that. Nobody passes a
+    // pump, a binder or an onChange — the editor registers itself and comments
+    // contributes its slice.
+    const adapter = {
+      ...quietAdapter(),
+      list: vi.fn(async () => [{ ...SAVED, nodes: [{ id: 'p1', from: 0, to: 5 }] }]),
+    }
+    const save = vi.fn(async (_envelope: { doc: JSONContent } & Record<string, unknown>) => ({}))
+    render(
+      <DocumentSaveProvider save={save} debounceMs={20}>
+        <CommentsProvider adapter={adapter}>
+          <DocumentEditor
+            features={[CommentsFeature]}
+            content={docOf(paragraph('p1', 'hello world'))}
+            renderBubble={(ctx) => <CommentsLayer editor={ctx.editor} />}
+          />
+        </CommentsProvider>
+      </DocumentSaveProvider>,
+    )
+    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull())
+    const live = editorFromDOM()
+    await waitFor(() =>
+      expect(getCommentsStorage(live)!.comments.map((record) => record.id)).toEqual(['c-1']),
+    )
+
+    // Type BEFORE the commented word: the anchor drifts…
+    act(() => {
+      live.view.dispatch(live.state.tr.insertText('XX', 1))
+    })
+
+    // …and rides the very envelope carrying the document it drifted in.
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    const envelope = save.mock.calls[0][0]
+    expect(envelope.doc).toEqual(live.getJSON())
+    expect(envelope.anchors).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+    ])
+    expect(envelope.creates).toEqual([])
+
+    // The confirmation landed: an edit that does NOT move the anchor costs no
+    // anchor write at all — the baseline was advanced by the save above.
+    act(() => {
+      live.view.dispatch(live.state.tr.insertText('!', live.state.doc.content.size - 1))
+    })
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0].anchors).toEqual([])
   })
 
   it('mirrors editor.isEditable into queueCreates — live across setEditable', async () => {
@@ -460,7 +521,6 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     expect(second!.anchors).toEqual([
       { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
     ])
-    expect(second!.doc).toEqual(created.editor.getJSON())
   })
 
   it('unmounting the layer unregisters the bridge — no editor, no envelope', async () => {
@@ -485,7 +545,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     act(() => {
       payload = context.current!.anchorSync!.collectSavePayload()
     })
-    expect(payload!.doc).toEqual(created.editor.getJSON())
+    expect(payload).not.toBeNull()
 
     // The layer goes: its cleanup hands the provider a null bridge, and an
     // envelope without a live editor is no envelope at all.
@@ -533,11 +593,23 @@ describe('<CommentsLayer /> — a REAL envelope round-trip', () => {
       context.current = useComments()
       return null
     }
+    // THE REAL BACKEND, reached the way a consumer reaches it: the SDK builds
+    // the envelope and this is the only wiring in between.
+    const sent: Array<Omit<SaveEnvelope, 'versionId'>> = []
+    const save = async (envelope: Omit<SaveEnvelope, 'versionId'>) => {
+      sent.push(envelope)
+      return api.saveEnvelope({ versionId: api.versionId, ...envelope })
+    }
+    // A realistic window: the edit below must NOT get an envelope of its own —
+    // the cycle the comment asks for is what sends, carrying both halves.
     render(
-      <CommentsProvider user={ANA} adapter={api.adapter} onFlushNeeded={() => {}}>
-        <Probe />
-        <CommentsLayer editor={created.editor} />
-      </CommentsProvider>,
+      <DocumentSaveProvider save={save} debounceMs={1000}>
+        <RegisterEditor editor={created.editor} />
+        <CommentsProvider user={ANA} adapter={api.adapter}>
+          <Probe />
+          <CommentsLayer editor={created.editor} />
+        </CommentsProvider>
+      </DocumentSaveProvider>,
     )
     await waitFor(() => expect(context.current!.loading).toBe(false))
     await waitFor(() =>
@@ -559,35 +631,28 @@ describe('<CommentsLayer /> — a REAL envelope round-trip', () => {
       })
     })
 
-    let payload!: CommentSavePayload | null
-    act(() => {
-      payload = context.current!.anchorSync!.collectSavePayload()
-    })
-    expect(payload!.anchors).toEqual([
+    // Submitting a comment changes no text, so the cycle it asks for is what
+    // sends — no organic edit required. ONE envelope carries both halves…
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0].anchors).toEqual([
       { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
     ])
-    expect(payload!.creates).toHaveLength(1)
-
-    // THE REAL BACKEND: quotes are validated against the doc in this very
-    // request — a mismatch here would mean the two halves disagree.
-    const result = await api.saveEnvelope({
-      versionId: api.versionId,
-      doc: payload!.doc,
-      anchors: payload!.anchors,
-      creates: payload!.creates,
+    expect(sent[0].creates).toHaveLength(1)
+    // …and the quotes were validated against the doc in that very request — a
+    // mismatch here would mean the two halves disagree.
+    await act(async () => {
+      expect(await submitted).toBe(true)
     })
-    act(() => context.current!.anchorSync!.confirmSaved(payload!.token, result))
-
-    expect(await submitted).toBe(true)
     expect(api.peekComments().find((row) => row.id === 'c-1')!.nodes).toEqual([
       { id: 'p1', from: 4, to: 9 },
     ])
     expect(api.peekComments()).toHaveLength(2)
     // Confirmed → the ledger is clean and the next envelope carries nothing.
+    let leftover: CommentSavePayload | null = null
     act(() => {
-      payload = context.current!.anchorSync!.collectSavePayload()
+      leftover = context.current!.anchorSync!.collectSavePayload()
     })
-    expect(payload!.anchors).toEqual([])
-    expect(payload!.creates).toEqual([])
+    expect(leftover!.anchors).toEqual([])
+    expect(leftover!.creates).toEqual([])
   })
 })

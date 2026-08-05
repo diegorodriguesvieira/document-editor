@@ -31,7 +31,6 @@ export type { Condition, ConditionId, ConditionLeaf, ConditionOperand } from './
 // `nodes[]` rows — nothing about a comment is ever written to the document.
 export { CommentsFeature, getCommentAnchorState, getCommentPosition } from './custom/comments'
 export {
-  AnchorSyncBinder,
   CommentsProvider,
   PARENT_DELETED,
   STALE_CONTENT,

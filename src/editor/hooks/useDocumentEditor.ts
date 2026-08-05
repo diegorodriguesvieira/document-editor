@@ -3,6 +3,7 @@ import { useEditor } from '@tiptap/react'
 import type { Editor, EditorEvents } from '@tiptap/core'
 import { createEditorApi, type EditorApi } from '../core/EditorApi'
 import { baseEditorOptions } from '../core/createEditor'
+import { useDocumentSaveRegistry } from '../core/documentSave'
 import type { DocumentJSON } from '../core/document'
 import { resolveFeatures, type ResolvedFeatures } from '../core/registry'
 import type { FeatureDefinition } from '../core/types'
@@ -107,6 +108,17 @@ export function useDocumentEditor(options: UseDocumentEditorOptions): DocumentEd
     () => (editor ? createEditorApi(editor, resolved) : null),
     [editor, resolved],
   )
+
+  // Autosave, zero-config: with a DocumentSaveProvider above, the editor hands
+  // itself over and the save layer watches it directly — there is no prop to
+  // forget to wire. A no-op without one (the provider is opt-in). Here rather
+  // than in <DocumentEditor> so custom shells are covered too — the same
+  // choke-point discipline buildExtensions uses for node ids.
+  const saveRegistry = useDocumentSaveRegistry()
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !saveRegistry) return
+    return saveRegistry.registerEditor(editor)
+  }, [editor, saveRegistry])
 
   // Callbacks via refs so changing them doesn't re-subscribe or re-fire.
   const onReadyRef = useRef(options.onReady)

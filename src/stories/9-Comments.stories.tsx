@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { BubbleToolbar, DocumentEditor, type DocumentJSON, type EditorApi } from '../editor'
 import {
-  AnchorSyncBinder,
-  CommentsLayer,
-  CommentsPanel,
-  CommentsProvider,
-  type CommentAnchorSync,
-  type CommentUser,
-} from '../features'
+  BubbleToolbar,
+  DocumentEditor,
+  DocumentSaveProvider,
+  useDocumentSave,
+  type DocumentJSON,
+  type DocumentSaveState,
+  type EditorApi,
+} from '../editor'
+import { CommentsLayer, CommentsPanel, CommentsProvider, type CommentUser } from '../features'
 import {
   createMockCommentsApi,
-  VERSION_CONFLICT,
+  isVersionConflict,
   type MockCommentsApi,
   type MockFailureKind,
+  type SaveEnvelope,
   type StoredComment,
 } from '../app/commentsMock'
 import { ALL_FEATURES, Shell } from './storyShell'
@@ -156,15 +158,14 @@ const dashStyles: Record<string, React.CSSProperties> = {
   },
 }
 
-/** How the consumer's autosave is doing — the rig owns it, the dashboard
- *  shows it. `conflict` is terminal: another session saved, so every retry
- *  would be rejected the same way. */
-type SaveStatus = 'saved' | 'failed' | 'conflict'
-
-const SAVE_LABEL: Record<SaveStatus, string> = {
+/** How the autosave is doing, straight from the SDK's save layer. `stopped` is
+ *  for good: another session saved, so every retry would be rejected the same
+ *  way. */
+const SAVE_LABEL: Record<DocumentSaveState, string> = {
   saved: 'up to date',
+  saving: 'saving…',
   failed: 'NOT SAVED — the next edit retries the whole envelope',
-  conflict: 'VERSION CONFLICT — reload to continue from the latest version',
+  stopped: 'VERSION CONFLICT — reload to continue from the latest version',
 }
 
 /** Latency slider + per-endpoint failure toggles + the autosave state (with
@@ -174,17 +175,17 @@ const SAVE_LABEL: Record<SaveStatus, string> = {
  *  and an optional live `nodes[]` inspector over the mock's rows. */
 function MockDashboard({
   api,
-  save,
   onOtherSessionSaves,
   showNodes = false,
 }: {
   api: MockCommentsApi
-  save: SaveStatus
   onOtherSessionSaves: () => void
   showNodes?: boolean
 }) {
   const [, force] = useReducer((tick: number) => tick + 1, 0)
   useEffect(() => api.subscribe(force), [api])
+  // The save state comes from the SDK — the rig keeps no copy of it.
+  const save = useDocumentSave()?.state ?? 'saved'
   const [latency, setLatency] = useState(api.latencyMs)
   const toggle = (kind: MockFailureKind) => {
     if (api.failNext.has(kind)) api.failNext.delete(kind)
@@ -256,13 +257,13 @@ function MockDashboard({
     </div>
   )
 }
-
-
 /**
- * The one rig every story mounts: editor + balloon + panel + dashboard, with
- * the consumer's ENVELOPE save pump — `onChange` snapshots the document, the
- * drifted anchors and the queued creates from ONE editor state and PUTs them
- * as a single transaction.
+ * The one rig every story mounts: editor + balloon + panel + dashboard, under
+ * the SDK's save layer. Note how little wiring the ENVELOPE costs the
+ * consumer — one `save` function (the endpoint plus its version token) and a
+ * cadence. Collecting the document, the drifted anchors and the queued
+ * creates from ONE editor state and PUTting them as a single transaction is
+ * the SDK's job, and there is no way to forget to connect it.
  */
 function CommentsRig({
   api,
@@ -273,102 +274,23 @@ function CommentsRig({
   editable: boolean
   showNodes?: boolean
 }) {
-  const syncRef = useRef<CommentAnchorSync | null>(null)
-  const bind = useCallback((sync: CommentAnchorSync | null) => {
-    syncRef.current = sync
-  }, [])
-  const [save, setSave] = useState<SaveStatus>('saved')
-  /** THE SAVE CADENCE is the consumer's policy: `onChange` is debounced for
-   *  SERIALIZATION (250ms — getJSON is O(n)), which is far too eager for a
-   *  network write, so every edit burst funnels through this longer window.
-   *  A comment submitted by the user (onFlushNeeded) pumps immediately. */
+  /** THE SAVE CADENCE is the consumer's policy — a network write should not
+   *  fire on every typing pause. Everything else about the cycle (one envelope
+   *  in flight, coalescing, stopping for good, the teardown flush) is the
+   *  SDK's. */
   const AUTOSAVE_MS = 1500
   // The version this session edits on top of — read once, then advanced by
   // every accepted save. Sending `api.versionId` instead would make the client
-  // permanently "current" and the conflict guard unreachable.
+  // permanently "current" and the conflict guard unreachable. It lives here,
+  // in the save closure: the SDK carries the envelope, it never reads it.
   const versionRef = useRef(api.versionId)
-  const conflictRef = useRef(false)
-  // One envelope in flight at a time (see below), plus "an edit arrived while
-  // it flew".
-  const savingRef = useRef(false)
-  const againRef = useRef(false)
-  // THE ENVELOPE PUMP: snapshot doc + dirty anchors + queued creates from ONE
-  // editor state, PUT them as a single transaction, confirm on success —
-  // discard on failure (nothing persisted; the next cycle resends fresher).
-  // SERIALIZED: overlapping cycles would carry the same version token, so the
-  // second would come back as a conflict that never happened — they coalesce
-  // into one follow-up instead.
-  const inFlightRef = useRef<Promise<void>>(Promise.resolve())
-  const pump = useCallback(
-    function run(): Promise<void> {
-      if (conflictRef.current) return inFlightRef.current
-      if (savingRef.current) {
-        againRef.current = true
-        return inFlightRef.current
-      }
-      const sync = syncRef.current
-      const payload = sync?.collectSavePayload()
-      if (!sync || !payload) return Promise.resolve()
-      savingRef.current = true
-      const cycle = api
-        .saveEnvelope({
-          versionId: versionRef.current,
-          doc: payload.doc,
-          anchors: payload.anchors,
-          creates: payload.creates,
-        })
-        .then((result) => {
-          versionRef.current = result.versionId
-          sync.confirmSaved(payload.token, result)
-          setSave('saved')
-        })
-        .catch((failure: unknown) => {
-          const conflict = (failure as { code?: unknown } | null)?.code === VERSION_CONFLICT
-          // Terminal on conflict: the pump stops, so anything queued must be
-          // settled rather than left hanging.
-          sync.discardSave(payload.token, conflict ? { terminal: true } : undefined)
-          if (conflict) conflictRef.current = true
-          setSave(conflict ? 'conflict' : 'failed')
-        })
-        .finally(() => {
-          savingRef.current = false
-        })
-        .then(() => {
-          if (!againRef.current) return
-          againRef.current = false
-          return run()
-        })
-      inFlightRef.current = cycle
-      return cycle
+  const save = useCallback(
+    async (envelope: Omit<SaveEnvelope, 'versionId'>) => {
+      const result = await api.saveEnvelope({ versionId: versionRef.current, ...envelope })
+      versionRef.current = result.versionId
+      return result
     },
     [api],
-  )
-
-  // Arm the autosave window (see AUTOSAVE_MS).
-  const pumpTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const scheduleSave = useCallback(() => {
-    clearTimeout(pumpTimerRef.current)
-    pumpTimerRef.current = setTimeout(() => {
-      pumpTimerRef.current = undefined
-      void pump()
-    }, AUTOSAVE_MS)
-  }, [pump])
-  /** Land what is pending NOW and resolve when it has — the provider awaits
-   *  this before a REVIEW-mode create (validated against the SAVED doc). */
-  const flushSave = useCallback(() => {
-    if (pumpTimerRef.current !== undefined) {
-      clearTimeout(pumpTimerRef.current)
-      pumpTimerRef.current = undefined
-      return pump()
-    }
-    return inFlightRef.current
-  }, [pump])
-  // Nothing typed is lost on teardown.
-  useEffect(
-    () => () => {
-      void flushSave()
-    },
-    [flushSave],
   )
 
   // The live editor api — the "another session saves" knob and the console
@@ -410,37 +332,38 @@ function CommentsRig({
 
   return (
     <Shell>
-      <CommentsProvider user={YOU} adapter={api.adapter} onFlushNeeded={flushSave}>
-        <AnchorSyncBinder bind={bind} />
-        <DocumentEditor
-          features={ALL_FEATURES}
-          content={REVIEW_DOC}
-          editable={editable}
-          onReady={(editorApi) => {
-            editorApiRef.current = editorApi
-            dumpDoc()
-          }}
-          onChange={() => {
-            dumpDoc()
-            scheduleSave()
-          }}
-          renderBubble={(ctx) => (
-            <>
-              <BubbleToolbar {...ctx} />
-              <CommentsLayer editor={ctx.editor} />
-            </>
-          )}
-          renderLeftPanel={() => (
-            <MockDashboard
-              api={api}
-              save={save}
-              onOtherSessionSaves={otherSessionSaves}
-              showNodes={showNodes}
-            />
-          )}
-          renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}
-        />
-      </CommentsProvider>
+      {/* The save layer sits ABOVE: the envelope is the DOCUMENT's save, and
+          comments merely contributes its anchors and queued creates to it.
+          A stale version stops saving — every retry would be rejected alike. */}
+      <DocumentSaveProvider save={save} debounceMs={AUTOSAVE_MS} shouldStop={isVersionConflict}>
+        <CommentsProvider user={YOU} adapter={api.adapter}>
+          <DocumentEditor
+            features={ALL_FEATURES}
+            content={REVIEW_DOC}
+            editable={editable}
+            onReady={(editorApi) => {
+              editorApiRef.current = editorApi
+              dumpDoc()
+            }}
+            // Only the console mirror — the autosave watches the editor itself.
+            onChange={dumpDoc}
+            renderBubble={(ctx) => (
+              <>
+                <BubbleToolbar {...ctx} />
+                <CommentsLayer editor={ctx.editor} />
+              </>
+            )}
+            renderLeftPanel={() => (
+              <MockDashboard
+                api={api}
+                onOtherSessionSaves={otherSessionSaves}
+                showNodes={showNodes}
+              />
+            )}
+            renderRightPanel={(ctx) => <CommentsPanel editor={ctx.editor} />}
+          />
+        </CommentsProvider>
+      </DocumentSaveProvider>
     </Shell>
   )
 }

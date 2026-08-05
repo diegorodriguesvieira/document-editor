@@ -305,21 +305,26 @@ WRITES ride ONE ATOMIC ENVELOPE. The segments plugin keeps a timer-free DIRTY
 LEDGER: every transaction marks the comments whose geometry moved, and a
 per-dispatch sweep un-marks whatever landed back on its confirmed baseline
 (so a move, or an undo within the cycle, costs zero traffic). Nothing is
-pushed anywhere. When the consumer's save pump runs it calls
-`anchorSync.collectSavePayload()`, which reads the document AND the dirty
-anchors AND the queued creates from the SAME editor state in one synchronous
-frame — the coherence law: a doc paired with anchors derived at another
-instant is exactly the bug this model exists to kill. The consumer PUTs that
-envelope `{ versionId, doc, anchors, creates }` transactionally and calls
+pushed anywhere. The cycle belongs to `DocumentSaveProvider` (editor layer,
+usable with or without comments): it watches the editor, waits out the burst,
+then snapshots the document and asks every registered CONTRIBUTOR for its
+slice — comments' contributor being `collectSavePayload()` (dirty anchors +
+queued creates) — all in ONE synchronous frame. That is the coherence law: a
+doc paired with anchors derived at another instant is exactly the bug this
+model exists to kill, and one collect site is what makes it structural. The
+consumer's `save` PUTs the envelope `{ doc, anchors, creates }` (adding its
+own `versionId`) transactionally; the save layer then relays the response to
 `confirmSaved(token, result)` (payloads become baselines; created rows settle
-their composer promises) or `discardSave(token)` — nothing persisted, nothing
-cleared, and the next collect supersedes with fresher state. Live-only:
+their composer promises) or, on rejection, `discardSave(token)` — nothing
+persisted, nothing cleared, and the next collect supersedes. Live-only:
 dormant segments never travel (the row self-cleans to what is highlighted),
 and queued creates are RE-DERIVED at collect (tracked in the plugin under
-their `tempId`), never replayed from submit time. `versionId` is the
-optimistic-concurrency token: a stale one is rejected without writing, and
-the consumer stops the pump and asks for a refresh (a `terminal` discard
-settles every queued create instead of hanging). Per-comment states
+their `tempId`), never replayed from submit time. One envelope flies at a
+time and overlapping cycles coalesce into a single follow-up. `versionId` is
+the consumer's optimistic-concurrency token — it lives in the `save` closure,
+because the SDK carries it without ever reading it; a stale one is rejected
+without writing, and the consumer's `shouldStop` tells the save layer to stop
+for good (settling every queued create instead of leaving it hanging). Per-comment states
 (`pendingSave` → `saving`) render on the cards; there is no per-anchor
 failure — a failed envelope persisted NOTHING and retries wholesale. Creates
 in REVIEW mode still POST immediately (the doc is frozen, so the saved doc IS
