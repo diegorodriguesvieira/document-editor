@@ -204,39 +204,150 @@ const REVIEW_DOC: DocumentJSON = {
         'On termination the supplier hands over work in progress and the client pays for ' +
           'everything accepted or in flight up to that date.',
       ),
+      head('n-h-warranty', '8. Warranty'),
+      para(
+        'n-warranty-1',
+        'The supplier warrants that the services are performed with reasonable skill and care ' +
+          'by people qualified to perform them, and that the deliverables match the schedule ' +
+          'in every material respect.',
+      ),
+      para(
+        'n-warranty-2',
+        'Defects reported within ninety days of acceptance are corrected at no charge. That ' +
+          'correction is the client’s exclusive remedy for a warranty claim.',
+      ),
+      head('n-h-data', '9. Data protection'),
+      para(
+        'n-data-1',
+        'Where the supplier processes personal data on the client’s behalf, it does so only ' +
+          'on documented instructions, and it tells the client without undue delay if the law ' +
+          'requires it to do otherwise.',
+      ),
+      para(
+        'n-data-2',
+        'Sub-processors require prior written approval. The supplier remains responsible for ' +
+          'their acts and omissions as if they were its own.',
+      ),
+      head('n-h-force', '10. Force majeure'),
+      para(
+        'n-force-1',
+        'Neither party is liable for a failure caused by an event beyond its reasonable ' +
+          'control, provided it notifies the other promptly and works to resume performance.',
+      ),
+      para(
+        'n-force-2',
+        'If the event persists beyond sixty days, either party may terminate the affected ' +
+          'statement of work without penalty.',
+      ),
+      head('n-h-notices', '11. Notices'),
+      para(
+        'n-notices-1',
+        'Notices are given in writing to the addresses on the cover page, and are effective on ' +
+          'receipt — or on the next working day, if received outside working hours.',
+      ),
+      head('n-h-law', '12. Governing law'),
+      para(
+        'n-law-1',
+        'This agreement is governed by the law named on the cover page, and the parties submit ' +
+          'to the exclusive jurisdiction of its courts.',
+      ),
+      para(
+        'n-law-2',
+        'If any provision is held unenforceable, it is severed and the rest of the agreement ' +
+          'continues in force.',
+      ),
     ],
   },
 }
 
-/** "30 days" inside the deadline paragraph (content offsets 25..32). */
-const DEADLINE_ROW: StoredComment = {
-  id: 'c-deadline',
-  quote: '30 days',
-  text: 'Can we make this 15 days?',
-  author: RITA,
-  createdAt: '2026-07-15T12:00:00Z',
-  status: 'OPEN',
-  nodes: [{ id: 'n-deadline', from: 25, to: 32 }],
+/* ── The seeded comments ───────────────────────────────────────────────────
+ * Anchors are DERIVED from the document above, never hand-counted: `nodes[]`
+ * carries node-local offsets, and a fixture whose `from` drifts one character
+ * from its `quote` fails the backend's validator in a way that looks like an
+ * SDK bug. `anchor()` finds the phrase and throws if an edit moved it. */
+function anchor(uid: string, phrase: string) {
+  const block = REVIEW_DOC.doc.content?.find((node) => node.attrs?.uid === uid)
+  const text = block?.content?.map((child) => child.text ?? '').join('') ?? ''
+  const from = text.indexOf(phrase)
+  if (from < 0) throw new Error(`story fixture: "${phrase}" is not in ${uid} any more`)
+  return { id: uid, from, to: from + phrase.length }
+}
+
+/** A seeded row whose quote and anchor cannot disagree — both come from the
+ *  same phrase, looked up in the document. */
+function row(
+  id: string,
+  uid: string,
+  phrase: string,
+  text: string,
+  over: Partial<StoredComment> = {},
+): StoredComment {
+  return {
+    id,
+    quote: phrase,
+    text,
+    author: RITA,
+    createdAt: '2026-07-15T12:00:00Z',
+    status: 'OPEN',
+    nodes: [anchor(uid, phrase)],
+    replies: [],
+    ...over,
+  }
+}
+
+const DEADLINE_ROW = row('c-deadline', 'n-deadline', '30 days', 'Can we make this 15 days?', {
   replies: [
     { id: 'r-1', text: 'Checking with legal, one sec.', author: YOU, createdAt: '2026-07-15T14:00:00Z' },
   ],
+})
+
+/** ONE comment, TWO segments — the shape a split (or a copy-extend) produces,
+ *  here deliberately at OPPOSITE ends of the document: clicking its card has
+ *  somewhere to scroll, and only the FIRST segment in document order wins. */
+const MULTI_ROW: StoredComment = {
+  ...row('c-multi', 'n-terms', 'Payment terms', 'These two clauses contradict each other.', {
+    createdAt: '2026-07-16T09:00:00Z',
+  }),
+  quote: 'Payment termsLiability',
+  nodes: [anchor('n-terms', 'Payment terms'), anchor('n-liability', 'Liability')],
 }
 
-/** ONE comment, TWO segments: "Payment terms" + "Liability" — the
- *  multi-segment shape a split (or copy-extend) produces. */
-const MULTI_ROW: StoredComment = {
-  id: 'c-multi',
-  quote: 'Payment termsLiability',
-  text: 'These two clauses contradict each other.',
-  author: RITA,
-  createdAt: '2026-07-16T09:00:00Z',
-  status: 'OPEN',
-  nodes: [
-    { id: 'n-terms', from: 0, to: 13 },
-    { id: 'n-liability', from: 0, to: 9 },
-  ],
-  replies: [],
-}
+/** Ten open threads spread over the whole contract — the volume that makes
+ *  the PANEL scroll as well as the document, so a card click has to move two
+ *  viewports without them fighting each other. */
+const MANY_ROWS: StoredComment[] = [
+  row('c-preamble', 'n-preamble', 'replaces every prior understanding', 'Is that true of the NDA?'),
+  DEADLINE_ROW,
+  row('c-partial', 'n-delivery-2', 'Partial deliveries', 'Only with a milestone plan attached.', {
+    createdAt: '2026-07-15T13:00:00Z',
+  }),
+  row('c-silence', 'n-acceptance-1', 'Silence past that window counts as acceptance', 'Legal wants this spelled out.', {
+    createdAt: '2026-07-15T15:00:00Z',
+    replies: [
+      { id: 'r-2', text: 'Agreed — I will redraft it.', author: YOU, createdAt: '2026-07-15T16:00:00Z' },
+      { id: 'r-3', text: 'Thanks. Ping me when it is up.', author: RITA, createdAt: '2026-07-15T17:00:00Z' },
+    ],
+  }),
+  MULTI_ROW,
+  row('c-interest', 'n-payment-3', 'statutory rate', 'Which jurisdiction sets it?', {
+    createdAt: '2026-07-16T10:00:00Z',
+  }),
+  row('c-conf', 'n-conf-2', 'three years', 'Five, to match the master agreement.', {
+    createdAt: '2026-07-16T11:00:00Z',
+  }),
+  row('c-ip', 'n-ip-1', 'on payment in full', 'And if we terminate mid-milestone?', {
+    createdAt: '2026-07-16T12:00:00Z',
+  }),
+  row('c-cap', 'n-liability-2', 'nothing in this agreement limits what the law says cannot be limited', 'Keep this sentence verbatim.', {
+    createdAt: '2026-07-16T13:00:00Z',
+  }),
+  row('c-subproc', 'n-data-2', 'prior written approval', 'We need a standing list instead.', {
+    createdAt: '2026-07-16T14:00:00Z',
+  }),
+  row('c-force', 'n-force-2', 'sixty days', 'Thirty would be safer for us.', {
+    createdAt: '2026-07-16T15:00:00Z',
+  }),
+]
 
 /** One mock per story mount — module scope would leak rows across stories. */
 const storyApi = (seed: StoredComment[], failing: MockFailureKind[] = []) => {
@@ -530,7 +641,7 @@ function CommentsRig({
 
 export const CardClickLightsSegments: Story = {
   name: '1. Card click → segments light + scroll',
-  render: () => <CommentsRig api={storyApi([DEADLINE_ROW, MULTI_ROW])} editable={false} />,
+  render: () => <CommentsRig api={storyApi(MANY_ROWS)} editable={false} />,
   parameters: {
     docs: {
       description: {
@@ -545,7 +656,7 @@ export const CardClickLightsSegments: Story = {
 
 export const HighlightClickScrollsSidebar: Story = {
   name: '2. Highlight click → sidebar card',
-  render: () => <CommentsRig api={storyApi([DEADLINE_ROW, MULTI_ROW])} editable={false} />,
+  render: () => <CommentsRig api={storyApi(MANY_ROWS)} editable={false} />,
   parameters: {
     docs: {
       description: {

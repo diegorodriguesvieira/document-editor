@@ -101,6 +101,27 @@ function collapseSelectionAt(editor: Editor | null, pos: number) {
   editor.commands.setTextSelection(Math.max(0, Math.min(pos, editor.state.doc.content.size)))
 }
 
+/**
+ * Scroll a card into the PANEL's viewport — and nothing else's.
+ *
+ * `card.scrollIntoView({block: 'nearest'})` reads safer than it is: it scrolls
+ * EVERY scrollable ancestor, the page included, which is precisely where the
+ * other half of a card click is already scrolling (smoothly, to the anchor).
+ * A programmatic scroll cancels an animation in flight on the same scroller,
+ * so that innocent one-liner ate the jump — first click lit the card and went
+ * nowhere, second click (same `active`, effect skipped) worked. The platform
+ * offers no "scroll this container only" flag, so the container is scrolled by
+ * hand: shift it by however far the card sticks out, in whichever direction.
+ */
+function revealWithinPanel(card: HTMLElement | null): void {
+  const scroller = card?.closest('.comments-panel')
+  if (!card || !scroller) return
+  const cardBox = card.getBoundingClientRect()
+  const viewBox = scroller.getBoundingClientRect()
+  if (cardBox.top < viewBox.top) scroller.scrollTop -= viewBox.top - cardBox.top
+  else if (cardBox.bottom > viewBox.bottom) scroller.scrollTop += cardBox.bottom - viewBox.bottom
+}
+
 /* The draft composer's "outside": the whole PANEL counts as inside (reading
    cards mid-draft is not abandonment), plus portaled popups and the modal
    backdrop under them — dismissing a card menu must not throw the draft away. */
@@ -589,23 +610,9 @@ function CommentCard({
   const orphan = !frozen && anchorState === 'orphaned'
   const active = !orphan && !frozen && context?.activeId === comment.id
   // Clicking the HIGHLIGHT in the document activates this card — bring it into
-  // the panel's scrolled viewport.
-  //
-  // Scrolling the PANEL by hand instead of `card.scrollIntoView()`, which
-  // cannot be contained: it scrolls every scrollable ancestor, the page
-  // included. The page is exactly where the OTHER half of a card click is
-  // already scrolling — smoothly, to the anchor — and any programmatic scroll
-  // cancels an animation in flight. That is what made the first click on a
-  // card light it up and go nowhere, while a second click (same `active`, so
-  // this effect no longer runs) scrolled fine.
+  // the panel's scrolled viewport (and nothing else's: see revealWithinPanel).
   useEffect(() => {
-    const card = cardRef.current
-    const scroller = card?.closest('.comments-panel')
-    if (!active || !card || !scroller) return
-    const cardBox = card.getBoundingClientRect()
-    const viewBox = scroller.getBoundingClientRect()
-    if (cardBox.top < viewBox.top) scroller.scrollTop -= viewBox.top - cardBox.top
-    else if (cardBox.bottom > viewBox.bottom) scroller.scrollTop += cardBox.bottom - viewBox.bottom
+    if (active) revealWithinPanel(cardRef.current)
   }, [active])
   if (!context) return null
   const { labels } = context
