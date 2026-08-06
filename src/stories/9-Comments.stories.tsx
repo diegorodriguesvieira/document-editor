@@ -69,8 +69,28 @@ type Story = StoryObj
 const YOU: CommentUser = { id: 'u-you', name: 'You' }
 const RITA: CommentUser = { id: 'u-reviewer', name: 'Rita Reviewer' }
 
-/* Content under review — EXPLICIT uids, because the seeded rows' `nodes[]`
- * point at them (injectNodeIds keeps unique explicit ids verbatim). */
+/* Shorthands for the filler around the anchored clauses — long enough that the
+ * document actually SCROLLS, which is what makes "click a card → the document
+ * scrolls to the segment" (and the sticky header/footer, and zoom) testable
+ * by hand. Explicit uids throughout: deterministic, and anchorable later. */
+type Block = DocumentJSON['doc']
+const head = (uid: string, text: string): Block => ({
+  type: 'heading',
+  attrs: { level: 2, uid },
+  content: [{ type: 'text', text }],
+})
+const para = (uid: string, text: string): Block => ({
+  type: 'paragraph',
+  attrs: { uid },
+  content: [{ type: 'text', text }],
+})
+
+/* Content under review. The three ANCHORED paragraphs (`n-deadline`,
+ * `n-terms`, `n-liability`) keep their uids AND their text verbatim — the
+ * seeded rows below point at them by offset, and the mock backend validates
+ * every quote against this document, so a single edited character here breaks
+ * both. They sit far apart on purpose: the multi-segment comment then spans
+ * opposite ends of the page, and clicking its card has somewhere to scroll. */
 const REVIEW_DOC: DocumentJSON = {
   doc: {
     type: 'doc',
@@ -80,18 +100,79 @@ const REVIEW_DOC: DocumentJSON = {
         attrs: { level: 1, uid: 'n-title' },
         content: [{ type: 'text', text: 'Review me' }],
       },
+      para(
+        'n-preamble',
+        'This agreement is entered into by the parties named above and governs the supply of ' +
+          'the services described in the schedule. It replaces every prior understanding on ' +
+          'the same subject, written or otherwise.',
+      ),
+      head('n-h-delivery', '1. Delivery'),
       {
         type: 'paragraph',
         attrs: { uid: 'n-deadline' },
         content: [{ type: 'text', text: 'The delivery deadline is 30 days after signature.' }],
       },
+      para(
+        'n-delivery-2',
+        'Partial deliveries are accepted only where the schedule provides for them, and each ' +
+          'one is invoiced separately. A delivery is complete when the supplier hands over ' +
+          'every artefact listed for that milestone.',
+      ),
+      para(
+        'n-delivery-3',
+        'Delay caused by the client — late approvals, missing access, unavailable staff — ' +
+          'moves the deadline by the same number of working days, and the supplier must say ' +
+          'so in writing within five days of the cause.',
+      ),
+      head('n-h-acceptance', '2. Acceptance'),
+      para(
+        'n-acceptance-1',
+        'The client has ten working days from delivery to accept or reject. Silence past that ' +
+          'window counts as acceptance, and acceptance starts the payment clock.',
+      ),
+      para(
+        'n-acceptance-2',
+        'A rejection must list the defects and point at the requirement each one misses. ' +
+          'Disagreement about whether something is a defect goes to the escalation path in ' +
+          'clause 7 before it goes anywhere else.',
+      ),
+      head('n-h-payment', '3. Payment'),
       {
         type: 'paragraph',
         attrs: { uid: 'n-terms' },
-        content: [
-          { type: 'text', text: 'Payment terms follow the master agreement.' },
-        ],
+        content: [{ type: 'text', text: 'Payment terms follow the master agreement.' }],
       },
+      para(
+        'n-payment-2',
+        'Invoices are issued on acceptance and settled within thirty days. Amounts genuinely ' +
+          'in dispute may be withheld; the rest of the invoice may not.',
+      ),
+      para(
+        'n-payment-3',
+        'Late payment accrues interest at the statutory rate, and the supplier may suspend ' +
+          'work after giving fifteen days of written notice that goes unanswered.',
+      ),
+      head('n-h-confidentiality', '4. Confidentiality'),
+      para(
+        'n-conf-1',
+        'Each party keeps the other party’s confidential information to itself, uses it ' +
+          'only to perform this agreement, and protects it at least as carefully as it ' +
+          'protects its own.',
+      ),
+      para(
+        'n-conf-2',
+        'The duty survives termination by three years, and does not cover information that ' +
+          'was already public, was already known, or was independently developed without ' +
+          'reference to the disclosure.',
+      ),
+      head('n-h-ip', '5. Intellectual property'),
+      para(
+        'n-ip-1',
+        'Deliverables become the client’s property on payment in full. Everything the ' +
+          'supplier brought with it — tools, libraries, know-how — stays the supplier’s, ' +
+          'licensed to the client for as long as the deliverables are used.',
+      ),
+      head('n-h-liability', '6. Liability'),
       {
         type: 'paragraph',
         attrs: { uid: 'n-liability' },
@@ -99,6 +180,30 @@ const REVIEW_DOC: DocumentJSON = {
           { type: 'text', text: 'Liability is capped at the fees paid in the last twelve months.' },
         ],
       },
+      para(
+        'n-liability-2',
+        'The cap does not apply to death or personal injury, to fraud, or to a breach of the ' +
+          'confidentiality clause — nothing in this agreement limits what the law says cannot ' +
+          'be limited.',
+      ),
+      head('n-h-escalation', '7. Escalation and termination'),
+      para(
+        'n-esc-1',
+        'Disputes go first to the named contacts, then to the signatories, and only then to ' +
+          'the courts named in clause 9. Each step gets ten working days before the next one ' +
+          'opens.',
+      ),
+      para(
+        'n-esc-2',
+        'Either party may terminate for a material breach that is still unremedied thirty ' +
+          'days after written notice, and either may terminate for convenience with ninety ' +
+          'days of notice.',
+      ),
+      para(
+        'n-esc-3',
+        'On termination the supplier hands over work in progress and the client pays for ' +
+          'everything accepted or in flight up to that date.',
+      ),
     ],
   },
 }

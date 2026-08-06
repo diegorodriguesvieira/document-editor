@@ -588,11 +588,24 @@ function CommentCard({
   )
   const orphan = !frozen && anchorState === 'orphaned'
   const active = !orphan && !frozen && context?.activeId === comment.id
-  // Clicking the HIGHLIGHT in the document activates this card — bring it
-  // into the panel's scrolled viewport. (Optional chaining: jsdom has no
-  // scrollIntoView.)
+  // Clicking the HIGHLIGHT in the document activates this card — bring it into
+  // the panel's scrolled viewport.
+  //
+  // Scrolling the PANEL by hand instead of `card.scrollIntoView()`, which
+  // cannot be contained: it scrolls every scrollable ancestor, the page
+  // included. The page is exactly where the OTHER half of a card click is
+  // already scrolling — smoothly, to the anchor — and any programmatic scroll
+  // cancels an animation in flight. That is what made the first click on a
+  // card light it up and go nowhere, while a second click (same `active`, so
+  // this effect no longer runs) scrolled fine.
   useEffect(() => {
-    if (active) cardRef.current?.scrollIntoView?.({ block: 'nearest' })
+    const card = cardRef.current
+    const scroller = card?.closest('.comments-panel')
+    if (!active || !card || !scroller) return
+    const cardBox = card.getBoundingClientRect()
+    const viewBox = scroller.getBoundingClientRect()
+    if (cardBox.top < viewBox.top) scroller.scrollTop -= viewBox.top - cardBox.top
+    else if (cardBox.bottom > viewBox.bottom) scroller.scrollTop += cardBox.bottom - viewBox.bottom
   }, [active])
   if (!context) return null
   const { labels } = context

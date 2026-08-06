@@ -401,6 +401,84 @@ describe('<CommentsPanel />', () => {
     )
   })
 
+  it('a card click scrolls the DOCUMENT once — the panel never scrolls the page with it', async () => {
+    // The regression: the card also brings ITSELF into the panel's viewport,
+    // and `card.scrollIntoView()` cannot be contained — it scrolls every
+    // scrollable ancestor, the page included. That instant scroll landed right
+    // after the document's SMOOTH one and cancelled it, so the first click on
+    // a card lit it up and went nowhere while a second click (same `active`,
+    // so the effect no longer ran) scrolled fine. The panel scrolls itself by
+    // hand now; exactly ONE scrollIntoView per click, and it is the document's.
+    const created = anchoredEditor()
+    created.editor.setEditable(false)
+    const comment = saved('c-1', BETO, 'jump to me', {
+      quote: 'world',
+      nodes: [{ id: 'p1', from: 6, to: 11 }],
+    })
+    const scrollSpy = vi.fn()
+    Element.prototype.scrollIntoView = scrollSpy
+
+    renderPanel({ adapter: fakeAdapter([comment]), editor: created.editor })
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelector('[data-comment-id="c-1"]')).not.toBeNull(),
+    )
+    await userEvent.click(await screen.findByText('jump to me'))
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelector('span.comment--active')).not.toBeNull(),
+    )
+
+    expect(scrollSpy).toHaveBeenCalledTimes(1)
+    expect(scrollSpy).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    expect(created.editor.view.dom.contains(scrollSpy.mock.contexts[0] as Node)).toBe(true)
+  })
+
+  it('a MULTI-SEGMENT card jumps to the FIRST segment in document order, not the last', async () => {
+    // Three paragraphs, and ONE comment anchored to the middle and the last —
+    // the shape a split (or a copy-extend) produces. The jump must land on the
+    // earlier of the two, wherever they sit in the array.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(
+        paragraph('p1', 'opening line'),
+        paragraph('p2', 'Payment terms follow the master agreement.'),
+        paragraph('p3', 'Liability is capped at the fees paid.'),
+      ),
+    })
+    created.editor.setEditable(false)
+    const comment = saved('c-multi', BETO, 'these contradict', {
+      quote: 'Payment termsLiability',
+      // Deliberately NOT in document order: the panel must sort by position,
+      // not trust the row's array.
+      nodes: [
+        { id: 'p3', from: 0, to: 9 },
+        { id: 'p2', from: 0, to: 13 },
+      ],
+    })
+    const scrollSpy = vi.fn()
+    Element.prototype.scrollIntoView = scrollSpy
+
+    renderPanel({ adapter: fakeAdapter([comment]), editor: created.editor })
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('[data-comment-id="c-multi"]').length).toBe(2),
+    )
+    await userEvent.click(await screen.findByText('these contradict'))
+
+    // p1 holds 12 chars → nodeSize 14, so p2's content starts at 15.
+    expect(created.editor.state.selection.from).toBe(15)
+    expect(created.editor.state.selection.empty).toBe(true)
+    // And the DOM scroll targeted the paragraph holding that FIRST segment —
+    // scrolling to the last one would leave the reader below what they clicked.
+    const centerCall = scrollSpy.mock.calls.findIndex(
+      (args) => (args[0] as ScrollIntoViewOptions | undefined)?.block === 'center',
+    )
+    expect(centerCall).toBeGreaterThanOrEqual(0)
+    const scrolled = scrollSpy.mock.contexts[centerCall] as Element
+    expect(scrolled.textContent).toContain('Payment terms')
+    // Both slices light up — one card, two highlights.
+    await waitFor(() =>
+      expect(created.editor.view.dom.querySelectorAll('span.comment--active').length).toBe(2),
+    )
+  })
+
   it('a comment with NOTHING live shows as orphaned: quote + hint, no jump, Delete kept', async () => {
     const created = anchoredEditor()
     // No `nodes` at all — nothing for the segments plugin to resolve.
