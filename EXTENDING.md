@@ -371,10 +371,6 @@ Things the first integration must know:
   cut+paste) revives the highlight. An anchor that survives only in PART
   keeps a normal card — `getCommentAnchorState` reports `partial` if your own
   panel wants to show it.
-- **Legacy documents**: the old model serialized anchors as `comment` marks;
-  that mark is GONE from the schema, so a stored doc still carrying them
-  THROWS on load. Run it through `stripCommentMarks(doc)` once on the way in
-  — it sheds only the legacy comment marks, everything else verbatim.
 - **Actions come from YOUR flags, never from authorship**: each comment
   carries `canEdit/canReply/canDelete/canResolve/canArchive` (each reply
   `canEdit/canDelete`) stamped by the backend; `user` only feeds the composer
@@ -544,8 +540,8 @@ Backend-contract values are exported for whoever renders the document:
 `DocumentComment`/`CommentReply`/`CommentStatus`/`CommentUser`/
 `CommentsAdapter`/`CommentDraft`, the anchor shapes
 `CommentNodeSegment`/`CommentAnchorPayload`/`CommentSyncState` (+ the
-`STALE_CONTENT`/`PARENT_DELETED` codes with their `is…Error` recognizers and
-the `stripCommentMarks` legacy-doc valve), plus
+`STALE_CONTENT`/`PARENT_DELETED` codes with their `is…Error` recognizers),
+plus
 `CommentsLabels`/`DEFAULT_COMMENTS_LABELS` (the i18n seam) and the custom-
 surface toolkit `useCommentsBridge`/`commentBalloonShouldShow`.
 The condition grammar, coercion rules and error policy live in

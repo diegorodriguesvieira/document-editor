@@ -55,10 +55,6 @@ export type {
 // state the panel renders.
 export type { CommentAnchorPayload, CommentNodeSegment } from './custom/commentAnchor'
 export type { CommentSyncState } from './custom/commentsProvider'
-// The migration valve for documents saved by the RETIRED mark model: sheds
-// legacy `comment` marks from raw JSON before load (the mark is gone from the
-// schema, so an unstripped legacy doc throws instead of loading).
-export { stripCommentMarks } from './custom/commentAnchor'
 export { CommentsLayer, commentBalloonShouldShow, useCommentsBridge } from './custom/commentsLayer'
 export { CommentsPanel } from './custom/commentsPanel'
 export type { ActionsMenuItem } from './custom/commentsPanel'

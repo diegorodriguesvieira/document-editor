@@ -1,6 +1,4 @@
-import type { JSONContent } from '@tiptap/core'
 import type { Node as PMNode } from '@tiptap/pm/model'
-import type { DocumentJSON } from '../../editor'
 // Deliberate deep imports: the uid index and attribute stay SDK-internal (off
 // the curated src/editor/index.ts barrel), and this module is exactly the
 // layer that binds comments to that internal contract.
@@ -128,30 +126,3 @@ export function textForSegments(doc: PMNode, segments: readonly CommentNodeSegme
   return text
 }
 
-/** The schema name the RETIRED mark-based comments serialized under — kept
- *  only so {@link stripCommentMarks} can recognize legacy documents. */
-const LEGACY_COMMENT_MARK = 'comment'
-
-/**
- * MIGRATION VALVE for documents saved before comments went anchor-based: the
- * old model serialized its anchors as `comment` marks, and that mark is GONE
- * from the schema — loading such a doc now THROWS (`enableContentCheck`
- * refuses unknown marks instead of silently wiping content). Run stored JSON
- * through here before `setJSON`/`content` and the legacy anchors are shed:
- * every `{ type: 'comment' }` mark entry is removed (the `marks` array is
- * dropped when it empties), everything else — other marks included — passes
- * through untouched. Pure and immutable: the input document is never mutated.
- */
-export function stripCommentMarks(doc: DocumentJSON): DocumentJSON {
-  const strip = (node: JSONContent): JSONContent => {
-    const next: JSONContent = { ...node }
-    if (node.marks) {
-      const marks = node.marks.filter((mark) => mark.type !== LEGACY_COMMENT_MARK)
-      if (marks.length > 0) next.marks = marks
-      else delete next.marks
-    }
-    if (node.content) next.content = node.content.map(strip)
-    return next
-  }
-  return { doc: strip(doc.doc) }
-}

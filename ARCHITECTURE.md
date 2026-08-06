@@ -297,9 +297,6 @@ creating/resolving/deleting comments and every anchor movement dispatch NO
 doc-changing transaction and fire NO `onChange`, in either mode (pinned by
 the read-only round-trip test). The old warning that review mode loses
 anchors without a live save path is obsolete: there is nothing to lose.
-Legacy documents that still carry the RETIRED `comment` mark THROW on load
-(the mark left the schema; `enableContentCheck` refuses unknown marks) — the
-exported `stripCommentMarks(doc)` sheds them, everything else verbatim.
 
 WRITES ride ONE ATOMIC ENVELOPE. The segments plugin keeps a timer-free DIRTY
 LEDGER: every transaction marks the comments whose geometry moved, and a
@@ -357,7 +354,7 @@ mount, refetch after every mutation + the optimistic full-row insert when
 `add` returns one) owns the data and the sync queue; `comments.ts` holds the
 segments plugin + the interaction kernel (draft decoration, innermost-wins
 click reporting) and the reporter; `commentAnchor.ts` is the pure geometry
-module (resolve/derive/normalize + `stripCommentMarks`); `commentSync.ts` the
+module (resolve/derive/normalize); `commentSync.ts` the
 pure queue; `CommentsLayer` floats the balloon and runs `useCommentsBridge`
 (also mounted by `CommentsPanel` — idempotent): landing open rows in the
 plugin storage, wiring the reporter's sink into the queue, remapping the

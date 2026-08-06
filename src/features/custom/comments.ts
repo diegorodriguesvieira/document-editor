@@ -1551,9 +1551,7 @@ const CommentsKernel = Extension.create({
  * Anchors are external `nodes[]` rows (uid + node-local offsets, see
  * commentAnchor.ts) resolved and mapped by the segments plugin; highlights
  * are DECORATIONS — never serialized, and provably zero-write in review mode.
- * Documents saved by the RETIRED mark model still carry `comment` marks;
- * run them through `stripCommentMarks` before loading (the mark is gone from
- * the schema, so a legacy doc throws otherwise). The UI lives in
+ * The UI lives in
  * {@link CommentsLayer} (the review-only "Add comment" balloon — mount it in
  * BOTH modes; it is also the provider↔editor bridge) and {@link CommentsPanel}
  * (composer + cards), both fed by {@link CommentsProvider}.
