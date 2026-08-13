@@ -653,7 +653,14 @@ export function CommentsProvider({
     // THE COHERENCE LAW: this runs inside the save layer's collect frame, so
     // everything below is derived from the very editor state whose document
     // the envelope carries — never a snapshot taken a tick earlier.
-    const anchors = bridge.collect()
+    //
+    // Anchor reports are ROW updates; a queued create has no row — its truth
+    // rides `creates` below, re-derived through payloadFor. Without this
+    // filter, a tracked tempId whose geometry drifted (or whose text died —
+    // the ledger now writes proven detaches) would ship a phantom anchor for
+    // a row the backend has never heard of.
+    const queued = new Set(pendingCreatesRef.current.map((create) => create.tempId))
+    const anchors = bridge.collect().filter((report) => !queued.has(report.id))
     // Creates are RE-DERIVED, never replayed: the plugin tracks each queued
     // create under its tempId, so its range moved with every edit since
     // submit. A create whose text is gone (the user deleted what they were

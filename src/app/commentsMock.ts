@@ -528,9 +528,13 @@ export function createMockCommentsApi({
       db = [
         ...db.map((row) => {
           const anchor = moved.get(row.id)
-          return anchor
-            ? { ...row, nodes: anchor.nodes.map((s) => ({ ...s })), quote: anchor.quote }
-            : row
+          if (!anchor) return row
+          // A DETACH write (empty nodes) clears the anchor but keeps the last
+          // stored quote: it is the orphan card's context line, and the
+          // incoming quote for zero segments is necessarily ''. Recommended
+          // behavior for a real backend implementing this contract.
+          const quote = anchor.nodes.length === 0 ? row.quote : anchor.quote
+          return { ...row, nodes: anchor.nodes.map((s) => ({ ...s })), quote }
         }),
         ...created.map((entry) => entry.row),
       ]

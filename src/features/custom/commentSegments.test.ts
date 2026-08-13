@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { renderEditor } from '../../test/editorHarness'
 import { HistoryFeature } from '../history'
+import { HeaderFooterFeature } from './headerFooter'
+import { VariableFeature } from './variable'
 import {
   CommentsFeature,
   getCommentAnchorState,
@@ -242,6 +244,57 @@ describe('comment segments plugin (external nodes[] anchors)', () => {
     expect(getCommentAnchorState(created.editor, 'c-2')).toBe('anchored')
   })
 
+  it('the header/footer normalizer tombstones without detaching — the stored anchor survives a region rewrite', () => {
+    // The REAL one-transaction full-document rewrite: content landing before
+    // the header violates the region invariant, and HeaderFooterGuard's
+    // appendTransaction rewrites the whole doc in ONE ReplaceStep to restore
+    // order. The mapping has no concept of a move, so every live range wipes
+    // and the comment tombstones — while the very same paragraph, same uid,
+    // same text, lands reordered. The reporter must treat that as a MOVE
+    // (silence — the stored row is still true), never as a death; a reload
+    // then restores the highlight from the untouched record.
+    const created = renderEditor([HeaderFooterFeature, CommentsFeature], {
+      content: {
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'documentHeader',
+              attrs: { uid: 'hdr' },
+              content: [paragraph('hp', 'Company header')],
+            },
+            paragraph('p1', 'hello world'),
+          ],
+        },
+      },
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] }])
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+
+    // Disorder the regions: a paragraph inserted BEFORE the header. The
+    // guard's normalize fires in the same dispatch's fixpoint.
+    created.editor.commands.insertContentAt(0, {
+      type: 'paragraph',
+      attrs: { uid: 'p0' },
+      content: [{ type: 'text', text: 'intro' }],
+    })
+
+    // The header is back on top (the normalizer really ran)…
+    expect(created.editor.state.doc.firstChild?.type.name).toBe('documentHeader')
+    // …the in-session highlight is lost to the rewrite (known limitation —
+    // the tombstone holds it)…
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('orphaned')
+    // …and NOTHING ships: the stored address still resolves to its snapshot,
+    // so the detach adjudication reads this as a move and stays silent.
+    expect(getCommentsStorage(created.editor)!.collectDirtyAnchors!()).toEqual([])
+
+    // A reload (documentReplaced) re-seeds from the untouched record: the
+    // anchor was never erased, so the highlight comes straight back.
+    created.api.setJSON(created.api.getJSON())
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+  })
+
   it('slices overlaps: stacked class, both ids listed, innermost owns the slice', () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world')),
@@ -409,6 +462,50 @@ describe('revival truth gate', () => {
     created.editor.commands.insertContentAt(created.editor.state.doc.content.size, block.toJSON())
     expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
     expect(spanTexts(created.editor)).toEqual(['alpha', 'world'])
+  })
+
+  it('a range containing a CHIP revives too — snapshot and gate share the quote norm', () => {
+    // The norm-mismatch pin: dormantText is textForSegments output (atoms
+    // quote NOTHING), so a gate comparing the placeholder norm (atoms count
+    // one space) could never match a chip-containing range — cut a chip
+    // range, put it back, and the highlight stayed dead forever.
+    const created = renderEditor([VariableFeature, CommentsFeature], {
+      content: docOf(paragraph('p1', 'alpha'), {
+        type: 'paragraph',
+        attrs: { uid: 'p2' },
+        content: [
+          { type: 'text', text: 'pay ' },
+          { type: 'variable', attrs: { id: 'client.name', label: 'Client name', uid: 'v1' } },
+          { type: 'text', text: ' now' },
+        ],
+      }),
+    })
+    seedComments(created.editor, [
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p1', from: 0, to: 5 },
+          { id: 'p2', from: 0, to: 9 },
+        ],
+      },
+    ])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+
+    // Cut the whole chip-carrying block — uid leaves, segment goes dormant
+    // with the quote-norm snapshot 'pay  now'.
+    const block = created.editor.state.doc.child(1)
+    created.editor.view.dispatch(created.editor.state.tr.delete(7, 7 + block.nodeSize))
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('partial')
+
+    // Programmatic re-insertion: no clipboard, no carry — the reappearance
+    // gate alone decides, and it must accept its own snapshot's norm.
+    created.editor.commands.insertContentAt(created.editor.state.doc.content.size, block.toJSON())
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    // The inline decoration is sliced around the atom — assert the covered
+    // text, not the span count.
+    expect(spanTexts(created.editor)[0]).toBe('alpha')
+    expect(spanTexts(created.editor).join('')).toContain('pay ')
+    expect(spanTexts(created.editor).join('')).toContain(' now')
   })
 
   it('an unrelated undo never revives a tombstone over REPLACEMENT text', () => {

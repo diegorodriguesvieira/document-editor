@@ -53,10 +53,12 @@ const appendToBody = () => document.body
  * 3. REMAPS the draft range through document changes (typing before the
  *    range in edit mode, programmatic loads) — the pending anchor must stay
  *    glued to its text; a range that collapses cancels the draft.
- * 4. Lands the OPEN `nodes[]`-carrying rows in the kernel storage (the
- *    segments plugin's population — resolved/archived/soft-deleted rows shed
- *    their highlight by simply not landing; a backend comment nothing
- *    anchors stays visible as an ORPHANED card in the panel) TOGETHER with
+ * 4. Lands every OPEN row in the kernel storage (the segments plugin's
+ *    population — resolved/archived/soft-deleted rows shed their highlight by
+ *    simply not landing; a row whose `nodes[]` is empty seeds zero entries
+ *    and shows as an ORPHANED card, but its id staying in the population is
+ *    what keeps the in-session tombstone alive across a records refresh, so
+ *    paste and undo can still resurrect it) TOGETHER with
  *    the comments queued for the next save (under their `tempId`, so their
  *    range maps with every edit), registers the envelope bridge
  *    (`registerAnchorBridge`: the doc snapshot and the collect/confirm seams,
@@ -123,17 +125,18 @@ export function useCommentsBridge(editor: Editor | null): void {
     }
   }, [editor, draft, setDraft, clearDraft])
 
-  // The segments plugin's population: OPEN, undeleted rows that carry
-  // `nodes`. Resolved/archived/soft-deleted rows shed their highlight by
-  // exclusion; rows without `nodes` have nothing to resolve (orphan cards).
+  // The segments plugin's population: every OPEN, undeleted row — INCLUDING
+  // rows whose `nodes` is empty (detached on the backend). Those seed zero
+  // entries (orphan card, nothing to paint), but their membership is
+  // load-bearing: the reconcile evicts tombstones for ids missing from
+  // storage, so dropping empty rows here would destroy the in-session
+  // revival seed the moment a detach write round-trips — and paste/undo
+  // could no longer resurrect the comment.
   const anchorRecords = useMemo<CommentAnchorRecord[] | null>(() => {
     if (comments == null) return null
     return [
       ...comments
-        .filter(
-          (comment) =>
-            comment.status === 'OPEN' && !comment.isDeleted && (comment.nodes?.length ?? 0) > 0,
-        )
+        .filter((comment) => comment.status === 'OPEN' && !comment.isDeleted)
         .map((comment) => ({ id: comment.id, nodes: comment.nodes ?? [], quote: comment.quote })),
       // Comments submitted in EDIT mode but not yet saved ride the plugin
       // under their tempId: their range maps with every edit, so the envelope

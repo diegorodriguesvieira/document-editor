@@ -56,7 +56,9 @@ export interface CommentsStorage {
    *  transaction stream, the no-op dispatch is what makes the plugin see it). */
   comments: CommentAnchorRecord[]
   /** Set by the segments plugin's view: the CURRENT canonical payload of
-   *  every comment whose anchors drifted from the last confirmed save.
+   *  every comment whose anchors drifted from the last confirmed save. A
+   *  report whose `nodes` is empty is the DETACH write — the comment's text
+   *  was proven deleted and the stored row must stop describing it.
    *  Read-only — nothing clears until {@link CommentsStorage.confirmAnchorsSaved}.
    *  Reads the live editor state, so calling it in the same synchronous frame
    *  as `getJSON()` yields the envelope's coherent doc+anchors pair (the
@@ -362,8 +364,11 @@ function pastedEdgeUids(slice: Slice): PastedEdgeUids {
  *   was pasted back into its own source, where first-occurrence alignment
  *   cannot tell copy from original.
  * - Only LIVE segments extend, same as the remap half — so a drop that MOVED
- *   text extends nothing (the delete collapsed the segment first), while an
- *   alt-drag COPY extends. Cut text stays dead: anti-ghost holds.
+ *   text extends nothing here (the delete collapsed the segment first), while
+ *   an alt-drag COPY extends. The MOVE is the cut-carry's job instead: a drop
+ *   that deleted its own dragged selection records a carry buffer inline, so
+ *   the comment follows a drag exactly as it follows cut+paste. Deleted text
+ *   that never comes back stays dead: anti-ghost holds.
  * - The open EDGE blocks of a multi-block copy stay uncovered (they never
  *   latch) — accepted; their closed middles still extend via the remap half.
  */
@@ -507,10 +512,11 @@ interface CutCarry {
 /**
  * What a cut took from the commented ranges — computed on the OLD document
  * (the transaction's mapping has not been applied to these positions yet).
- * Single-textblock cuts only: inside one block, position arithmetic IS
- * character arithmetic, while a multi-block cut would have to account for the
- * boundary tokens `textBetween` skips. Whole-block cuts do not need this
- * anyway — the uid revival already restores them.
+ * Recorded PER TEXTBLOCK — a multi-block cut yields one entry per block —
+ * because inside one block, position arithmetic IS character arithmetic; the
+ * per-block clip is what absorbs the boundary tokens `textBetween` skips.
+ * Whole-block cuts do not strictly need this (the uid revival already
+ * restores them), but their blocks record too and the paste dedupes.
  */
 function recordCutCarry(oldState: EditorState, prev: CommentSegmentsState): CutCarry | null {
   const { from, to } = oldState.selection
@@ -551,6 +557,13 @@ function recordCutCarry(oldState: EditorState, prev: CommentSegmentsState): CutC
  * whether the content landed inside an existing block or as a node of its
  * own, the evidence is the same characters coming back.
  *
+ * Identity and geometry travel separately: the range binds to the matched
+ * node's POSITION, and the uid is only recorded as the stored identity. A
+ * node still holding a DUPLICATED uid (a pasted copy awaiting its re-mint)
+ * is skipped for this apply — the carry window retries once the kernel's
+ * appended transaction settles the identity, so `stored.id` is always the
+ * unique, final uid.
+ *
  * The carry survives repeated pastes (pasting a cut buffer twice duplicates
  * it, exactly like a copy), a tombstoned comment is resurrected here (its
  * text demonstrably returned — the same evidence every revival demands), and
@@ -574,24 +587,36 @@ function applyCutCarry(
     entries.map((candidate) => (candidate.live ? candidate : { ...candidate, moved: true }))
 
   const changes = getChangedRanges(combineTransactionSteps(oldState.doc, [tr]))
+  const index = nodeIdIndex(doc)
   for (const { newRange } of changes) {
-    for (const { node } of findChildrenInRange(doc, newRange, (candidate) =>
+    for (const { node, pos } of findChildrenInRange(doc, newRange, (candidate) =>
       candidate.isTextblock,
     )) {
       const uid = node.attrs[NODE_ID_ATTRIBUTE] as unknown
       if (typeof uid !== 'string' || uid === '') continue
+      // A duplicated uid is a pasted copy the NodeIds kernel has not re-minted
+      // yet (its appended transaction lands later in this same dispatch).
+      // Binding now would store an identity owned by the SURVIVING holder —
+      // skip this node and let the carry-window retry bind after the re-mint,
+      // when the uid is unique. Mirrors the merge half's landing defer.
+      if (index.duplicated.has(uid)) continue
       const text = contentString(node)
       for (const block of carry.blocks) {
         const align = text.indexOf(block.text)
         if (align === -1) continue
+        // The binding is the MATCHED node's own geometry — string indices are
+        // content offsets under the placeholder norm, so the range needs no
+        // re-resolution. Never round-trip through the uid index here: byId
+        // keeps the FIRST holder in document order, which during a paste can
+        // be the surviving remainder rather than this node.
+        const base = pos + 1
         for (const range of block.ranges) {
           const stored: CommentNodeSegment = {
             id: uid,
             from: align + range.from,
             to: align + range.to,
           }
-          const live = resolveSegment(doc, stored)
-          if (!live) continue
+          const live = { from: base + stored.from, to: base + stored.to }
           const existing = comments.get(range.id)
           const tombstoned = dropped.get(range.id)
           const alreadyThere = (existing ?? tombstoned ?? []).some(
@@ -625,9 +650,9 @@ function applyCutCarry(
 
 /**
  * The canonical anchor payload of a comment's CURRENT entries — the one
- * derivation every write shares (the reporter, {@link deriveAnchorPayload}
- * for retries): each live range re-derived from the doc it sits in
- * (`segmentsFromRange`, in entry order — normalization keeps the lives in
+ * derivation every write shares (the reporter's ledger and the public
+ * `payloadFor` seam alike): each live range re-derived from the doc it sits
+ * in (`segmentsFromRange`, in entry order — normalization keeps the lives in
  * document order). DORMANT entries DO NOT TRAVEL (decided): every entry a
  * write ships is one the backend's quote validator can safely resolve, the
  * stored row self-cleans to exactly what is highlighted, and nothing
@@ -635,9 +660,11 @@ function applyCutCarry(
  * state keeps the collapse snapshots; the one corner given up is reviving a
  * MIXED row's dormant segment across a reload.
  *
- * Null when nothing is live (or the lives graze only block boundaries):
- * writing then would ship `nodes: []` — destroying the stored anchor an
- * all-dormant comment still revives from — so it is simply never reported.
+ * Null means only "nothing is live" (including lives that grazed just block
+ * boundaries). What a null MEANS for the backend row is not decided here:
+ * the ledger's `reportPayloadOf` adjudicates it — a PROVEN-dead anchor is
+ * written as the empty payload so the row never outlives its text, and
+ * everything unproven stays silent.
  */
 function derivePayload(doc: PMNode, entries: SegmentEntry[]): CommentAnchorPayload | null {
   const nodes: CommentNodeSegment[] = []
@@ -664,12 +691,13 @@ function payloadsEqual(a: CommentAnchorPayload, b: CommentAnchorPayload): boolea
  * The DIRTY LEDGER behind the atomic save envelope (rodada 6) — no timers, no
  * sink, no queue. `applySegments` marks ids whose live geometry changed;
  * `sweep` (plugin view, once per dispatch) settles the picture against the
- * confirmed baselines (an edit undone within the cycle silences itself, an
- * all-dormant anchor is never written); `collect` derives the CURRENT
- * canonical payloads for the envelope without clearing anything; `confirm`
- * lands the envelope's payloads as the persisted truth — dirt that arrived
- * after the collect stays dirty for the next envelope. The consumer's save
- * debounce is the only cadence.
+ * confirmed baselines (an edit undone within the cycle silences itself; a
+ * dirty id with nothing live is adjudicated by `reportPayloadOf` — a
+ * PROVEN-dead anchor writes the empty payload, anything unproven never
+ * writes); `collect` derives the CURRENT canonical payloads for the envelope
+ * without clearing anything; `confirm` lands the envelope's payloads as the
+ * persisted truth — dirt that arrived after the collect stays dirty for the
+ * next envelope. The consumer's save debounce is the only cadence.
  */
 interface AnchorReporter {
   /** A comment's live geometry changed: mapped, coalesced, collapsed, revived. */
@@ -722,9 +750,52 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
     return entries ? derivePayload(state.doc, entries) : null
   }
 
+  /** The detach write. A factory, not a shared constant — reports and
+   *  baselines cross the adapter seam and must never share `nodes` identity. */
+  const emptyPayload = (): CommentAnchorPayload => ({ nodes: [], quote: '' })
+
+  /**
+   * The LEDGER's derivation — what sweep/collect/confirm adjudicate a dirty
+   * id against. Three-valued:
+   * - a LIVE payload: at least one range still holds (mixed rows stay
+   *   live-only — dormants never travel);
+   * - the EMPTY payload: the anchor is PROVEN dead — every entry (dormant in
+   *   `comments` or tombstoned in `dropped`) carries a collapse snapshot and
+   *   none of their stored addresses still resolves to it. Cut, type-over
+   *   and paste-over land here; the write clears the row so the stored
+   *   anchor never outlives the text it described.
+   * - null: nothing to say. Unknown ids; ids with no entries in either map
+   *   (teardown, pre-seed); any SNAPSHOTLESS entry (a seeded dormant — no
+   *   snapshot is no proof of death: a drifted local doc must not erase a
+   *   row that may be true for the saved one); and any entry whose stored
+   *   address STILL resolves to its snapshot — a one-transaction move (drag,
+   *   region normalize, cell merge) relocated the text intact, the row is
+   *   still true, and erasing it would destroy a valid anchor.
+   *
+   * The public `payloadFor` seam deliberately keeps the LIVE-only
+   * derivation: a queued create's doom check reads its truthiness, and an
+   * empty payload is an object — truthy — that would ship a comment anchored
+   * to nothing instead of cancelling it.
+   */
+  const reportPayloadOf = (state: EditorState, id: string): CommentAnchorPayload | null => {
+    const live = payloadOf(state, id)
+    if (live) return live
+    if (!storage.comments.some((record) => record.id === id)) return null
+    const segments = commentSegmentsKey.getState(state)
+    const entries = segments?.comments.get(id) ?? segments?.dropped.get(id)
+    if (!entries || entries.length === 0) return null
+    for (const entry of entries) {
+      if (entry.dormantText === undefined) return null
+      if (textForSegments(state.doc, [entry.stored]) === entry.dormantText) return null
+    }
+    return emptyPayload()
+  }
+
   const baseline = (doc: PMNode, record: CommentAnchorRecord): CommentAnchorPayload => ({
     nodes: record.nodes.map((node) => ({ ...node })),
-    quote: record.quote ?? textForSegments(doc, record.nodes),
+    // A row already detached on the backend must baseline EQUAL to the empty
+    // derivation, or a confirmed erasure could never settle across a reload.
+    quote: record.nodes.length === 0 ? '' : (record.quote ?? textForSegments(doc, record.nodes)),
   })
 
   return {
@@ -751,8 +822,11 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
           dirty.delete(id)
           continue
         }
-        const payload = payloadOf(state, id)
-        // All-dormant, tombstoned or evicted: never written — not dirty.
+        const payload = reportPayloadOf(state, id)
+        // Nothing to adjudicate — unproven death, unseeded, or evicted from
+        // the doc's maps: never written, not dirty. (Gone from STORAGE means
+        // silence too, handled above; gone from the DOC means the empty
+        // payload, and that one flows through the baseline compare below.)
         if (!payload) {
           dirty.delete(id)
           continue
@@ -765,7 +839,7 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
     collect: (state) => {
       const reports: CommentAnchorReport[] = []
       for (const id of [...dirty]) {
-        const payload = payloadOf(state, id)
+        const payload = reportPayloadOf(state, id)
         if (payload) reports.push({ id, ...payload })
       }
       return reports
@@ -774,8 +848,10 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
       for (const report of reports) {
         const saved: CommentAnchorPayload = { nodes: report.nodes, quote: report.quote }
         lastReported.set(report.id, saved)
-        const current = payloadOf(state, report.id)
-        if (!current) continue // all-dormant: never written (orphan rule)
+        const current = reportPayloadOf(state, report.id)
+        // Nothing to adjudicate anymore (evicted mid-flight, or the death
+        // became unprovable): the saved baseline stands, nothing re-dirties.
+        if (!current) continue
         // BOTH directions against the NEW baseline — what the envelope just
         // persisted. Equal: clean. Different: dirty, whichever way it drifted.
         // The delete-only version silently lost the UNDO case: an edit that
@@ -1015,10 +1091,12 @@ function applySegments(
         // Geometry-preserving content edits (same-length replacement:
         // spellcheck, IME, autocorrect) still change the QUOTE — dirty the
         // reporter even though no entry mutates, or the row's quote drifts
-        // until the validator false-rejects a later write.
+        // until the validator false-rejects a later write. QUOTE norm: the
+        // artifact this protects is the shipped quote, and the placeholder
+        // norm is blind to a leaf swapped for a literal space.
         if (
-          doc.textBetween(from, to, undefined, LEAF_PLACEHOLDER) !==
-          oldState.doc.textBetween(entry.live.from, entry.live.to, undefined, LEAF_PLACEHOLDER)
+          doc.textBetween(from, to) !==
+          oldState.doc.textBetween(entry.live.from, entry.live.to)
         ) {
           reporter.markDirty(id)
         }
@@ -1071,10 +1149,13 @@ function applySegments(
         if (!live) return entry
         // The truth gate: a revival must land on EXACTLY the text that went
         // dormant, or it is the ghost (an unrelated undo over replacement
-        // text, a stale seed after pre-dormancy drift).
+        // text, a stale seed after pre-dormancy drift). QUOTE norm on both
+        // sides — the snapshot is textForSegments output, and comparing it
+        // against the placeholder norm would refuse every range containing a
+        // leaf (chip, hardBreak) forever.
         if (
           entry.dormantText !== undefined &&
-          doc.textBetween(live.from, live.to, undefined, LEAF_PLACEHOLDER) !== entry.dormantText
+          doc.textBetween(live.from, live.to) !== entry.dormantText
         ) {
           return entry
         }
@@ -1106,9 +1187,10 @@ function applySegments(
         if (entry.dormantText === undefined && !entryReappeared) return entry
         const live = resolveSegment(doc, entry.stored)
         if (!live) return entry
+        // QUOTE norm, matching the snapshot's derivation (see the gate above).
         if (
           entry.dormantText !== undefined &&
-          doc.textBetween(live.from, live.to, undefined, LEAF_PLACEHOLDER) !== entry.dormantText
+          doc.textBetween(live.from, live.to) !== entry.dormantText
         ) {
           return entry
         }
@@ -1145,7 +1227,10 @@ function applySegments(
           const stored: CommentNodeSegment = { ...entry.stored, id: newUid }
           const live = resolveSegment(doc, stored)
           if (!live) continue
-          if (doc.textBetween(live.from, live.to, undefined, LEAF_PLACEHOLDER) !== entry.dormantText) {
+          // QUOTE norm — derived from the REMAPPED node's own resolved range
+          // (never from entry.stored, which still names the shell the revival
+          // is moving away from).
+          if (doc.textBetween(live.from, live.to) !== entry.dormantText) {
             continue
           }
           revived = true
@@ -1228,6 +1313,26 @@ function applySegments(
   // is matched by TEXT.
   const pastedEdges = tr.docChanged ? consumePastedEdgeUids() : null
   const uiEvent = tr.getMeta('uiEvent') as unknown
+  // A drag MOVE is ONE transaction — ProseMirror deletes the dragged range
+  // and inserts it at the drop point under a single 'drop' meta — so no cut
+  // ever recorded a buffer for it. Record one here, from the same pre-state,
+  // when this drop demonstrably deleted the old selection (the wiped pair,
+  // exactly as the mapping pass reads a collapse). An EXTERNAL drop deletes
+  // nothing (its old selection is unrelated) and an alt-drag COPY leaves the
+  // source in place: both fail the guard and ride the copy-extend halves.
+  // `noteCut` only on a real buffer — a null would clobber a cut still
+  // waiting for its paste.
+  if (uiEvent === 'drop' && tr.docChanged) {
+    const { from, to } = oldState.selection
+    const draggedAway =
+      from < to &&
+      tr.mapping.mapResult(from, 1).deletedAfter &&
+      tr.mapping.mapResult(to, -1).deletedBefore
+    if (draggedAway) {
+      const dragCarry = recordCutCarry(oldState, prev)
+      if (dragCarry) clipboard.noteCut(dragCarry)
+    }
+  }
   if (uiEvent === 'paste' || uiEvent === 'drop') {
     const spots = tr.docChanged ? mergedPasteSpots(tr) : { start: null, end: null }
     // Both open edges of the slice, each with its own source: a multi-block
@@ -1323,7 +1428,9 @@ function applySegments(
     const entries = comments.get(id)
     if (entries) comments.set(id, normalizeEntries(entries))
     // Dirty even when since evicted (tombstone/membership): the sweep resolves
-    // what a dirty id means against the FINAL state — gone means silence.
+    // what a dirty id means against the FINAL state — gone from STORAGE means
+    // silence, PROVEN gone from the doc means the empty write, and everything
+    // else settles against its baseline.
     reporter.markDirty(id)
   }
 

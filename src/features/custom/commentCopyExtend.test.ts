@@ -441,7 +441,7 @@ describe('copy-extend through the REAL pipeline — remap half and the drop arm'
     expect(spanTexts(created.editor)).toEqual(['hello', 'llo'])
   })
 
-  it('drop arm — a drag MOVE (delete + insert, one transaction) extends nothing', () => {
+  it('drop arm — a drag MOVE carries the comment to the drop point (drag = move, like cut+paste)', () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
     })
@@ -451,14 +451,69 @@ describe('copy-extend through the REAL pipeline — remap half and the drop arm'
     created.editor.view.someProp('transformPasted', (fn) => {
       slice = fn(slice, created.editor.view, false)
     })
-    // The move shape: the same transaction deletes the dragged text and
-    // inserts it at the target — the delete collapses the live segment BEFORE
-    // the merge half runs, so only LIVE segments extend (anti-ghost).
+    // The move shape, faithfully: a real drag starts from the SELECTED text
+    // (dragstart reads view.state.selection), then ONE transaction deletes
+    // that range and inserts the slice at the drop point under 'drop'. The
+    // deleted-old-selection pair is what tells a move apart from an external
+    // drop or an alt-drag copy — and it is what arms the inline carry.
+    created.editor.commands.setTextSelection({ from: 1, to: 6 })
     const tr = created.editor.state.tr.delete(1, 6)
     tr.replaceRange(tr.mapping.map(22), tr.mapping.map(22), slice)
     created.editor.view.dispatch(tr.setMeta('uiEvent', 'drop'))
 
-    expect(spanTexts(created.editor)).toEqual([])
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    expect(collectAnchors(created.editor)).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p2', from: 8, to: 13 }], quote: 'hello' },
+    ])
+  })
+
+  it('drop arm — dragging a SUBRANGE out keeps both halves highlighted', () => {
+    // The half-a-comment drag: 'world' leaves, 'hello ' stays. The carry must
+    // fire off the deleted-selection guard, never off "the comment fully
+    // collapsed" — a subrange move collapses nothing, and gating on collapse
+    // would silently lose exactly the half that travelled.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 11 }] }])
+
+    let slice = parseSliceFromHTML(created.editor, '<p data-uid="p1">world</p>')
+    created.editor.view.someProp('transformPasted', (fn) => {
+      slice = fn(slice, created.editor.view, false)
+    })
+    created.editor.commands.setTextSelection({ from: 7, to: 12 })
+    const tr = created.editor.state.tr.delete(7, 12)
+    tr.replaceRange(tr.mapping.map(22), tr.mapping.map(22), slice)
+    created.editor.view.dispatch(tr.setMeta('uiEvent', 'drop'))
+
+    expect(spanTexts(created.editor)).toEqual(['hello ', 'world'])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+  })
+
+  it('drop arm — an EXTERNAL drop (nothing deleted) never arms the carry', () => {
+    // The stale-selection case the guard exists for: the user has commented
+    // text SELECTED, and content from outside the editor is dropped at the
+    // end. Nothing is deleted, so this is no move — arming the carry off the
+    // mere selection would text-match the dropped copy and duplicate the
+    // highlight onto content nobody moved.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] }])
+    created.editor.commands.setTextSelection({ from: 1, to: 6 })
+
+    let slice = parseSliceFromHTML(created.editor, '<p data-uid="ext">hello</p>')
+    created.editor.view.someProp('transformPasted', (fn) => {
+      slice = fn(slice, created.editor.view, false)
+    })
+    const end = created.editor.state.doc.content.size - 1
+    created.editor.view.dispatch(
+      created.editor.state.tr.replaceRange(end, end, slice).setMeta('uiEvent', 'drop'),
+    )
+
+    // Only the original highlight — the dropped copy gained nothing.
+    expect(spanTexts(created.editor)).toEqual(['hello'])
   })
 })
 
@@ -535,7 +590,7 @@ describe('cut-carry — the comment follows a cut of TEXT', () => {
     expect(collectAnchors(created.editor)[0]!.nodes).toHaveLength(2)
   })
 
-  it('a cut with NOTHING pasted stays orphaned — and unrelated text never revives it', () => {
+  it('a cut with NOTHING pasted orphans — unrelated text never revives it, and the DETACH ships', () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
     })
@@ -554,7 +609,11 @@ describe('cut-carry — the comment follows a cut of TEXT', () => {
       '<p data-pm-slice="1 1 []">something else</p>',
     )
     expect(spanTexts(created.editor)).toEqual([])
-    expect(collectAnchors(created.editor)).toEqual([])
+    // The envelope carries the PROVEN detach — the stored row must not keep
+    // describing text this document no longer holds. (A later in-session
+    // paste of the real characters still resurrects the tombstone and the
+    // next envelope restores the row.)
+    expect(collectAnchors(created.editor)).toEqual([{ id: 'c-1', nodes: [], quote: '' }])
   })
 
   it('a plain DELETE (no cut) never carries — only a real cut records a buffer', () => {
@@ -568,6 +627,69 @@ describe('cut-carry — the comment follows a cut of TEXT', () => {
     created.editor.commands.deleteRange({ from: 1, to: 6 })
     pasteAt(created.editor, created.editor.state.doc.content.size - 1, '<p data-pm-slice="1 1 []">hello</p>')
     expect(spanTexts(created.editor)).toEqual([])
+  })
+
+  it('the carry survives the detach round-trip: save, records refresh, THEN paste still revives', () => {
+    // The regression the bridge's keep-empty-rows rule exists for. The save
+    // debounce routinely lands between a cut and its paste: the DETACH write
+    // round-trips, the backend row comes back as `nodes: []`, and the
+    // records refresh re-lands the population. The row STAYING in storage is
+    // what keeps the tombstone (the membership reconcile evicts ids that
+    // left), so the paste can still resurrect — and the next envelope heals
+    // the row.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] }])
+
+    cut(created.editor, 1, 6)
+    expect(collectAnchors(created.editor)).toEqual([{ id: 'c-1', nodes: [], quote: '' }])
+    confirmAnchors(created.editor)
+
+    // The refresh: the provider re-lands what the backend now holds.
+    seedComments(created.editor, [{ id: 'c-1', nodes: [] }])
+
+    pasteAt(created.editor, created.editor.state.doc.content.size - 1, '<p data-pm-slice="1 1 []">hello</p>')
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+    expect(collectAnchors(created.editor)).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p2', from: 8, to: 13 }], quote: 'hello' },
+    ])
+  })
+
+  it('undo after the detach round-trip still restores the highlight — and the next envelope heals the row', () => {
+    const created = renderEditor([HistoryFeature, CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'target: ')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] }])
+
+    cut(created.editor, 1, 6)
+    confirmAnchors(created.editor)
+    seedComments(created.editor, [{ id: 'c-1', nodes: [] }])
+
+    created.editor.commands.undo()
+
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+    expect(collectAnchors(created.editor)).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }], quote: 'hello' },
+    ])
+  })
+
+  it('a FRESH session seeded with the detached row stays orphaned — paste-back revival is session-scoped', () => {
+    // The accepted limit (orphan-forever, the delete rule): the collapse
+    // snapshots and the carry buffer are plugin state, so a comment whose
+    // detach was persisted has nothing to revive from in a new session —
+    // pasting the very characters back re-lights nothing and, crucially,
+    // ships no write (an empty row has no death to prove).
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', ' world'), paragraph('p2', 'target: ')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [] }])
+
+    pasteAt(created.editor, created.editor.state.doc.content.size - 1, '<p data-pm-slice="1 1 []">hello</p>')
+
+    expect(spanTexts(created.editor)).toEqual([])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('orphaned')
+    expect(collectAnchors(created.editor)).toEqual([])
   })
 })
 
@@ -832,6 +954,79 @@ describe('cut-carry across MULTIPLE blocks', () => {
     expect(spanTexts(created.editor)).toEqual(['terms'])
     expect(getCommentAnchorState(created.editor, 'c-2')).toBe('anchored')
   })
+
+  it('THREE blocks, BOTH edges partial — the full anchor relocates (the reported gesture)', () => {
+    // The field report: a comment spanning three paragraphs, cut from
+    // mid-first to mid-third (all of the middle), pasted elsewhere — every
+    // paragraph must arrive highlighted: the head onto the block the open
+    // edge merged into, the middle onto its preserved uid, the tail onto the
+    // block the paste materialized.
+    const created = renderEditor([CommentsFeature], { content: twoParagraphDoc() })
+    seedComments(created.editor, [
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p1', from: 12, to: 19 },
+          { id: 'p2', from: 0, to: 13 },
+          { id: 'p3', from: 0, to: 9 },
+        ],
+      },
+    ])
+    expect(spanTexts(created.editor)).toEqual(['30 days', 'payment terms', 'liability'])
+
+    // Cut 'is 30 days' + all of p2 + 'liability' — the merge leaves ONE
+    // surviving block (uid p1): 'deadline  is capped'.
+    created.editor.commands.setTextSelection({ from: 10, to: 46 })
+    created.editor.view.dispatch(created.editor.state.tr.deleteSelection().setMeta('uiEvent', 'cut'))
+    expect(spanTexts(created.editor)).toEqual([])
+
+    created.editor.commands.setTextSelection(created.editor.state.doc.content.size - 1)
+    created.editor.view.pasteHTML(
+      '<p data-pm-slice="1 1 []" data-uid="p1">is 30 days</p>' +
+        '<p data-uid="p2">payment terms</p>' +
+        '<p data-uid="p3">liability</p>',
+      new Event('paste') as ClipboardEvent,
+    )
+
+    expect(spanTexts(created.editor)).toEqual(['30 days', 'payment terms', 'liability'])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    const [report] = collectAnchors(created.editor)
+    expect(report!.nodes).toHaveLength(3)
+    expect(report!.quote).toBe('30 dayspayment termsliability')
+  })
+
+  it('the duplicate-uid window: the carry binds the PASTED copy, never the surviving remainder', () => {
+    // Defect-B pin. The cut leaves a NON-empty survivor still holding p1;
+    // the closed slice materializes a copy that transiently holds p1 too.
+    // An identity round-trip through the uid index resolves to the FIRST
+    // holder — the survivor — and paints a ghost there ('line ', clamped
+    // into 'deadline '). The carry must bind the node it text-matched, and a
+    // duplicated uid defers one apply until the kernel re-mints the copy.
+    const created = renderEditor([CommentsFeature], { content: twoParagraphDoc() })
+    seedComments(created.editor, [DEADLINE])
+    expect(spanTexts(created.editor)).toEqual(['30 days'])
+
+    // Cut 'is 30 days' + all of p2: the survivor keeps 'deadline ' under p1.
+    created.editor.commands.setTextSelection({ from: 10, to: 35 })
+    created.editor.view.dispatch(created.editor.state.tr.deleteSelection().setMeta('uiEvent', 'cut'))
+    expect(spanTexts(created.editor)).toEqual([])
+
+    // Paste BELOW the survivor as a CLOSED slice still carrying p1 — the
+    // first-occurrence lookup would land on the survivor above.
+    created.editor.commands.setTextSelection(created.editor.state.doc.content.size - 1)
+    created.editor.view.pasteHTML(
+      '<p data-pm-slice="0 0 []" data-uid="p1">is 30 days</p>',
+      new Event('paste') as ClipboardEvent,
+    )
+
+    // Exactly ONE highlight, on the pasted copy — no ghost in the survivor.
+    expect(spanTexts(created.editor)).toEqual(['30 days'])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    const [report] = collectAnchors(created.editor)
+    expect(report!.nodes).toHaveLength(1)
+    expect(report!.nodes[0]!.id).not.toBe('p1')
+    expect(report!.quote).toBe('30 days')
+  })
 })
 
 /* A cut that runs THROUGH a commented range — from a heading down to the
@@ -1032,9 +1227,21 @@ describe('copy/cut matrix — the remaining gestures', () => {
     // c-2's text was REPLACED, so it orphans — a comment must never end up
     // covering the text that replaced the one it was made on.
     expect(getCommentAnchorState(created.editor, 'c-2')).toBe('orphaned')
-    // c-1 followed the paste into the target block.
+    // c-1 followed the paste into the target block; c-2's death is proven
+    // (its snapshot no longer resolves), so its DETACH ships alongside.
+    // Ledger order is dirtying order: the wipe dirtied c-2 first.
     expect(spanTexts(created.editor)).toEqual(['hello', 'hello'])
-    expect(collectAnchors(created.editor).map((report) => report.id)).toEqual(['c-1'])
+    expect(collectAnchors(created.editor)).toEqual([
+      { id: 'c-2', nodes: [], quote: '' },
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p1', from: 0, to: 5 },
+          { id: 'p2', from: 0, to: 5 },
+        ],
+        quote: 'hellohello',
+      },
+    ])
   })
 
   it('typing OVER a commented range orphans it too — same rule, no paste involved', () => {

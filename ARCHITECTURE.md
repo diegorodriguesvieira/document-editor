@@ -282,15 +282,28 @@ without it, typing at the seam of two touching ranges opens a permanent hole)
 and paints DISJOINT-SLICE decorations: `.comment` per slice, `--stacked` on
 overlaps, `data-comment-id` = innermost (smallest TOTAL covered length),
 `data-comment-ids` = every covering id. Segments whose text is deleted go
-DORMANT (`stored` retained verbatim; all-dormant = tombstone, and ordinary
-typing never re-resolves — the anti-ghost rule). Revival has exactly three
-triggers: the uid reappearing (cut+paste restores highlights with zero
-traffic — offsets are move-invariant), undo/redo, and the `documentReplaced`
-meta `api.setJSON` stamps. A paste that DUPLICATES a commented node
-(uid-collision remap meta from the NodeIds kernel) extends the comment onto
-the copy by content-window intersection. The offset norm (text = 1/char;
-inline atoms and hardBreak = 1, quoting nothing) is pinned by the shared
-FE/BE golden vectors in `commentAnchor.golden.ts`.
+DORMANT — `stored` refreshed from the pre-collapse geometry plus a
+`dormantText` snapshot of the covered text, in the QUOTE norm (all-dormant =
+tombstone, and ordinary typing never re-resolves — the anti-ghost rule).
+Revival has exactly three triggers — the uid reappearing (a whole-block
+cut+paste restores highlights with zero traffic — offsets are
+move-invariant), undo/redo, and the `documentReplaced` meta `api.setJSON`
+stamps — and every one is gated on the snapshot: the resolved text must equal
+`dormantText`, compared in the same quote norm that produced it (one norm on
+both sides, or a range containing a chip could never revive). A paste that
+DUPLICATES a commented node (uid-collision remap meta from the NodeIds
+kernel) extends the comment onto the copy by content-window intersection.
+Cutting TEXT (the node survives) records a CARRY buffer — the cut blocks'
+text plus each comment range in that text's frame — and the paste that
+brings those characters back re-anchors them; a drag is the same move in ONE
+transaction (`uiEvent: 'drop'` deleting its own dragged selection), so it
+records the buffer inline and the comment follows a drag exactly as it
+follows cut+paste. The carry binds each range to the POSITION of the node it
+text-matched — never through the uid index, whose first-occurrence rule
+would land on a surviving duplicate — and a node still holding a duplicated
+uid defers one apply, until the kernel's re-mint settles the identity. The
+offset norm (text = 1/char; inline atoms and hardBreak = 1, quoting nothing)
+is pinned by the shared FE/BE golden vectors in `commentAnchor.golden.ts`.
 
 THE ZERO-WRITE GUARANTEE: highlights are decorations over external anchors —
 creating/resolving/deleting comments and every anchor movement dispatch NO
@@ -321,7 +334,25 @@ time and overlapping cycles coalesce into a single follow-up. `versionId` is
 the consumer's optimistic-concurrency token — it lives in the `save` closure,
 because the SDK carries it without ever reading it; a stale one is rejected
 without writing, and the consumer's `shouldStop` tells the save layer to stop
-for good (settling every queued create instead of leaving it hanging). The cycle's own state (`saved` → `pending` → `saving` → …) is what the
+for good (settling every queued create instead of leaving it hanging).
+
+A comment whose EVERY range died writes its DETACH: when each entry carries a
+collapse snapshot and none of their stored addresses still resolves to it,
+the death is proven and the envelope ships `{ nodes: [], quote: '' }` — the
+row must not outlive its text, or the next reload clamps the stale anchor
+over whatever text sits there (the ghost this rule exists to kill). Anything
+UNPROVEN stays silent: a one-transaction move (drag, region normalize, cell
+merge) relocates the text intact so the stored row is still true, and a
+snapshotless dormant (a seeded row that never resolved this session) is no
+evidence of death. In-session revival is untouched either way — tombstones
+resurrect from their snapshots and the next envelope heals the row — and a
+detached row STAYS in the plugin population (`nodes: []` seeds zero entries)
+precisely so that tombstone survives the records refresh. The deliberate
+forfeit: paste-back revival across SESSIONS dies with the stored anchor
+(orphan-forever — deleting commented text orphans the comment, the product
+rule).
+
+The cycle's own state (`saved` → `pending` → `saving` → …) is what the
 consumer's banner reads, and `saved` is the ONLY value meaning the server has
 everything — the opt-in `warnBeforeUnload` turns anything else into the
 browser's leave-page confirmation (its text is the platform's, and it warns
@@ -338,11 +369,15 @@ Threads and permissions are backend-shaped: `canEdit`/`canReply`/`canDelete`/
 `canResolve`/`canArchive` per comment (reply: `canEdit`/`canDelete`) — the
 panel renders from flags ALONE, never authorship. Replies are ONE level, have
 no anchor of their own, and stay available on ORPHANED comments (the card
-persists forever — quote + hint, no jump). A PARTIAL anchor (some segments
+persists forever — quote + hint, no jump; a detach write clears `nodes` but
+the backend keeps the row's LAST quote, which is that card's context line). A PARTIAL anchor (some segments
 dormant) renders like a healthy card: `getCommentAnchorState` still reports
 it for custom surfaces, but the stock panel had nothing actionable to say.
-`status` tabs filter the single `list()`; only OPEN, undeleted rows reach the
-plugin, so resolving/archiving/soft-deleting sheds the highlight by exclusion.
+`status` tabs filter the single `list()`; every OPEN, undeleted row reaches
+the plugin — including a detached one (`nodes: []`, zero entries, nothing
+painted), whose membership is what keeps its tombstone alive across a
+records refresh — so resolving/archiving/soft-deleting sheds the highlight
+by exclusion.
 Soft-deleted rows may stay in `list()` as `isDeleted` tombstones — the UI
 skips them, and the provider reconciles `activeId` against every refreshed
 list (a remote lifecycle flip must not leave a dangling active highlight).
@@ -354,12 +389,12 @@ mount, refetch after every mutation + the optimistic full-row insert when
 `add` returns one) owns the data and the sync queue; `comments.ts` holds the
 segments plugin + the interaction kernel (draft decoration, innermost-wins
 click reporting) and the reporter; `commentAnchor.ts` is the pure geometry
-module (resolve/derive/normalize); `commentSync.ts` the
-pure queue; `CommentsLayer` floats the balloon and runs `useCommentsBridge`
-(also mounted by `CommentsPanel` — idempotent): landing open rows in the
-plugin storage, wiring the reporter's sink into the queue, remapping the
-draft, mirroring `isEditable` into the create-queueing flag, and registering
-the fresh-payload source Retry reads. Adapter errors: thrown `Error` messages
+module (resolve/derive/normalize); `CommentsLayer` floats the balloon and
+runs `useCommentsBridge` (also mounted by `CommentsPanel` — idempotent):
+landing open rows in the plugin storage, registering the envelope bridge the
+provider's collect reads, remapping the draft, forwarding the ledger's
+changes to the badge derivation, and mirroring `isEditable` into the
+create-queueing flag. Adapter errors: thrown `Error` messages
 are user-facing copy, verbatim; all UI strings flow through `CommentsLabels`
 (`<CommentsProvider labels>`).
 

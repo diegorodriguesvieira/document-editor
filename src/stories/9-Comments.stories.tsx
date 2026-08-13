@@ -729,7 +729,7 @@ export const SplitMergeNodes: Story = {
 }
 
 export const CutPasteZeroTraffic: Story = {
-  name: '6. Cut+paste → restored, zero writes',
+  name: '6. Cut+paste → restored, row always true',
   render: () => <CommentsRig api={storyApi([DEADLINE_ROW])} editable showNodes />,
   parameters: {
     docs: {
@@ -737,9 +737,12 @@ export const CutPasteZeroTraffic: Story = {
         story:
           'Select the WHOLE commented paragraph, cut it (⌘X) — the card goes orphaned — and ' +
           'paste it somewhere else: the highlight is RESTORED (the node uid reappears; offsets ' +
-          'are move-invariant) and the card never badges — the envelopes the move produces ' +
-          'carry an EMPTY `anchors[]`, so cut+paste costs no anchor write at all. The ' +
-          '`nodes[]` inspector never changes.',
+          'are move-invariant). Paste before the autosave fires and the move nets out to the ' +
+          'saved baseline — an EMPTY `anchors[]`, zero anchor traffic, the `nodes[]` inspector ' +
+          'never blinks. Wait past the debounce and you see the row TRACK the screen instead: ' +
+          'the cut ships the DETACH (`nodes: []` — a stored anchor must not outlive its text), ' +
+          'the paste ships the restored anchor right after. Either way the persisted row is ' +
+          'never stale — which is the invariant this story is really about.',
       },
     },
   },

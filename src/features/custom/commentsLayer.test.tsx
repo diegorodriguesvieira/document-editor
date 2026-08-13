@@ -7,7 +7,7 @@ import { docWith, editorFromDOM, renderEditor } from '../../test/editorHarness'
 import { DocumentEditor, DocumentSaveProvider, type Editor } from '../../editor'
 import { useDocumentSaveRegistry } from '../../editor/core/documentSave'
 import { createMockCommentsApi, type SaveEnvelope } from '../../app/commentsMock'
-import { CommentsFeature, getCommentsStorage } from './comments'
+import { CommentsFeature, getCommentAnchorState, getCommentsStorage } from './comments'
 import { CommentsLayer, commentBalloonShouldShow } from './commentsLayer'
 import {
   CommentsProvider,
@@ -304,7 +304,7 @@ describe('<CommentsLayer /> document-click → active comment', () => {
 })
 
 describe('<CommentsLayer /> anchor-model wiring', () => {
-  it('lands OPEN nodes-carrying rows in the kernel storage — resolved, deleted and nodeless rows stay out', async () => {
+  it('lands every OPEN row in the kernel storage — resolved and deleted stay out, nodeless rides along', async () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'beta')),
     })
@@ -315,7 +315,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
         { ...SAVED, id: 'c-anchor', nodes: [{ id: 'p1', from: 0, to: 5 }] },
         { ...SAVED, id: 'c-resolved', status: 'RESOLVED' as const, nodes: [{ id: 'p2', from: 0, to: 4 }] },
         { ...SAVED, id: 'c-deleted', isDeleted: true, nodes: [{ id: 'p2', from: 0, to: 4 }] },
-        { ...SAVED, id: 'c-nodeless' }, // nothing to resolve → orphan card only
+        { ...SAVED, id: 'c-nodeless' }, // detached on the backend → orphan card
       ]),
     }
 
@@ -326,15 +326,21 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     )
 
     const storage = getCommentsStorage(created.editor)!
+    // A detached row STAYS in the population: membership is what keeps its
+    // in-session tombstone (and with it, paste/undo resurrection) alive
+    // across a records refresh. It seeds zero entries — nothing paints.
     await waitFor(() =>
-      expect(storage.comments.map((record) => record.id)).toEqual(['c-anchor']),
+      expect(storage.comments.map((record) => record.id)).toEqual(['c-anchor', 'c-nodeless']),
     )
     // The row's quote rides along — it seeds the reporter's baseline.
     expect(storage.comments[0].quote).toBe('hello')
-    // And the nudge ran the plugin's membership reconcile: highlight painted.
+    expect(getCommentAnchorState(created.editor, 'c-nodeless')).toBe('orphaned')
+    // And the nudge ran the plugin's membership reconcile: highlight painted
+    // for the anchored row only.
     expect(
       created.editor.view.dom.querySelector('[data-comment-id="c-anchor"]')?.textContent,
     ).toBe('hello')
+    expect(created.editor.view.dom.querySelector('[data-comment-id="c-nodeless"]')).toBeNull()
   })
 
   it('ENVELOPE pin: the drifted anchor rides ONE payload with the doc — pendingSave → saving → gone', async () => {

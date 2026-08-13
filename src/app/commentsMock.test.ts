@@ -209,6 +209,23 @@ describe('the atomic save envelope', () => {
     expect(await savedDocQuotes(api, { from: 0, to: 5 }, 'hello')).toBe(false)
   })
 
+  it('a DETACH write (empty nodes) clears the anchor and PRESERVES the stored quote', async () => {
+    const api = zeroLatency({ template: { doc: PLAIN_DOC }, seed: [seedRow()] })
+
+    // `nodes: []` is legal (contract §9.3) and its honest quote is '' — the
+    // validator accepts it against any doc. The row keeps its LAST quote:
+    // that string is the orphan card's context line, and blanking it on
+    // detach would erase the only remaining trace of what was commented.
+    const result = await api.saveEnvelope(
+      fullEnvelope({ anchors: [{ id: 'c-seed', nodes: [], quote: '' }], creates: [] }),
+    )
+
+    expect(result.versionId).toBe(2)
+    const [row] = api.peekComments()
+    expect(row!.nodes).toEqual([])
+    expect(row!.quote).toBe('hello')
+  })
+
   it('an empty envelope is a plain doc save — the version still bumps', async () => {
     const api = zeroLatency({ template: { doc: PLAIN_DOC } })
 

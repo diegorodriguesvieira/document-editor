@@ -527,6 +527,39 @@ describe('CommentsProvider anchor sync (the save envelope)', () => {
     expect(result.current!.anchorSync!.states.get('c-9')).toBe('saving')
   })
 
+  it('queued tempIds never leak into the anchors half — their truth rides creates', async () => {
+    const adapter = fakeAdapter()
+    const { result } = mount(adapter, ANA, pendingSave())
+    await waitFor(() => expect(result.current!.loading).toBe(false))
+
+    // The plugin tracks queued creates under their tempId, so the ledger can
+    // offer one up as an anchor report (a drifted range, or a proven detach).
+    // An anchor report is a ROW update and a tempId has no row — the collect
+    // must strip them; the create's truth rides `creates`, via payloadFor.
+    let leaked: CommentAnchorReport[] = []
+    const bridge = fakeBridge({ collect: () => [REPORT, ...leaked] })
+    act(() => result.current!.registerAnchorBridge(bridge))
+    act(() => result.current!.setQueueCreates(true))
+    act(() => result.current!.setDraft({ from: 1, to: 6, quote: 'hello' }))
+    act(() => {
+      void result.current!.addComment('parked', { nodes: HELLO_NODES, quote: 'hello' })
+    })
+
+    let first!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      first = result.current!.anchorSync!.collectSavePayload()
+    })
+    const tempId = first!.creates[0]!.tempId
+    leaked = [{ id: tempId, nodes: [], quote: '' }]
+
+    let second!: ReturnType<CommentAnchorSync['collectSavePayload']>
+    act(() => {
+      second = result.current!.anchorSync!.collectSavePayload()
+    })
+    expect(second!.anchors).toEqual([REPORT])
+    expect(second!.creates).toHaveLength(1)
+  })
+
   it('a queued create asks for a cycle, rides the envelope and settles on confirm', async () => {
     const adapter = fakeAdapter()
     // A backend that mints the rows the envelope asked for — the response

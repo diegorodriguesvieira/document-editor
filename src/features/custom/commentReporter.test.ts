@@ -184,7 +184,7 @@ describe('anchor dirty ledger (the segments plugin write side)', () => {
     ])
   })
 
-  it('a comment gone ALL-dormant is never collected — writing [] would destroy the revival seed', () => {
+  it('a comment gone ALL-dormant collects the DETACH write — the row must not outlive its text', () => {
     const created = renderEditor([CommentsFeature], {
       content: docOf(paragraph('p1', 'hello world')),
     })
@@ -192,9 +192,61 @@ describe('anchor dirty ledger (the segments plugin write side)', () => {
 
     // Dirty it…
     created.editor.view.dispatch(created.editor.state.tr.insertText('X', 1))
-    // …then delete the whole commented text. Anchoring into text that no
-    // longer exists — or shipping `nodes: []` — must never happen.
+    // …then delete the whole commented text. Every entry snapshots the text
+    // it covered and none still resolves to it — the death is PROVEN, so the
+    // write clears the stored row. Leaving the stale anchor was the ghost
+    // factory: the next reload clamped it over whatever text sat there.
     created.editor.view.dispatch(created.editor.state.tr.delete(2, 7))
+
+    expect(collect(created.editor)).toEqual([{ id: 'c-1', nodes: [], quote: '' }])
+
+    // Confirmed, the detach IS the baseline: nothing re-reports, not even
+    // after unrelated edits (in-session revival still owns the tombstone).
+    confirm(created.editor, [{ id: 'c-1', nodes: [], quote: '' }])
+    expect(collect(created.editor)).toEqual([])
+    created.editor.view.dispatch(created.editor.state.tr.insertText('Y', 1))
+    expect(collect(created.editor)).toEqual([])
+  })
+
+  it('a one-transaction MOVE never detaches — the stored anchor still resolves to its text', () => {
+    // The drag/normalizer/cell-merge shape: delete + reinsert in ONE
+    // transaction. Every live range collapses through the mapping (the
+    // mapping has no concept of a move), yet the block lands intact under
+    // the SAME uid — the stored address still resolves to the snapshot, the
+    // row is still true, and erasing it would destroy a valid anchor.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'alpha'), paragraph('p2', 'beta')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 0, to: 5 }] }])
+
+    const blockA = created.editor.state.doc.child(0)
+    const tr = created.editor.state.tr.delete(0, blockA.nodeSize)
+    tr.insert(tr.doc.content.size, blockA)
+    created.editor.view.dispatch(tr)
+
+    expect(collect(created.editor)).toEqual([])
+  })
+
+  it('an unresolvable segment is no proof of death — the stale half holds the whole row', () => {
+    // One segment on a present block, one on a uid this document never had
+    // (a stale row from another version). Deleting the present half proves
+    // ITS death but not the absent one's — a drifted local doc must not
+    // erase a row that may still be true for the saved one. Conservative
+    // hold: no detach ships; the row stays stale-but-recoverable.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    seedComments(created.editor, [
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p1', from: 0, to: 5 },
+          { id: 'p9', from: 0, to: 4 },
+        ],
+      },
+    ])
+
+    created.editor.view.dispatch(created.editor.state.tr.delete(1, 6))
 
     expect(collect(created.editor)).toEqual([])
   })
