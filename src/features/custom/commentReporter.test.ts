@@ -29,8 +29,14 @@ function seedComments(editor: Editor, comments: CommentAnchorRecord[]) {
 }
 
 /** The envelope's anchors: what `collectSavePayload` reads through the bridge
- *  — CURRENT canonical payloads of every dirty comment, pull-based. */
-const collect = (editor: Editor) => getCommentsStorage(editor)!.collectDirtyAnchors!()
+ *  — CURRENT canonical payloads of every dirty comment, pull-based.
+ *  Per-segment quotes are STRIPPED for these geometry assertions; the
+ *  per-segment quote contract has its own raw pins. */
+const collect = (editor: Editor) =>
+  getCommentsStorage(editor)!.collectDirtyAnchors!().map((report) => ({
+    ...report,
+    nodes: report.nodes.map(({ id, from, to }) => ({ id, from, to })),
+  }))
 
 /** The envelope confirmed: the collected payloads become the baselines. */
 const confirm = (editor: Editor, reports = collect(editor)) =>
@@ -249,6 +255,46 @@ describe('anchor dirty ledger (the segments plugin write side)', () => {
     created.editor.view.dispatch(created.editor.state.tr.delete(1, 6))
 
     expect(collect(created.editor)).toEqual([])
+  })
+
+  it('a seed-REFUSED segment is never proof of death — the detach holds while one exists', () => {
+    // One segment live on a present block, one seeded dormant OFF a
+    // per-segment quote (its uid is absent here). Deleting the live half
+    // proves ITS death — but the seeded snapshot is the BACKEND's claim
+    // about a doc this session may not be showing, so the row must hold.
+    // Without the `seeded` flag the quote-born dormantText would read as
+    // provable death and the detach would erase a possibly-true row.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    seedComments(created.editor, [
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p1', from: 0, to: 5, quote: 'hello' },
+          { id: 'p9', from: 0, to: 4, quote: 'gone' },
+        ],
+      },
+    ])
+
+    created.editor.view.dispatch(created.editor.state.tr.delete(1, 6))
+
+    expect(collect(created.editor)).toEqual([])
+  })
+
+  it('every write carries per-segment quotes — the raw contract behind the geometry helpers', () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world')),
+    })
+    seedComments(created.editor, [{ id: 'c-1', nodes: [{ id: 'p1', from: 6, to: 11 }] }])
+
+    created.editor.view.dispatch(created.editor.state.tr.insertText('X', 1))
+
+    // Raw storage read — the `collect` helper above strips segment quotes
+    // for geometry assertions; this is the pin that they are really there.
+    expect(getCommentsStorage(created.editor)!.collectDirtyAnchors!()).toEqual([
+      { id: 'c-1', nodes: [{ id: 'p1', from: 7, to: 12, quote: 'world' }], quote: 'world' },
+    ])
   })
 
   it('a comment removed from storage drops out of the ledger', () => {

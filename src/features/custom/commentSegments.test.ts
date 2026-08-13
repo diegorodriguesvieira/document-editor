@@ -535,6 +535,85 @@ describe('revival truth gate', () => {
     expect(spanTexts(created.editor)).toEqual(['hello'])
   })
 
+  it('THE SEED GATE: a stale row with per-segment quotes cannot paint the ghost (the trace shape)', () => {
+    // The reported corruption, reproduced: after a cut was saved elsewhere,
+    // a stale 3-node record is seeded against a document where the surviving
+    // uid holds DIFFERENT text. Arithmetic alone clamps {0,8} over
+    // 'UNCOMMEN' and paints a lie; the per-segment quote refuses it.
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p-tail', 'UNCOMMENTED UNCOMMENTED UNCOMMENTED')),
+    })
+    seedComments(created.editor, [
+      {
+        id: 'c-1',
+        nodes: [
+          { id: 'p-head', from: 0, to: 11, quote: '[COMMENTED ' },
+          { id: 'p-mid', from: 0, to: 9, quote: 'test here' },
+          { id: 'p-tail', from: 0, to: 8, quote: 'CONTENT]' },
+        ],
+      },
+    ])
+
+    expect(spanTexts(created.editor)).toEqual([]) // no 'UNCOMMEN' ghost
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('orphaned')
+    // And the refusal is not a death sentence: nothing ships (the row may be
+    // true for the saved doc — this session is simply not showing it).
+    expect(getCommentsStorage(created.editor)!.collectDirtyAnchors!()).toEqual([])
+  })
+
+  it('the seed gate accepts a matching quote and stays compat for quote-less rows', () => {
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'hello world'), paragraph('p2', 'replaced entirely')),
+    })
+    seedComments(created.editor, [
+      // Quote matches the text at the address → resolves live, as always.
+      { id: 'c-ok', nodes: [{ id: 'p1', from: 0, to: 5, quote: 'hello' }] },
+      // Quote refuses the replaced text → dormant, nothing painted.
+      { id: 'c-stale', nodes: [{ id: 'p2', from: 0, to: 6, quote: 'doomed' }] },
+      // No quote → arithmetic resolution, exactly as before the field
+      // existed (presence-gated compat: legacy rows lose nothing).
+      { id: 'c-legacy', nodes: [{ id: 'p2', from: 9, to: 17 }] },
+    ])
+
+    expect(spanTexts(created.editor)).toEqual(['hello', 'entirely'])
+    expect(getCommentAnchorState(created.editor, 'c-ok')).toBe('anchored')
+    expect(getCommentAnchorState(created.editor, 'c-stale')).toBe('orphaned')
+    expect(getCommentAnchorState(created.editor, 'c-legacy')).toBe('anchored')
+  })
+
+  it('a seed-REFUSED segment revives when its true text returns — and never for other text', () => {
+    // The quote doubles as the revival snapshot: an absent uid seeds dormant
+    // WITH evidence, so a later remount/reload no longer strands the anchor
+    // (pre-gate, seeded dormants were snapshotless and revived ungated).
+    const created = renderEditor([CommentsFeature], {
+      content: docOf(paragraph('p1', 'alpha')),
+    })
+    seedComments(created.editor, [
+      { id: 'c-1', nodes: [{ id: 'p-cut', from: 0, to: 5, quote: 'hello' }] },
+    ])
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('orphaned')
+
+    // The uid comes back holding the WRONG text: the gate refuses.
+    created.editor.commands.insertContentAt(created.editor.state.doc.content.size, {
+      type: 'paragraph',
+      attrs: { uid: 'p-cut' },
+      content: [{ type: 'text', text: 'nopes' }],
+    })
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('orphaned')
+
+    // Replace it with the TRUE text under the same uid: revival, validated.
+    created.editor.view.dispatch(
+      created.editor.state.tr.delete(7, created.editor.state.doc.content.size),
+    )
+    created.editor.commands.insertContentAt(created.editor.state.doc.content.size, {
+      type: 'paragraph',
+      attrs: { uid: 'p-cut' },
+      content: [{ type: 'text', text: 'hello' }],
+    })
+    expect(getCommentAnchorState(created.editor, 'c-1')).toBe('anchored')
+    expect(spanTexts(created.editor)).toEqual(['hello'])
+  })
+
   it('a seeded dormant (no snapshot) revives on uid reappearance, never on a history tick', () => {
     const created = renderEditor([HistoryFeature, CommentsFeature], {
       content: docOf(paragraph('p1', 'alpha')),

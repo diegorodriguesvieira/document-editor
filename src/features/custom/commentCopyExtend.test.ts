@@ -36,8 +36,14 @@ function seedComments(editor: Editor, comments: CommentAnchorRecord[]) {
 
 /** The envelope's anchor half, as the provider's bridge reads it: the CURRENT
  *  canonical payload of every drifted comment. Pull-based and non-clearing —
- *  collecting twice yields the same reports. */
-const collectAnchors = (editor: Editor) => getCommentsStorage(editor)!.collectDirtyAnchors!()
+ *  collecting twice yields the same reports. Per-segment quotes are STRIPPED:
+ *  these are geometry assertions (id/from/to + the whole-anchor quote); the
+ *  per-segment quote contract has its own raw pins. */
+const collectAnchors = (editor: Editor) =>
+  getCommentsStorage(editor)!.collectDirtyAnchors!().map((report) => ({
+    ...report,
+    nodes: report.nodes.map(({ id, from, to }) => ({ id, from, to })),
+  }))
 
 /** The envelope carrying what a collect just returned was persisted: those
  *  payloads become the baselines (the stored row, from here on). */

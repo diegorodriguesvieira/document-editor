@@ -268,7 +268,13 @@ function Composer({ editor, draft }: { editor: Editor | null; draft: CommentDraf
     // comment still saves, anchorless, and shows as orphaned.
     let anchor: CommentAnchorPayload | undefined
     if (editor && !editor.isDestroyed) {
-      const nodes = segmentsFromRange(editor.state.doc, draft.from, draft.to)
+      const nodes = segmentsFromRange(editor.state.doc, draft.from, draft.to).map((segment) => ({
+        ...segment,
+        // Per-segment quotes from birth: the seed gate validates immediate
+        // (review-mode) creates on the very next load, not only after the
+        // first anchor write re-derives them.
+        quote: textForSegments(editor.state.doc, [segment]),
+      }))
       if (nodes.length > 0) anchor = { nodes, quote: textForSegments(editor.state.doc, nodes) }
     }
     // Collapse BEFORE the round-trip: the payload is captured, the draft

@@ -272,9 +272,16 @@ pastes) and a canonical shape exists.
 ### Comments — external anchors, zero document writes
 
 A comment lives ENTIRELY outside the document. The backend row carries the
-anchor — `nodes: [{ id, from, to }]`, the target node's `uid` plus node-local
-content offsets — and `quote`, the covered text at the last anchor write (the
-backend's stale-content checksum). The segments plugin (`comments.ts`)
+anchor — `nodes: [{ id, from, to, quote? }]`, the target node's `uid` plus
+node-local content offsets plus, on every write, THAT segment's own covered
+text — and `quote`, the whole-anchor text at the last write (the backend's
+stale-content checksum). The per-segment quote is the SEED TRUTH GATE,
+presence-gated: a stored segment carrying one resolves LIVE only when the
+text at its address still equals it; a mismatch or an absent uid seeds
+DORMANT with the quote as its revival snapshot (flagged seed-born — evidence
+for revival, never proof of death for the detach adjudication), and a
+quote-less segment resolves by arithmetic exactly as before the field
+existed. The segments plugin (`comments.ts`)
 resolves each segment against the uid index, maps the live ranges through
 every transaction with the classic bias pair (`map(from, 1)`/`map(to, -1)` —
 edge typing lands outside), normalizes after every mapping (sort + coalesce —
@@ -343,8 +350,8 @@ row must not outlive its text, or the next reload clamps the stale anchor
 over whatever text sits there (the ghost this rule exists to kill). Anything
 UNPROVEN stays silent: a one-transaction move (drag, region normalize, cell
 merge) relocates the text intact so the stored row is still true, and a
-snapshotless dormant (a seeded row that never resolved this session) is no
-evidence of death. In-session revival is untouched either way — tombstones
+SEED-BORN dormant — quote-refused or snapshotless alike — is the backend's
+claim about a doc this session may not be showing, not evidence of death. In-session revival is untouched either way — tombstones
 resurrect from their snapshots and the next envelope heals the row — and a
 detached row STAYS in the plugin population (`nodes: []` seeds zero entries)
 precisely so that tombstone survives the records refresh. The deliberate

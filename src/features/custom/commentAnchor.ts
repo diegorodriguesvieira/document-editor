@@ -30,6 +30,16 @@ export interface CommentNodeSegment {
   id: string
   from: number
   to: number
+  /** The text THIS segment covered at derivation time, in the quote norm
+   *  (atoms/hardBreak quote nothing — an atom-only segment's quote is '').
+   *  Every anchor write emits it; whether it round-trips is the backend's
+   *  choice, and the seed gate is PRESENCE-GATED on it: a stored segment
+   *  carrying a quote only resolves LIVE if the text at its address still
+   *  matches — a mismatch (or an absent uid) seeds DORMANT with this quote
+   *  as the revival snapshot instead of clamping a lying highlight. A
+   *  segment without a quote resolves exactly as before the field existed,
+   *  so backends that store nothing lose nothing and break nothing. */
+  quote?: string
 }
 
 /**

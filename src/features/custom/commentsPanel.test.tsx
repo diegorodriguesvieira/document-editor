@@ -196,10 +196,11 @@ describe('<CommentsPanel />', () => {
 
     // segmentsFromRange over the draft range [1,6) → node-local [0,5) on p1,
     // quote recomputed from those segments — the backend's validator input.
+    // Each segment carries its OWN quote too (the seed gate's evidence).
     expect(adapter.add).toHaveBeenCalledWith({
       text: 'needs a source',
       quote: 'hello',
-      nodes: HELLO_NODES,
+      nodes: [{ id: 'p1', from: 0, to: 5, quote: 'hello' }],
     })
     // Refetch-after-write: the composer closes, then the SERVER's copy lands
     // as a card (composer first — the textarea's own content would satisfy a

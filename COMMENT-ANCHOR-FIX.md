@@ -1,4 +1,4 @@
-# Comment anchors across cut/paste — the corruption, six defects, and what shipped
+# Comment anchors across cut/paste — the corruption, seven defects, and what shipped
 
 > Upstream's response to the deel-ui report (DOC-4580) and its two companion
 > documents: the fix plan ("comment anchors lost across a cut/paste") and the
@@ -29,11 +29,12 @@ NodeIds collision rule working as designed — not part of the bug.
 
 The backend is not at fault: it stores what it is sent.
 
-## 2. The six defects — all confirmed in this tree
+## 2. The seven defects — all confirmed in this tree, all fixed
 
 The deel-ui plan named A, B and C. Investigating the port write-up's claims
 against this tree confirmed three more (A′, A″, D) plus an independent
-revival killer (E). All six were real here; all but C are fixed.
+revival killer (E). All were real here; all are fixed — C landed in a
+follow-up pass as the presence-gated seed gate (section 4.5).
 
 **A — a fully-collapsed comment was never reported.** Six suppression gates,
 not the four the plan listed: `derivePayload` returning null for zero live
@@ -99,6 +100,18 @@ pair had the same root: the geometry-preserving quote-drift detector
 compared placeholder-normed text while protecting the free-normed shipped
 quote.
 
+**C — the seed path had no truth gate.** `resolveSegment` clamps stored
+offsets into the node's current size and returns a range with no text
+comparison — read-side repair that cannot tell "the node shrank" from "the
+node's text was replaced". Fed a stale record (the remount in the trace, an
+external writer, a client-side re-seed racing a detach-confirm), the clamp
+mints a live ghost over whatever text now sits at those offsets, and the
+next edit persists it. Fixed as the presence-gated seed truth gate over
+per-segment quotes — every anchor write now emits each segment's own quote,
+and `seedEntries` refuses a segment whose stored text no longer matches,
+seeding it dormant WITH that quote as its revival snapshot. Full design,
+the `seeded` guard, and the port-back notes: section 4.5.
+
 ## 3. The detach rule that shipped (fix A + A′ together)
 
 The reporter's ledger derivation (`reportPayloadOf`) adjudicates every dirty
@@ -112,9 +125,11 @@ id three ways:
    resolves to it (quote norm, the same derivation that produced the
    snapshot — after fix E there is exactly one norm on both sides);
 3. everything else → silence: unknown ids; no entries in either map
-   (teardown, pre-seed); any snapshotless entry (a seeded dormant — a
+   (teardown, pre-seed); any SEED-BORN entry — flagged `seeded`, whether
+   quote-refused (its snapshot is the backend's claim about a doc this
+   session may not be showing) or snapshotless (no evidence at all): a
    drifted local doc must not erase a row that may be true for the saved
-   one); any entry still resolving to its snapshot (a one-transaction move —
+   one; any entry still resolving to its snapshot (a one-transaction move —
    the stored row is still true).
 
 `payloadFor` — the public seam queued creates ride — deliberately keeps the
@@ -160,18 +175,28 @@ Port these back — deel-ui shipped some of them differently.
    also what makes the write validate: `quoteOf(doc, []) === ''`). Backends
    should clear `nodes` and KEEP the last quote on a detach; the demo mock
    now models exactly that.
-5. **Defect C stays deferred, with one correction to the plan's rationale.**
-   "A quote gate cannot fire" is true of the documents service, not of the
-   SDK: records here carry a quote end-to-end. We adopted the write-up's
-   per-segment design (`{ id, from, to, quote }`, presence-gated; a refused
-   segment keeps its quote as `dormantText`, which also closes the
-   snapshotless-reappearance hole) as the follow-up, in its own cycle — it
-   changes the shared FE/BE contract, the golden vectors and dozens of shape
-   assertions, and none of it protects anything until a backend stores the
-   quotes. Known residue until then: an in-app remount between a cut and its
-   detach-confirm can still seed the stale client-side record; a silenced
-   move-tombstone whose text is edited later never detaches (stale but
-   harmless, exactly as today).
+5. **Defect C shipped upstream — the write-up's per-segment design, plus one
+   guard it did not name.** Every anchor write now emits each segment's own
+   quote (`{ id, from, to, quote }`); `seedEntries` is the truth gate: a
+   segment carrying a quote resolves LIVE only when the text at its address
+   still equals it — a mismatch, or an absent uid, seeds DORMANT with the
+   quote as `dormantText`, so nothing lies on screen and the reappearance
+   gate finally has evidence to revive against (closing the
+   snapshotless-reappearance hole; anchors now survive remounts and stale
+   re-seeds — the trace's ghost is test-pinned as unreproducible even with a
+   stale record). Presence-gated: quote-less segments (all existing rows)
+   resolve exactly as before — no migration, no flag day. THE GUARD TO PORT
+   BACK: seed-born dormants are flagged `seeded`, and the detach
+   adjudication HOLDS while one exists — a seed-time snapshot is the
+   backend's claim about a doc this session may simply not be showing;
+   treating it as provable death would let a mixed row (one live segment
+   wiped + one seed-refused) erase an anchor still true for the saved
+   document. The quote roles are deliberate, not redundant: `nodes[].quote`
+   is per-segment evidence (dies with a detach), the row's `quote` is the
+   orphan card's surviving context line, the payload's top-level `quote` is
+   the whole-anchor checksum your validator already reads. One correction to
+   the plan's rationale stands: "a quote gate cannot fire" was true of the
+   documents service, never of the SDK.
 
 ## 5. Product rules (confirmed with the owner)
 
@@ -212,11 +237,13 @@ either an adapter concern, additive, or gated to stay inert until adopted.
    copy. Inapplicable today (the documents service stores no quote); the
    demo mock models it as the reference behavior.
 
-**For defect C (its own cycle):**
+**For defect C (SDK side already shipped — this is the activation switch):**
 
-4. *Store and echo a per-segment quote* — `{ id, from, to, quote }`. Pure
-   storage: no server-side logic, the validation runs client-side at seed
-   time. The SDK's gate is presence-gated, so this cannot break anything by
+4. *Store and echo the per-segment quote* — `{ id, from, to, quote }`, which
+   every SDK anchor write now emits. Pure storage: no server-side logic, the
+   validation runs client-side at seed time, and the gate activates on your
+   deployment the moment stored rows start carrying the field — no SDK
+   release needed. Presence-gating means this cannot break anything by
    construction: rows without per-segment quotes (all existing data) resolve
    exactly as today — no migration, no flag day, old SDK versions ignore the
    unknown field. If the service ever validates quotes itself, it must use
@@ -234,22 +261,29 @@ orphan card is exactly how both should render.
 ## 7. What shipped, and how it is verified
 
 Source: `comments.ts` (the detach rule, the positional+deferred carry, the
-three gate one-liners, the drift detector, drop-carry recording),
-`commentsLayer.tsx` (population keeps empty rows), `commentsProvider.tsx`
-(tempId filter), `commentsMock.ts` (detach keeps the stored quote),
-`ARCHITECTURE.md` + Storybook copy.
+three gate one-liners, the drift detector, drop-carry recording, per-segment
+quote emission and the seed truth gate), `commentAnchor.ts` (the
+`CommentNodeSegment.quote` contract), `commentsLayer.tsx` (population keeps
+empty rows), `commentsProvider.tsx` (tempId filter), `commentsPanel.tsx`
+(draft creates emit per-segment quotes), `commentsMock.ts` (detach keeps the
+stored quote), `ARCHITECTURE.md` + Storybook copy.
 
-Tests — 698 passing, of which this change flipped four deliberate pins and
-added fourteen: the detach write (collect → confirm → no re-send), the
+Tests — 703 passing, of which this change flipped four deliberate pins and
+added nineteen: the detach write (collect → confirm → no re-send), the
 one-transaction-move silence, the unresolvable-segment hold, the reported
 three-block both-edges-partial gesture, the duplicate-uid window (binds the
 pasted copy, never the survivor), drag-move carries (whole and subrange),
 the external-drop guard, detach round-trip revival via paste AND via undo,
 the fresh-session orphan limit, the chip-range revival, the tempId leak, the
-mock's detach-keeps-quote rule, and a real-feature integration of the
+mock's detach-keeps-quote rule, a real-feature integration of the
 header/footer normalizer (tombstones everything, ships nothing, reload
-restores). Every bug-pinning test was run against the pre-fix tree and
-confirmed to FAIL there (revert-and-check).
+restores), and the defect-C pins: the trace's stale-record ghost is now
+unreproducible (the gate refuses it), matching quotes resolve live and
+quote-less rows stay compat, a refused segment revives when its true text
+returns, a seed-refused segment never proves death, and the raw write
+contract carries per-segment quotes. Every bug-pinning test was run against
+the pre-fix tree and confirmed to FAIL there (revert-and-check) — including
+the trace-ghost pin against the gate-less seed.
 
 Verified live in the browser against the Storybook rig (real 1500 ms
 autosave + mock latency): the cut shipped the detach (`nodes: []`, quote

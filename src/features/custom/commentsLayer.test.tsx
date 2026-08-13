@@ -386,7 +386,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
       payload = context.current!.anchorSync!.collectSavePayload()
     })
     expect(payload!.anchors).toEqual([
-      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7, quote: 'hello' }], quote: 'hello' },
     ])
     // Collected = in flight.
     await waitFor(() => expect(context.current!.anchorSync!.states.get('c-1')).toBe('saving'))
@@ -438,7 +438,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
     const envelope = save.mock.calls[0][0]
     expect(envelope.doc).toEqual(live.getJSON())
     expect(envelope.anchors).toEqual([
-      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7, quote: 'hello' }], quote: 'hello' },
     ])
     expect(envelope.creates).toEqual([])
 
@@ -507,7 +507,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
       first = context.current!.anchorSync!.collectSavePayload()
     })
     expect(first!.anchors).toEqual([
-      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7 }], quote: 'hello' },
+      { id: 'c-1', nodes: [{ id: 'p1', from: 2, to: 7, quote: 'hello' }], quote: 'hello' },
     ])
 
     // The envelope failed: NOTHING was persisted, so the anchor drops back to
@@ -525,7 +525,7 @@ describe('<CommentsLayer /> anchor-model wiring', () => {
       second = context.current!.anchorSync!.collectSavePayload()
     })
     expect(second!.anchors).toEqual([
-      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
+      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9, quote: 'hello' }], quote: 'hello' },
     ])
   })
 
@@ -641,7 +641,7 @@ describe('<CommentsLayer /> — a REAL envelope round-trip', () => {
     // sends — no organic edit required. ONE envelope carries both halves…
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0].anchors).toEqual([
-      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9 }], quote: 'hello' },
+      { id: 'c-1', nodes: [{ id: 'p1', from: 4, to: 9, quote: 'hello' }], quote: 'hello' },
     ])
     expect(sent[0].creates).toHaveLength(1)
     // …and the quotes were validated against the doc in that very request — a
@@ -650,7 +650,7 @@ describe('<CommentsLayer /> — a REAL envelope round-trip', () => {
       expect(await submitted).toBe(true)
     })
     expect(api.peekComments().find((row) => row.id === 'c-1')!.nodes).toEqual([
-      { id: 'p1', from: 4, to: 9 },
+      { id: 'p1', from: 4, to: 9, quote: 'hello' },
     ])
     expect(api.peekComments()).toHaveLength(2)
     // Confirmed → the ledger is clean and the next envelope carries nothing.

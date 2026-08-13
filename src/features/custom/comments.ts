@@ -98,14 +98,17 @@ export function getCommentsStorage(editor: Editor): CommentsStorage | undefined 
  *  DORMANT. On an in-session collapse `stored` is REFRESHED from the
  *  pre-collapse live geometry and `dormantText` snapshots the exact text it
  *  covered; revival re-resolves `stored` and accepts only a text match (the
- *  anti-ghost truth gate). Entries seeded dormant from storage carry no
- *  snapshot and revive only on uid reappearance. Write paths never recompute
- *  or clamp stored offsets. */
+ *  anti-ghost truth gate). Entries seeded dormant from storage carry the
+ *  record's per-segment quote as their snapshot when the row has one (the
+ *  seed truth gate), and no snapshot otherwise — snapshotless dormants
+ *  revive only on uid reappearance. Write paths never recompute or clamp
+ *  stored offsets. */
 interface SegmentEntry {
   stored: CommentNodeSegment
   live: { from: number; to: number } | null
-  /** Set while dormant from an IN-SESSION collapse: the text `stored` covered
-   *  at collapse time. Absent on seeded dormants. */
+  /** The text `stored` covered when this entry went dormant: the collapse
+   *  snapshot for in-session dormants, the record's per-segment quote for
+   *  seed-refused ones. Absent on quote-less seeded dormants. */
   dormantText?: string
   /** Marks BOTH ends of a cut+paste MOVE: the range the cut took (kept as the
    *  undo seed) and the one the paste created. Whichever end is dormant is
@@ -113,6 +116,11 @@ interface SegmentEntry {
    *  — so the card never reads "partially detached" for a move, in either
    *  direction (paste, or the undo that reverts it). */
   moved?: boolean
+  /** Born dormant at SEED time (uid absent, or the per-segment quote refused
+   *  the resolved text). A seed-born snapshot is the BACKEND's claim about a
+   *  doc this session may simply not be showing — evidence for revival,
+   *  never proof of death: the detach adjudication holds while one exists. */
+  seeded?: boolean
 }
 
 interface LiveEntry extends SegmentEntry {
@@ -173,11 +181,27 @@ function normalizeEntries(entries: SegmentEntry[]): SegmentEntry[] {
 }
 
 /** Resolve a storage record into fresh state entries — every seed path
- *  (membership, revival, full re-seed) goes through here so seed-time
- *  adjacency coalesces immediately. */
+ *  (membership, full re-seed) goes through here so seed-time adjacency
+ *  coalesces immediately.
+ *
+ *  THE SEED TRUTH GATE, presence-gated on the record's per-segment quote:
+ *  a segment carrying one only resolves LIVE when the text at its address
+ *  still equals it — resolveSegment clamps arithmetic, and arithmetic
+ *  cannot tell "the node shrank" from "the node's text was replaced" (the
+ *  stale-row ghost). A mismatch, or an absent uid, seeds DORMANT with the
+ *  quote as `dormantText`: nothing lies on screen, and the reappearance
+ *  gate finally has evidence to revive against when the true text returns.
+ *  Quote-less segments (every pre-existing row) resolve exactly as before
+ *  the field existed. `''` is a real quote (an atom-only segment) — the
+ *  gate tests presence, never truthiness. */
 function seedEntries(doc: PMNode, record: CommentAnchorRecord): SegmentEntry[] {
   return normalizeEntries(
-    record.nodes.map((stored) => ({ stored, live: resolveSegment(doc, stored) })),
+    record.nodes.map((stored): SegmentEntry => {
+      const live = resolveSegment(doc, stored)
+      if (stored.quote === undefined) return { stored, live }
+      if (live && doc.textBetween(live.from, live.to) === stored.quote) return { stored, live }
+      return { stored, live: null, dormantText: stored.quote, seeded: true }
+    }),
   )
 }
 
@@ -671,7 +695,12 @@ function derivePayload(doc: PMNode, entries: SegmentEntry[]): CommentAnchorPaylo
   let quote = ''
   for (const entry of entries) {
     if (!entry.live) continue
-    nodes.push(...segmentsFromRange(doc, entry.live.from, entry.live.to))
+    for (const segment of segmentsFromRange(doc, entry.live.from, entry.live.to)) {
+      // Each segment carries its OWN quote — the seed gate's evidence and
+      // the revival snapshot a refused segment keeps. The top-level quote
+      // stays the whole-anchor checksum the write validator reads.
+      nodes.push({ ...segment, quote: textForSegments(doc, [segment]) })
+    }
     // No block separator — matches textForSegments over the derived array,
     // and the offset norm: atoms/hardBreak count 1 position, quote nothing.
     quote += doc.textBetween(entry.live.from, entry.live.to)
@@ -765,12 +794,14 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
    *   and paste-over land here; the write clears the row so the stored
    *   anchor never outlives the text it described.
    * - null: nothing to say. Unknown ids; ids with no entries in either map
-   *   (teardown, pre-seed); any SNAPSHOTLESS entry (a seeded dormant — no
-   *   snapshot is no proof of death: a drifted local doc must not erase a
-   *   row that may be true for the saved one); and any entry whose stored
-   *   address STILL resolves to its snapshot — a one-transaction move (drag,
-   *   region normalize, cell merge) relocated the text intact, the row is
-   *   still true, and erasing it would destroy a valid anchor.
+   *   (teardown, pre-seed); any SEED-BORN dormant (flagged `seeded` — its
+   *   snapshot is the backend's claim about a doc this session may not be
+   *   showing, and a snapshotless one has no evidence at all: neither is
+   *   proof of death, and a drifted local doc must not erase a row that may
+   *   be true for the saved one); and any entry whose stored address STILL
+   *   resolves to its snapshot — a one-transaction move (drag, region
+   *   normalize, cell merge) relocated the text intact, the row is still
+   *   true, and erasing it would destroy a valid anchor.
    *
    * The public `payloadFor` seam deliberately keeps the LIVE-only
    * derivation: a queued create's doom check reads its truthiness, and an
@@ -785,6 +816,7 @@ function createAnchorReporter(storage: CommentsStorage): AnchorReporter {
     const entries = segments?.comments.get(id) ?? segments?.dropped.get(id)
     if (!entries || entries.length === 0) return null
     for (const entry of entries) {
+      if (entry.seeded) return null
       if (entry.dormantText === undefined) return null
       if (textForSegments(state.doc, [entry.stored]) === entry.dormantText) return null
     }
